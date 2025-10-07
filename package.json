@@ -1,0 +1,11 @@
+{
+  "name": "autodash",
+  "private": true,
+  "workspaces": ["frontend"],
+  "scripts": {
+    "dev:front": "npm --workspace frontend run dev",
+    "dev:back": "cd backend && uvicorn app.main:app --reload --port 3001"
+  }
+}
+
+
