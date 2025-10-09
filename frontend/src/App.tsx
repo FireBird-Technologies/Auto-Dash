@@ -10,6 +10,7 @@ type Row = Record<string, number | string>;
 export default function App() {
   const [currentStep, setCurrentStep] = useState(-1); // landing first
   const [data, setData] = useState<Row[]>([]);
+  const [datasetId, setDatasetId] = useState<string>('');
   const [vizContext, setVizContext] = useState({
     description: ''
   });
@@ -36,8 +37,9 @@ export default function App() {
       case 0:
         return (
           <ConnectData
-            onDataLoaded={(newData) => {
+            onDataLoaded={(newData, newDatasetId) => {
               setData(newData);
+              setDatasetId(newDatasetId);
               setCurrentStep(1);
             }}
           />
@@ -55,6 +57,7 @@ export default function App() {
         return (
           <Visualization
             data={data}
+            datasetId={datasetId}
             context={vizContext}
           />
         );
