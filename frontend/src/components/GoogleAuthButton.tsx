@@ -1,4 +1,5 @@
 import React from 'react';
+import { config } from '../config';
 
 interface GoogleAuthButtonProps {
   onSuccess?: (token: string) => void;
@@ -18,8 +19,7 @@ export const GoogleAuthButton: React.FC<GoogleAuthButtonProps> = ({
     }
     
     // Redirect to backend Google OAuth
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
-    window.location.href = `${backendUrl}/api/auth/google/login`;
+    window.location.href = `${config.backendUrl}/api/auth/google/login`;
   };
 
   return (

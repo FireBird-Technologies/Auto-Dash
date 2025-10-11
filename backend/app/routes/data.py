@@ -3,18 +3,25 @@ from sqlalchemy.orm import Session
 from typing import Dict, Any, Optional
 from pydantic import BaseModel
 import pandas as pd
+import numpy as np
 import io
 import json
 import chardet
 import tempfile
 import os
 import uuid
+import asyncio
 from pathlib import Path
+from datetime import datetime
 
 from ..core.db import get_db
 from ..core.security import get_current_user
-from ..models import User
-from ..services.data_store import data_store
+from ..models import User, Dataset as DatasetModel
+from ..services.dataset_service import dataset_service
+import logging
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/data", tags=["data"])
 
@@ -47,16 +54,16 @@ class FileProcessor:
     
     def read_csv(self):
         """Read CSV with multiple fallback strategies"""
-        encodings = [None, 'utf-8', 'latin-1', 'iso-8859-1', 'cp1252']
-        delimiters = [',', ';', '\t', '|']
+        encodings = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
+        delimiters = [',', ';', '\t', '|', ':', ' ']
         
         # Try auto-detect encoding first
         try:
             detected_encoding = self.detect_encoding()
-            if detected_encoding:
+            if detected_encoding and detected_encoding not in encodings:
                 encodings.insert(0, detected_encoding)
-        except:
-            pass
+        except Exception as e:
+            logger.warning(f"Encoding detection failed: {str(e)}")
         
         # Try different encoding and delimiter combinations
         for encoding in encodings:
@@ -133,14 +140,17 @@ async def get_sample_data():
         # Read the CSV
         df = pd.read_csv(sample_file)
         
+        # Replace NaN with None (which becomes null in JSON)
+        clean_df = df.replace({np.nan: None, np.inf: None, -np.inf: None})
+        
         # Return data info
         return {
             "message": "Sample housing data loaded",
             "filename": "housing_sample.csv",
             "rows": len(df),
             "columns": df.columns.tolist(),
-            "data": df.to_dict('records'),
-            "preview": df.head(10).to_dict('records'),
+            "data": df_clean.to_dict('records'),
+            "preview": df_clean.head(10).to_dict('records'),
             "data_types": df.dtypes.astype(str).to_dict()
         }
     except Exception as e:
@@ -156,7 +166,8 @@ async def load_sample_data(
     db: Session = Depends(get_db)
 ):
     """
-    Load sample housing data into user's workspace
+    Load sample housing data into user's workspace.
+    Reuses pre-generated context if available from any previous load.
     """
     try:
         # Path to housing_sample.csv
@@ -168,20 +179,127 @@ async def load_sample_data(
         # Read the CSV
         df = pd.read_csv(sample_file)
         
-        # Store in data store
-        dataset_id = f"sample_{uuid.uuid4().hex[:8]}"
-        info = data_store.store_dataset(
-            user_id=current_user.id,
-            dataset_id=dataset_id,
-            df=df,
-            filename="housing_sample.csv"
-        )
+        # Replace NaN with None (which becomes null in JSON)
+        df = df.replace({np.nan: None, np.inf: None, -np.inf: None})
         
-        return {
-            "message": "Sample data loaded successfully",
-            "dataset_id": dataset_id,
-            "dataset_info": info
-        }
+        # Use consistent dataset ID for sample data (per user)
+        # This allows us to reuse context across sessions
+        dataset_id = f"sample_housing_{current_user.id}"
+        
+        # Check if this user already has this sample dataset
+        existing_dataset = db.query(DatasetModel).filter(
+            DatasetModel.dataset_id == dataset_id,
+            DatasetModel.user_id == current_user.id
+        ).first()
+        
+        if existing_dataset:
+            # Dataset already exists, update it and reuse context if available
+            existing_dataset.row_count = len(df)
+            existing_dataset.column_count = len(df.columns)
+            existing_dataset.file_size_bytes = sample_file.stat().st_size
+            db.commit()
+            db.refresh(existing_dataset)
+            
+            # Store in in-memory data store (for fast access)
+            info = dataset_service.store_dataset(
+                user_id=current_user.id,
+                dataset_id=dataset_id,
+                df=df,
+                filename="housing_sample.csv"
+            )
+            
+            # If context already exists, load it into memory
+            if existing_dataset.context and existing_dataset.context_status == "completed":
+                # Context exists in DB, load it into memory
+                if current_user.id in dataset_service._store and dataset_id in dataset_service._store[current_user.id]:
+                    dataset_service._store[current_user.id][dataset_id]["context"] = existing_dataset.context
+                    dataset_service._store[current_user.id][dataset_id]["context_status"] = "completed"
+                
+                return {
+                    "message": "Sample data loaded successfully with pre-generated context.",
+                    "dataset_id": dataset_id,
+                    "dataset_info": info,
+                    "context_status": "completed",
+                    "context_reused": True
+                }
+            else:
+                # Context doesn't exist or failed, regenerate
+                asyncio.create_task(
+                    dataset_service.generate_context_async(dataset_id, df.copy(), current_user.id)
+                )
+                
+                return {
+                    "message": "Sample data loaded successfully. Context generation in progress.",
+                    "dataset_id": dataset_id,
+                    "dataset_info": info,
+                    "context_status": "pending",
+                    "context_reused": False
+                }
+        else:
+            # First time loading sample for this user
+            # Check if ANY user has generated context for this sample (to share context)
+            any_sample_with_context = db.query(DatasetModel).filter(
+                DatasetModel.filename == "housing_sample.csv",
+                DatasetModel.context_status == "completed",
+                DatasetModel.context.isnot(None)
+            ).first()
+            
+            # Create new database record for this user
+            db_dataset = DatasetModel(
+                user_id=current_user.id,
+                dataset_id=dataset_id,
+                filename="housing_sample.csv",
+                row_count=len(df),
+                column_count=len(df.columns),
+                file_size_bytes=sample_file.stat().st_size,
+                context_status="pending"
+            )
+            
+            # If we found a pre-generated context from another user, copy it
+            if any_sample_with_context:
+                db_dataset.context = any_sample_with_context.context
+                db_dataset.context_status = "completed"
+                db_dataset.context_generated_at = datetime.utcnow()
+                db_dataset.columns_info = any_sample_with_context.columns_info
+            
+            db.add(db_dataset)
+            db.commit()
+            db.refresh(db_dataset)
+            
+            # Store in in-memory data store (for fast access)
+            info = dataset_service.store_dataset(
+                user_id=current_user.id,
+                dataset_id=dataset_id,
+                df=df,
+                filename="housing_sample.csv"
+            )
+            
+            # Load existing context into memory if we copied it
+            if db_dataset.context_status == "completed":
+                if current_user.id in dataset_service._store and dataset_id in dataset_service._store[current_user.id]:
+                    dataset_service._store[current_user.id][dataset_id]["context"] = db_dataset.context
+                    dataset_service._store[current_user.id][dataset_id]["context_status"] = "completed"
+                
+                return {
+                    "message": "Sample data loaded successfully with pre-generated context.",
+                    "dataset_id": dataset_id,
+                    "dataset_info": info,
+                    "context_status": "completed",
+                    "context_reused": True
+                }
+            else:
+                # Generate context asynchronously (updates both DB and memory)
+                asyncio.create_task(
+                    dataset_service.generate_context_async(dataset_id, df.copy(), current_user.id)
+                )
+                
+                return {
+                    "message": "Sample data loaded successfully. Context generation in progress.",
+                    "dataset_id": dataset_id,
+                    "dataset_info": info,
+                    "context_status": "pending",
+                    "context_reused": False
+                }
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -231,15 +349,37 @@ async def upload_data(
         else:  # Excel files
             df = processor.read_excel()
         
+        # Replace NaN with None (which becomes null in JSON)
+        df = df.replace({np.nan: None, np.inf: None, -np.inf: None})
+        
         # Generate unique dataset ID
         dataset_id = f"upload_{uuid.uuid4().hex[:8]}"
         
-        # Store in data store
-        info = data_store.store_dataset(
+        # Create database record FIRST for persistence
+        db_dataset = DatasetModel(
+            user_id=current_user.id,
+            dataset_id=dataset_id,
+            filename=file.filename,
+            row_count=len(df),
+            column_count=len(df.columns),
+            file_size_bytes=len(content),
+            context_status="pending"
+        )
+        db.add(db_dataset)
+        db.commit()
+        db.refresh(db_dataset)
+        
+        # Store in in-memory data store (for fast access during session)
+        info = dataset_service.store_dataset(
             user_id=current_user.id,
             dataset_id=dataset_id,
             df=df,
             filename=file.filename
+        )
+        
+        # Generate context asynchronously (with user_id for DB updates)
+        asyncio.create_task(
+            dataset_service.generate_context_async(dataset_id, df.copy(), current_user.id)
         )
         
         # Basic data info
@@ -252,11 +392,12 @@ async def upload_data(
             "data_types": df.dtypes.astype(str).to_dict(),
             "preview": df.head(5).to_dict('records'),
             "file_size_bytes": len(content),
-            "processing_method": "robust_parser"
+            "processing_method": "robust_parser",
+            "context_status": "pending"
         }
         
         return {
-            "message": "File uploaded and processed successfully",
+            "message": "File uploaded successfully. Context generation in progress.",
             "user_id": current_user.id,
             "dataset_id": dataset_id,
             "file_info": data_info
@@ -276,20 +417,56 @@ async def upload_data(
                 pass
 
 
-@router.get("/datasets")
-async def list_datasets(
+@router.get("/datasets/{dataset_id}/context")
+def get_dataset_context(
+    dataset_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    List all datasets for the current user.
-    """
-    datasets = data_store.list_datasets(current_user.id)
+    """Get the generated context for a dataset"""
+    dataset = db.query(DatasetModel).filter(
+        DatasetModel.dataset_id == dataset_id,
+        DatasetModel.user_id == current_user.id
+    ).first()
+    
+    if not dataset:
+        raise HTTPException(status_code=404, detail="Dataset not found")
     
     return {
-        "user_id": current_user.id,
-        "count": len(datasets),
-        "datasets": datasets
+        "dataset_id": dataset_id,
+        "filename": dataset.filename,
+        "context": dataset.context,
+        "context_status": dataset.context_status,
+        "context_generated_at": dataset.context_generated_at.isoformat() if dataset.context_generated_at else None,
+        "columns_info": dataset.columns_info,
+        "row_count": dataset.row_count,
+        "column_count": dataset.column_count,
+        "created_at": dataset.created_at.isoformat()
+    }
+
+
+@router.get("/datasets")
+def list_user_datasets(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """List all datasets for the current user"""
+    datasets = db.query(DatasetModel).filter(
+        DatasetModel.user_id == current_user.id
+    ).order_by(DatasetModel.created_at.desc()).all()
+    
+    return {
+        "datasets": [
+            {
+                "dataset_id": ds.dataset_id,
+                "filename": ds.filename,
+                "row_count": ds.row_count,
+                "column_count": ds.column_count,
+                "context_status": ds.context_status,
+                "created_at": ds.created_at.isoformat()
+            }
+            for ds in datasets
+        ]
     }
 
 
@@ -302,7 +479,7 @@ async def get_dataset_info(
     """
     Get information about a specific dataset.
     """
-    info = data_store.get_dataset_info(current_user.id, dataset_id)
+    info = dataset_service.get_dataset_info(current_user.id, dataset_id)
     
     if not info:
         raise HTTPException(status_code=404, detail="Dataset not found")
@@ -320,15 +497,59 @@ async def get_dataset_preview(
     """
     Get a preview of the dataset (first N rows).
     """
-    df = data_store.get_dataset(current_user.id, dataset_id)
+    df = dataset_service.get_dataset(current_user.id, dataset_id)
     
     if df is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
     
+    # Replace NaN with None (which becomes null in JSON)
+    df_clean = df.replace({np.nan: None, np.inf: None, -np.inf: None})
+    
     return {
         "dataset_id": dataset_id,
-        "preview": df.head(rows).to_dict('records'),
+        "preview": df_clean.head(rows).to_dict('records'),
         "total_rows": len(df)
+    }
+
+
+@router.get("/datasets/{dataset_id}/full")
+async def get_full_dataset(
+    dataset_id: str,
+    limit: Optional[int] = 5000,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get the full dataset (or limited number of rows).
+    Use this for visualizations that need complete data.
+    
+    Args:
+        dataset_id: The dataset identifier
+        limit: Optional limit on number of rows (default: 5000, use 0 for unlimited)
+    """
+    df = dataset_service.get_dataset(current_user.id, dataset_id)
+    
+    if df is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    
+    # Store original row count
+    total_rows = len(df)
+    
+    # Apply limit (default 5000 rows for performance)
+    # Use limit=0 in query params to get unlimited rows
+    if limit is not None and limit > 0:
+        df = df.head(limit)
+    
+    # Replace NaN with None (which becomes null in JSON)
+    df_clean = df.replace({np.nan: None, np.inf: None, -np.inf: None})
+    
+    return {
+        "dataset_id": dataset_id,
+        "data": df_clean.to_dict('records'),
+        "rows": len(df_clean),
+        "columns": df_clean.columns.tolist(),
+        "total_rows_in_dataset": total_rows,
+        "limited": len(df_clean) < total_rows
     }
 
 
@@ -341,7 +562,7 @@ async def delete_dataset(
     """
     Delete a dataset.
     """
-    success = data_store.delete_dataset(current_user.id, dataset_id)
+    success = dataset_service.delete_dataset(current_user.id, dataset_id)
     
     if not success:
         raise HTTPException(status_code=404, detail="Dataset not found")
@@ -352,6 +573,46 @@ async def delete_dataset(
     }
 
 
+@router.post("/datasets/{dataset_id}/prepare-context")
+async def prepare_dataset_context(
+    dataset_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Proactively trigger context generation for a dataset.
+    Call this when user starts typing to ensure context is ready.
+    """
+    # Check if context already exists or is being generated
+    status = dataset_service.get_context_status(current_user.id, dataset_id)
+    
+    if status in ["completed", "generating"]:
+        return {
+            "message": "Context already available or in progress",
+            "status": status
+        }
+    
+    # Get the dataset
+    df = dataset_service.get_dataset(current_user.id, dataset_id)
+    if df is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    
+    # Trigger context generation if pending or failed
+    if status in ["pending", "failed", "not_found"]:
+        asyncio.create_task(
+            dataset_service.generate_context_async(dataset_id, df.copy(), current_user.id)
+        )
+        return {
+            "message": "Context generation started",
+            "status": "generating"
+        }
+    
+    return {
+        "message": "Context status checked",
+        "status": status
+    }
+
+
 @router.post("/analyze")
 async def analyze_data(
     request: QueryRequest,
@@ -359,17 +620,18 @@ async def analyze_data(
     db: Session = Depends(get_db)
 ):
     """
-    Analyze data and generate chart specification based on natural language query.
-    This endpoint will use the chart_creator module (to be provided by user).
+    Initial visualization generation endpoint - used for first chart after upload.
+    Generates a complete D3.js visualization from natural language query.
     """
     # Get the dataset
     if request.dataset_id:
-        df = data_store.get_dataset(current_user.id, request.dataset_id)
+        df = dataset_service.get_dataset(current_user.id, request.dataset_id)
         if df is None:
             raise HTTPException(status_code=404, detail="Dataset not found")
+        dataset_id = request.dataset_id
     else:
         # Use the most recent dataset
-        result = data_store.get_latest_dataset(current_user.id)
+        result = dataset_service.get_latest_dataset(current_user.id)
         if result is None:
             raise HTTPException(
                 status_code=400,
@@ -377,22 +639,83 @@ async def analyze_data(
             )
         dataset_id, df = result
     
-    # Generate chart specification using DSPy agents
+    # Get the dataset context from memory
+    dataset_context = dataset_service.get_context(current_user.id, dataset_id)
+    
+    # If context not available yet, provide basic fallback info
+    if not dataset_context:
+        columns = [str(col) for col in df.columns.tolist()]
+        dataset_context = f"Dataset with {len(df)} rows and {len(df.columns)} columns. Columns: {', '.join(columns)}"
+    
+    # Generate chart specification using DSPy agents with context
     from ..services.chart_creator import generate_chart_spec
     
     try:
-        chart_spec = generate_chart_spec(df, request.query)
+        chart_spec = await generate_chart_spec(df, request.query, dataset_context)
         
         return {
             "message": "Chart generated successfully",
             "query": request.query,
-            "dataset_id": request.dataset_id or dataset_id if not request.dataset_id else request.dataset_id,
+            "dataset_id": dataset_id,
             "chart_spec": chart_spec
         }
     except Exception as e:
         raise HTTPException(
             status_code=500,
             detail=f"Error generating chart: {str(e)}"
+        )
+
+
+@router.post("/chat")
+async def chat_with_data(
+    request: QueryRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Conversational refinement endpoint - used after initial visualization.
+    Allows users to refine, modify, or ask questions about existing visualizations.
+    """
+    # Get the dataset
+    if request.dataset_id:
+        df = dataset_service.get_dataset(current_user.id, request.dataset_id)
+        if df is None:
+            raise HTTPException(status_code=404, detail="Dataset not found")
+        dataset_id = request.dataset_id
+    else:
+        # Use the most recent dataset
+        result = dataset_service.get_latest_dataset(current_user.id)
+        if result is None:
+            raise HTTPException(
+                status_code=400,
+                detail="No dataset available. Please upload a file first."
+            )
+        dataset_id, df = result
+    
+    # Get the dataset context from memory
+    dataset_context = dataset_service.get_context(current_user.id, dataset_id)
+    
+    # If context not available yet, provide basic fallback info
+    if not dataset_context:
+        columns = [str(col) for col in df.columns.tolist()]
+        dataset_context = f"Dataset with {len(df)} rows and {len(df.columns)} columns. Columns: {', '.join(columns)}"
+    
+    # Generate chart specification using DSPy agents with context
+    from ..services.chart_creator import generate_chart_spec
+    
+    try:
+        chart_spec = await generate_chart_spec(df, request.query, dataset_context)
+        
+        return {
+            "message": "Visualization updated",
+            "query": request.query,
+            "dataset_id": dataset_id,
+            "chart_spec": chart_spec
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error updating visualization: {str(e)}"
         )
 
 
@@ -405,7 +728,7 @@ async def get_dashboard_count(
     Get count of dashboards per user.
     """
     # Count datasets as dashboards for now
-    datasets = data_store.list_datasets(current_user.id)
+    datasets = dataset_service.list_datasets(current_user.id)
     
     return {
         "user_id": current_user.id,

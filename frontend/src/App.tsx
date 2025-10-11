@@ -1,80 +1,72 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { Navbar } from './components/Navbar';
 import { Landing } from './components/Landing';
-import { ConnectData } from './components/steps/ConnectData';
-import { StyleContext } from './components/steps/StyleContext';
-import { Visualization } from './components/steps/Visualization';
+import { Account } from './components/Account';
+import { VisualizePage } from './pages/VisualizePage';
 
-type Row = Record<string, number | string>;
+function AuthHandler() {
+  const navigate = useNavigate();
+  const location = useLocation();
 
-export default function App() {
-  const [currentStep, setCurrentStep] = useState(-1); // landing first
-  const [data, setData] = useState<Row[]>([]);
-  const [datasetId, setDatasetId] = useState<string>('');
-  const [vizContext, setVizContext] = useState({
-    description: ''
-  });
-
-  // Handle OAuth callback
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
+    const urlParams = new URLSearchParams(location.search);
     const token = urlParams.get('token');
     
     if (token && sessionStorage.getItem('auth_callback')) {
       localStorage.setItem('auth_token', token);
       sessionStorage.removeItem('auth_callback');
-      setCurrentStep(0);
-      window.history.replaceState({}, '', window.location.pathname);
+      navigate('/visualize', { replace: true });
     }
-  }, []);
+  }, [navigate, location]);
 
-  const progress = currentStep < 0 ? 0 : ((currentStep + 1) / 3) * 100;
+  return null;
+}
 
-  const renderStep = () => {
-    switch (currentStep) {
-      case -1:
-        return <Landing onStart={() => setCurrentStep(0)} />;
-      case 0:
-        return (
-          <ConnectData
-            onDataLoaded={(newData, newDatasetId) => {
-              setData(newData);
-              setDatasetId(newDatasetId);
-              setCurrentStep(1);
-            }}
-          />
-        );
-      case 1:
-        return (
-          <StyleContext
-            onComplete={(context) => {
-              setVizContext(context);
-              setCurrentStep(2);
-            }}
-          />
-        );
-      case 2:
-        return (
-          <Visualization
-            data={data}
-            datasetId={datasetId}
-            context={vizContext}
-          />
-        );
-      default:
-        return null;
-    }
-  };
+function AppRoutes() {
+  const navigate = useNavigate();
+  const isAuthenticated = !!localStorage.getItem('auth_token');
 
   return (
-    <div className="app-container">
-      <div className="progress-indicator">
-        <div className="progress-bar" style={{ width: `${progress}%` }} />
+    <>
+      <AuthHandler />
+      <Navbar onAccountClick={() => navigate('/account')} />
+      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <Routes>
+          <Route path="/" element={<Landing onStart={() => navigate('/visualize')} />} />
+          <Route 
+            path="/visualize" 
+            element={
+              isAuthenticated ? (
+                <VisualizePage />
+              ) : (
+                <Navigate to="/" replace />
+              )
+            } 
+          />
+          <Route 
+            path="/account" 
+            element={
+              isAuthenticated ? (
+                <Account onClose={() => navigate(-1)} />
+              ) : (
+                <Navigate to="/" replace />
+              )
+            } 
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
       </div>
-      
-      <Navbar />
-      
-      {renderStep()}
-    </div>
+    </>
+  );
+}
+
+export default function App() {
+  return (
+    <Router>
+      <div className="app-container">
+        <AppRoutes />
+      </div>
+    </Router>
   );
 }

@@ -1,4 +1,4 @@
-from sqlalchemy import String, Integer, Boolean, ForeignKey, DateTime
+from sqlalchemy import String, Integer, Boolean, ForeignKey, DateTime, Text, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import datetime
 from .db import Base
@@ -17,6 +17,7 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     subscriptions: Mapped[list["Subscription"]] = relationship(back_populates="user")
+    datasets: Mapped[list["Dataset"]] = relationship(back_populates="user")
 
 
 class Subscription(Base):
@@ -30,5 +31,37 @@ class Subscription(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     user: Mapped[User] = relationship(back_populates="subscriptions")
+
+
+class Dataset(Base):
+    __tablename__ = "datasets"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    dataset_id: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    
+    # Basic metadata
+    filename: Mapped[str] = mapped_column(String(255))
+    row_count: Mapped[int] = mapped_column(Integer)
+    column_count: Mapped[int] = mapped_column(Integer)
+    file_size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    
+    # Dataset context from DSPy (rich description)
+    context: Mapped[str | None] = mapped_column(Text, nullable=True)
+    context_generated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    
+    # Column metadata as JSON
+    columns_info: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Store: {"columns": [...], "dtypes": {...}, "statistics": {...}}
+    
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Status tracking
+    context_status: Mapped[str] = mapped_column(String(50), default="pending")
+    # Values: "pending", "generating", "completed", "failed"
+    
+    user: Mapped[User] = relationship(back_populates="datasets")
 
 

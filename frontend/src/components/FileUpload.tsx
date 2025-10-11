@@ -1,4 +1,5 @@
 import React, { useCallback, useState } from 'react';
+import { config, getAuthHeaders } from '../config';
 
 type Row = Record<string, number | string>;
 
@@ -15,10 +16,11 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded }) => {
     const formData = new FormData();
     formData.append('file', file);
 
-    const response = await fetch('http://localhost:8000/api/data/upload', {
+    const response = await fetch(`${config.backendUrl}/api/data/upload`, {
       method: 'POST',
       body: formData,
-      credentials: 'include', // For auth cookies
+      headers: getAuthHeaders(),
+      credentials: 'include',
     });
 
     if (!response.ok) {
@@ -35,8 +37,9 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded }) => {
     setSuccess(null);
 
     try {
-      const response = await fetch('http://localhost:8000/api/data/sample/load', {
+      const response = await fetch(`${config.backendUrl}/api/data/sample/load`, {
         method: 'POST',
+        headers: getAuthHeaders(),
         credentials: 'include',
       });
 
@@ -48,17 +51,8 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded }) => {
       const result = await response.json();
       setSuccess(`Sample data loaded: ${result.dataset_info.filename}`);
       
-      // Load preview data for display
-      const previewResponse = await fetch(
-        `http://localhost:8000/api/data/datasets/${result.dataset_id}/preview?rows=100`,
-        { credentials: 'include' }
-      );
-      
-      if (previewResponse.ok) {
-        const previewData = await previewResponse.json();
-        const columns = Object.keys(previewData.preview[0] || {});
-        onDataLoaded(previewData.preview, columns, result.dataset_id);
-      }
+      // Pass minimal data to proceed to visualization
+      onDataLoaded([], [], result.dataset_id);
     } catch (err) {
       console.error('Error loading sample data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load sample data');
@@ -79,10 +73,8 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded }) => {
       const result = await uploadToBackend(file);
       setSuccess(`File uploaded: ${result.file_info.filename}`);
       
-      // Pass data to parent component
-      const columns = result.file_info.column_names;
-      const preview = result.file_info.preview;
-      onDataLoaded(preview, columns, result.dataset_id);
+      // Pass minimal data to proceed to visualization
+      onDataLoaded([], [], result.dataset_id);
     } catch (err) {
       console.error('Error uploading file:', err);
       setError(err instanceof Error ? err.message : 'Upload failed');
@@ -113,28 +105,20 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded }) => {
           <button
             onClick={loadSampleData}
             disabled={uploading}
-            style={{
-              padding: '0.5rem 1rem',
-              backgroundColor: '#4f46e5',
-              color: 'white',
-              border: 'none',
-              borderRadius: '0.375rem',
-              cursor: uploading ? 'not-allowed' : 'pointer',
-              opacity: uploading ? 0.5 : 1
-            }}
+            className="feedback-button"
           >
-            {uploading ? 'Loading...' : 'Load Sample Housing Data'}
+            {uploading ? 'Loading...' : 'Load Sample Data'}
           </button>
         </div>
 
         {error && (
-          <div style={{ marginTop: '1rem', padding: '0.75rem', backgroundColor: '#fee2e2', color: '#991b1b', borderRadius: '0.375rem' }}>
+          <div style={{ marginTop: '1rem', padding: '0.75rem', backgroundColor: '#fce7f3', color: '#9f1239', borderRadius: '0.375rem', border: '1px solid #f9a8d4' }}>
             {error}
           </div>
         )}
         
         {success && (
-          <div style={{ marginTop: '1rem', padding: '0.75rem', backgroundColor: '#d1fae5', color: '#065f46', borderRadius: '0.375rem' }}>
+          <div style={{ marginTop: '1rem', padding: '0.75rem', backgroundColor: '#fdf2f8', color: '#831843', borderRadius: '0.375rem', border: '1px solid #fbcfe8' }}>
             {success}
           </div>
         )}

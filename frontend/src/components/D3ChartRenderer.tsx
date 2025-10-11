@@ -25,43 +25,68 @@ export const D3ChartRenderer: React.FC<D3ChartRendererProps> = ({ chartSpec, dat
   }, [chartSpec, data]);
 
   const executeChartSpec = (container: HTMLElement, spec: any, dataset: any[]) => {
-    // This function will execute the D3 code provided by the chart_creator
-    // The spec should contain:
-    // - type: chart type (histogram, bar, scatter, etc.)
-    // - code: D3.js code to execute
-    // - config: chart configuration
+    try {
+      // The backend returns either a string (D3 code) or an object with chart_spec property
+      const d3Code = typeof spec === 'string' ? spec : spec.chart_spec || spec.code;
+      
+      if (!d3Code) {
+        console.error('No D3 code found in chart spec:', spec);
+        container.innerHTML = '<p style="color: red;">No visualization code received</p>';
+        return;
+      }
 
-    if (!spec.type) {
-      console.warn('No chart type specified');
-      return;
+      // Set up the container with an ID that the D3 code expects
+      container.id = 'visualization';
+      
+      // Add a wrapper div for better layout control
+      const wrapper = document.createElement('div');
+      wrapper.style.width = '100%';
+      wrapper.style.height = '100%';
+      wrapper.style.position = 'relative';
+      wrapper.id = 'visualization-wrapper';
+      container.appendChild(wrapper);
+      
+      // Create a function from the D3 code string and execute it
+      // We need to make d3 available in the execution context
+      // Also make sure the visualization selects the wrapper
+      const wrappedCode = d3Code.replace(
+        /d3\.select\(["']#visualization["']\)/g,
+        'd3.select("#visualization-wrapper")'
+      );
+      
+      const executeD3Code = new Function('d3', 'data', wrappedCode);
+      
+      // Execute the code with d3 and data in scope
+      executeD3Code(d3, dataset);
+      
+      // Ensure all SVG elements have proper responsive attributes
+      const svgs = container.querySelectorAll('svg');
+      svgs.forEach((svg: SVGSVGElement) => {
+        if (!svg.hasAttribute('viewBox')) {
+          const width = svg.getAttribute('width') || '800';
+          const height = svg.getAttribute('height') || '600';
+          svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+        }
+        svg.style.maxWidth = '100%';
+        svg.style.height = 'auto';
+      });
+      
+    } catch (error: any) {
+      console.error('Error executing D3 code:', error);
+      container.innerHTML = `<p style="color: red; padding: 20px;">Error rendering visualization: ${error.message}</p>`;
     }
-
-    // For now, create a placeholder based on chart type
-    // This will be replaced when chart_creator is integrated
-    const svg = d3.select(container)
-      .append('svg')
-      .attr('width', 800)
-      .attr('height', 600);
-
-    svg.append('text')
-      .attr('x', 400)
-      .attr('y', 300)
-      .attr('text-anchor', 'middle')
-      .attr('font-size', '20px')
-      .attr('fill', '#666')
-      .text(`Chart Type: ${spec.type} (Awaiting chart_creator integration)`);
   };
 
   return (
     <div 
-      ref={containerRef} 
+      ref={containerRef}
+      className="d3-chart-container"
       style={{
         width: '100%',
-        minHeight: '400px',
-        border: '1px solid #e5e7eb',
-        borderRadius: '0.5rem',
-        padding: '1rem',
-        backgroundColor: '#ffffff'
+        height: '100%',
+        minHeight: '600px',
+        position: 'relative',
+        overflow: 'visible'
       }}
     />
   );

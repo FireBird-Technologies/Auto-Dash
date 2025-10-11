@@ -10,8 +10,19 @@ It includes a two-stage pipeline:
 
 import dspy
 import pandas as pd
+import numpy as np
 from typing import Dict, Any, List, Optional
 import json
+import logging
+
+# Set up logger for the module
+logger = logging.getLogger("dspy_vis")
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    ch = logging.StreamHandler()
+    formatter = logging.Formatter('[%(asctime)s][%(levelname)s] %(message)s')
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
 
 
 # ============================================================================
@@ -45,7 +56,12 @@ STYLING_INSTRUCTIONS = [
                 "hover": {"enabled": True, "show_tooltip": True},
                 "zoom": {"enabled": True, "pan": True}
             },
-            "svg_defaults": {"height": 600, "width": 800, "margin": {"top": 50, "right": 50, "bottom": 50, "left": 60}}
+            "svg_defaults": {
+                "height": 500,
+                "width": "100%",
+                "max_width": 900,
+                "margin": {"top": 50, "right": 50, "bottom": 50, "left": 60}
+            }
         }
     },
     {
@@ -70,7 +86,11 @@ STYLING_INSTRUCTIONS = [
                 "hover": {"enabled": True, "show_tooltip": True, "highlight_color": "#ff6b6b"},
                 "click": {"enabled": True, "action": "show_details"}
             },
-            "svg_defaults": {"height": 600, "width": 800}
+            "svg_defaults": {
+                "height": 500,
+                "width": "100%",
+                "max_width": 900
+            }
         }
     },
     {
@@ -92,7 +112,11 @@ STYLING_INSTRUCTIONS = [
             "interactivity": {
                 "hover": {"enabled": True, "show_tooltip": True}
             },
-            "svg_defaults": {"height": 600, "width": 800}
+            "svg_defaults": {
+                "height": 500,
+                "width": "100%",
+                "max_width": 900
+            }
         }
     },
     {
@@ -112,7 +136,11 @@ STYLING_INSTRUCTIONS = [
                 "zoom": {"enabled": True, "pan": True},
                 "brush": {"enabled": True}
             },
-            "svg_defaults": {"height": 600, "width": 800}
+            "svg_defaults": {
+                "height": 500,
+                "width": "100%",
+                "max_width": 900
+            }
         }
     },
     {
@@ -138,7 +166,11 @@ STYLING_INSTRUCTIONS = [
             "interactivity": {
                 "hover": {"enabled": True, "show_tooltip": True, "highlight": True}
             },
-            "svg_defaults": {"height": 600, "width": 800}
+            "svg_defaults": {
+                "height": 500,
+                "width": "100%",
+                "max_width": 700
+            }
         }
     },
     {
@@ -157,7 +189,11 @@ STYLING_INSTRUCTIONS = [
                 "percentage_decimals": 2,
                 "percentage_sign": True
             },
-            "svg_defaults": {"height": 600, "width": 800}
+            "svg_defaults": {
+                "height": 500,
+                "width": "100%",
+                "max_width": 900
+            }
         }
     },
     {
@@ -175,7 +211,11 @@ STYLING_INSTRUCTIONS = [
             "interactivity": {
                 "hover": {"enabled": True, "show_tooltip": True}
             },
-            "svg_defaults": {"height": 600, "width": 800}
+            "svg_defaults": {
+                "height": 500,
+                "width": "100%",
+                "max_width": 900
+            }
         }
     },
     {
@@ -188,7 +228,130 @@ STYLING_INSTRUCTIONS = [
                 "grid_stroke_width": 1
             },
             "title": {"bold_html": True, "include": True},
-            "svg_defaults": {"height": 600, "width": 800}
+            "svg_defaults": {
+                "height": 500,
+                "width": "100%",
+                "max_width": 900
+            }
+        }
+    },
+
+
+    {
+        "category": "chord",
+        "description": "Chord diagrams - show inter-relationships between entities in a circular layout.",
+        "styling": {
+            "theme": "light",
+            "chord_style": {"pad_angle": 0.03, "inner_radius_ratio": 0.7},
+            "color_scheme": "d3.schemeCategory10",
+            "annotations": ["group labels", "flow values"],
+            "title": {"bold_html": True, "include": True},
+            "interactivity": {"hover": {"enabled": True, "show_tooltip": True}},
+            "svg_defaults": {"height": 550, "width": "100%", "max_width": 650}
+        }
+    },
+    {
+        "category": "d3graph",
+        "description": "Generic D3 force-directed network graph to visualize nodes and edges (networks).",
+        "styling": {
+            "theme": "light",
+            "node_style": {"radius": 7, "color": "#FF6D00"},
+            "edge_style": {"width": 1, "color": "#bbb"},
+            "force_strength": 0.07,
+            "title": {"bold_html": True, "include": True},
+            "interactivity": {
+                "drag": {"enabled": True},
+                "zoom": {"enabled": True}
+            },
+            "svg_defaults": {"height": 580, "width": "100%", "max_width": 900}
+        }
+    },
+
+    {
+        "category": "sankey",
+        "description": "Sankey diagram showing flow magnitudes between nodes using links of varying thickness.",
+        "styling": {
+            "theme": "light",
+            "node_width": 18,
+            "node_padding": 10,
+            "color_scheme": "d3.schemeCategory10",
+            "title": {"bold_html": True, "include": True},
+            "annotations": ["flow values", "labels"],
+            "interactivity": {
+                "hover": {"enabled": True, "show_tooltip": True}
+            },
+            "svg_defaults": {"height": 580, "width": "100%", "max_width": 950}
+        }
+    },
+    {
+        "category": "matrix",
+        "description": "Matrix visualizations (e.g., adjacency matrix or correlation heatmap).",
+        "styling": {
+            "theme": "light",
+            "cell_style": {"border": "1px solid #ccc", "size": 35},
+            "color_scale": "d3.interpolateRdBu",
+            "annotations": ["values inside cells"],
+            "title": {"bold_html": True, "include": True},
+            "svg_defaults": {"height": 600, "width": "100%", "max_width": 1000}
+        }
+    },
+    
+    {
+        "category": "violin",
+        "description": "Violin plots visualize data distributions, combining box plot and density trace.",
+        "styling": {
+            "theme": "light",
+            "violin_style": {"width": 75, "color": "#8e24aa", "opacity": 0.8},
+            "axes": {"stroke_width": 0.18, "grid_stroke_width": 1, "grid_color": "#eee"},
+            "title": {"bold_html": True, "include": True},
+            "annotations": ["median", "quartiles"],
+            "interactivity": {"hover": {"enabled": True, "show_tooltip": True}},
+            "svg_defaults": {"height": 500, "width": "100%", "max_width": 700}
+        }
+    },
+
+    {
+        "category": "treemap",
+        "description": "Treemap visualization to display hierarchical data using nested rectangles.",
+        "styling": {
+            "theme": "light",
+            "rect_style": {"padding": 2, "corner_radius": 2},
+            "color_scheme": "d3.interpolateCool",
+            "title": {"bold_html": True, "include": True},
+            "annotations": ["labels", "values"],
+            "svg_defaults": {"height": 500, "width": "100%", "max_width": 900}
+        }
+    },
+    {
+        "category": "tree",
+        "description": "Tree diagrams - node-link or radial layout for hierarchical data.",
+        "styling": {
+            "theme": "light",
+            "node_style": {"radius": 5, "color": "#43A047"},
+            "link_style": {"width": 1.2, "color": "#bdbdbd"},
+            "title": {"bold_html": True, "include": True},
+            "interactivity": {
+                "collapse_expand": {"enabled": True},
+                "hover": {"enabled": True, "show_tooltip": True}
+            },
+            "svg_defaults": {"height": 620, "width": "100%", "max_width": 950}
+        }
+    },
+
+    {
+        "category": "maps",
+        "description": "Geographic map, choropleth or point-based for spatial visualizations.",
+        "styling": {
+            "theme": "light",
+            "map_style": {"projection": "geoMercator"},
+            "color_scale": "d3.interpolateViridis",
+            "point_style": {"radius": 5, "color": "#d84315"},
+            "title": {"bold_html": True, "include": True},
+            "interactivity": {
+                "zoom": {"enabled": True, "pan": True},
+                "hover": {"enabled": True, "show_tooltip": True}
+            },
+            "svg_defaults": {"height": 520, "width": "100%", "max_width": 950}
         }
     }
 ]
@@ -198,15 +361,6 @@ STYLING_INSTRUCTIONS = [
 # DSPY SIGNATURES
 # ============================================================================
 
-class ValidateQuery(dspy.Signature):
-    """Validate if the query can be satisfied with available data."""
-    query = dspy.InputField(desc="User's natural language query")
-    available_columns = dspy.InputField(desc="List of available column names in the dataset")
-    column_types = dspy.InputField(desc="Dictionary mapping column names to their data types")
-    
-    is_valid = dspy.OutputField(desc="Boolean: True if query can be satisfied with available columns", type=bool)
-    missing_info = dspy.OutputField(desc="Explanation of what's missing or problematic if not valid")
-    suggested_columns = dspy.OutputField(desc="List of column names that should be used for this query")
 
 
 class GenerateVisualizationPlan(dspy.Signature):
@@ -226,8 +380,9 @@ class GenerateVisualizationPlan(dspy.Signature):
             "Step-by-step plan describing what to compute or visualize, "
             "including which chart types to use. "
             "Chart names must be chosen from: "
-            "[line_charts, bar_charts, histograms, scatter_plots, pie_charts, "
-            "tabular_and_generic_charts, heat_maps, histogram_distribution]."
+            "[line_charts, bar_charts, histograms, scatter_plots, treemaps, "
+            "sankey, heat_maps,d3graphs histogram_distribution]."
+            "but only choose as much as needed don't repeat charts"
         )
     )
 
@@ -239,45 +394,29 @@ class GenerateVisualizationPlan(dspy.Signature):
     chart_type = dspy.OutputField(
         desc="Primary chart type from the list above"
     )
+class fix_d3(dspy.Signature):
+    """"""
+    d3_code = dspy.InputField(desc="The error based d3 code")
+    error = dspy.InputField(desc="The error generated by the system")
+    fix = dspy.OutputField(desc="The fixed code that can run")
 
-
-class GenerateDataAggregation(dspy.Signature):
+class CreateDatasetContext(dspy.Signature):
     """
-    Generate pandas code to aggregate and prepare data for visualization.
+    DSPy signature to generate dataset context for visualization tasks.
+    The dataset context should describe columns, types, sample values, and relevant statistics.
     """
-    plan = dspy.InputField(desc="Visualization plan describing what to compute")
-    dataset_context = dspy.InputField(desc="Dataset information including columns and types")
-    
-    aggregation_code = dspy.OutputField(
-        desc="Python pandas code that transforms the input DataFrame 'df' into aggregated data. Must be executable code that creates a variable 'result'."
+
+    dataframe_info = dspy.InputField(
+        desc="Information about the pandas DataFrame: column names, types, and optionally some samples/statistics."
     )
-    columns_needed = dspy.OutputField(
-        desc="List of column names needed from the original dataset",
-        type=list
+
+    dataset_context = dspy.OutputField(
+        desc="A textual or structured summary describing the columns, their data types, sample values, value ranges, and any key statistics that help downstream modules reason about what visualizations are possible."
     )
 
 
-class PlanToD3(dspy.Signature):
-    """Convert visualization plan to executable D3.js code."""
-    plan = dspy.InputField(desc="Planner instructions around what they want to visualize")
-    dataset_context = dspy.InputField(desc="Information about the dataset, columns, stats")
-    styling_instructions = dspy.InputField(desc="Styling instructions for the charts/dashboard")
-    
-    d3_js_code = dspy.OutputField(
-        desc="Complete, executable D3.js code that renders the visualization. Should include all necessary D3 setup, scales, axes, and rendering logic."
-    )
 
 
-class GenerateChartMetadata(dspy.Signature):
-    """Generate metadata for the chart including title, labels, and description."""
-    query = dspy.InputField(desc="User's original query")
-    plan = dspy.InputField(desc="Visualization plan")
-    chart_type = dspy.InputField(desc="Type of chart being generated")
-    
-    title = dspy.OutputField(desc="Chart title")
-    x_label = dspy.OutputField(desc="X-axis label (if applicable)")
-    y_label = dspy.OutputField(desc="Y-axis label (if applicable)")
-    description = dspy.OutputField(desc="Brief description of what the chart shows")
 
 
 # ============================================================================
@@ -298,265 +437,78 @@ d3.select("body")
 # MAIN D3 MODULE
 # ============================================================================
 
+class plan_to_d3(dspy.Signature):
+    """Generate D3.js visualization code that uses data passed as a parameter.
+    
+    CRITICAL REQUIREMENTS:
+    1. The data is already available as a JavaScript array called 'data'
+    2. DO NOT use d3.csv(), d3.json(), or any data loading methods
+    3. DO NOT use d3.select("body") - ALWAYS use d3.select("#visualization") as the root container
+    4. Use D3 v7 CORE LIBRARY ONLY - NO external plugins (d3.regressionLinear, d3.sankey, d3.hexbin, d3-regression, etc.)
+    5. For regression/trendlines, use manual calculations or d3.line() with computed slope/intercept
+    6. Use D3 v7 syntax (d3.group, d3.rollup instead of d3.nest)
+    7. The container div with id="visualization" is already created for you
+    
+    AVAILABLE D3 FUNCTIONS (core only):
+    - Scales: d3.scaleLinear, d3.scaleOrdinal, d3.scaleBand, d3.scaleTime, d3.scaleLog
+    - Shapes: d3.line, d3.area, d3.arc, d3.pie, d3.symbol
+    - Arrays: d3.group, d3.rollup, d3.mean, d3.sum, d3.extent, d3.min, d3.max, d3.median
+    - Axes: d3.axisBottom, d3.axisLeft, d3.axisRight, d3.axisTop
+    - Colors: d3.schemeCategory10, d3.interpolateViridis, d3.scaleOrdinal
+    
+    Example start of D3 code:
+    // Data is already available as 'data' parameter
+    // Select the provided container
+    const container = d3.select("#visualization");
+    
+    // Create your visualization
+    const svg = container.append("svg")
+        .attr("width", 800)
+        .attr("height", 600);
+    
+    // For trendlines, calculate manually:
+    // const xMean = d3.mean(data, d => d.x);
+    // const yMean = d3.mean(data, d => d.y);
+    // const slope = d3.sum(data, d => (d.x - xMean) * (d.y - yMean)) / d3.sum(data, d => (d.x - xMean) ** 2);
+    // const intercept = yMean - slope * xMean;
+    
+    Ensure the visualization is interactive with buttons, legends axis controls etc
+    Make the chart modern sleek
+    """
+    plan = dspy.InputField(desc="Planner instructions around what they want to visualize")
+    dataset_context = dspy.InputField(desc="Information about the dataset, columns, stats")
+    styling_instructions = dspy.InputField(desc="Styling instructions for the charts / dashboard")
+    d3_js_code = dspy.OutputField(desc="Complete D3.js code that: 1) Uses the 'data' variable (already available), 2) MUST use d3.select('#visualization') NOT d3.select('body'), 3) Uses ONLY D3 v7 core library - NO external plugins (d3.regressionLinear, d3.sankey, etc.), 4) NO data loading code, 5) For trendlines calculate slope/intercept manually")
+
 class D3VisualizationModule(dspy.Module):
-    """
-    Main DSPy module for generating D3.js visualizations.
-    
-    Pipeline:
-    1. Validate query against available data
-    2. Generate visualization plan
-    3. Generate data aggregation code (if needed)
-    4. Generate D3.js code
-    5. Generate metadata
-    """
-    
-    def __init__(self, styling_instructions: List[Dict] = None):
-        super().__init__()
-        self.styling_instructions = styling_instructions or STYLING_INSTRUCTIONS
-        
-        # Initialize predictors
-        self.validator = dspy.Predict(ValidateQuery)
+    def __init__(self):
+        self.styling_instructions = STYLING_INSTRUCTIONS
         self.planner = dspy.Predict(GenerateVisualizationPlan)
-        self.data_aggregator = dspy.Predict(GenerateDataAggregation)
-        self.d3_generator = dspy.Predict(PlanToD3)
-        self.metadata_generator = dspy.Predict(GenerateChartMetadata)
-        
-    def get_relevant_styling(self, plan: str) -> List[Dict]:
-        """Extract relevant styling instructions based on the plan."""
-        relevant_styles = []
-        for style_config in self.styling_instructions:
-            if style_config.get("category") in plan:
-                relevant_styles.append(style_config)
-        return relevant_styles
-    
-    def extract_chart_type(self, plan: str) -> str:
-        """Extract the primary chart type from the plan."""
-        for style_config in self.styling_instructions:
-            category = style_config.get("category")
-            if category in plan:
-                return category.replace("_", " ").title()
-        return "Custom Chart"
-    
-    def safe_execute_aggregation(self, df: pd.DataFrame, code: str) -> Optional[pd.DataFrame]:
-        """
-        Safely execute pandas aggregation code.
-        Returns None if execution fails.
-        """
-        try:
-            # Create a safe execution environment
-            local_vars = {"df": df, "pd": pd}
-            exec(code, {"__builtins__": {}}, local_vars)
-            
-            # Try to get the result
-            if "result" in local_vars:
-                return local_vars["result"]
-            else:
-                # If no result variable, return original df
-                return df
-        except Exception as e:
-            print(f"Aggregation execution failed: {e}")
-            return None
-    
-    def forward(
-        self, 
-        query: str, 
-        df: pd.DataFrame,
-        return_aggregation_code: bool = False
-    ) -> Dict[str, Any]:
-        """
-        Generate visualization from query and dataframe.
-        
-        Args:
-            query: Natural language query
-            df: Pandas DataFrame with the data
-            return_aggregation_code: If True, includes aggregation code in response
-            
-        Returns:
-            Dictionary with chart specification
-        """
-        # Prepare dataset context
-        dataset_context = {
-            "columns": df.columns.tolist(),
-            "dtypes": {k: str(v) for k, v in df.dtypes.items()},
-            "shape": {"rows": len(df), "columns": len(df.columns)},
-            "sample_rows": df.head(5).to_dict('records'),
-            "statistics": df.describe().to_dict() if len(df) > 0 else {}
-        }
-        dataset_context_str = json.dumps(dataset_context, indent=2)
-        
-        # Step 1: Validate query
-        validation = self.validator(
-            query=query,
-            available_columns=str(df.columns.tolist()),
-            column_types=str(df.dtypes.to_dict())
-        )
-        
-        if not validation.is_valid:
-            return {
-                "type": "error",
-                "message": validation.missing_info,
-                "suggestions": validation.suggested_columns if hasattr(validation, 'suggested_columns') else []
-            }
-        
-        # Step 2: Generate plan
-        plan_result = self.planner(
-            query=query,
-            dataset_context=dataset_context_str
-        )
-        
-        # Check if query is relevant
-        if plan_result.relevant_query:  # True means NOT relevant
-            return {
-                "type": "error",
-                "message": "Query is not about data visualization or analysis",
-                "d3_code": FAIL_MESSAGE
-            }
-        
-        # Step 3: Generate data aggregation (optional)
-        aggregated_df = df
-        aggregation_code = None
-        
-        if "aggregate" in plan_result.plan.lower() or "group" in plan_result.plan.lower():
-            try:
-                agg_result = self.data_aggregator(
-                    plan=plan_result.plan,
-                    dataset_context=dataset_context_str
-                )
-                aggregation_code = agg_result.aggregation_code
-                
-                # Try to execute aggregation
-                result = self.safe_execute_aggregation(df, aggregation_code)
-                if result is not None:
-                    aggregated_df = result
-            except Exception as e:
-                print(f"Aggregation failed: {e}")
-                # Continue with original data
-        
-        # Step 4: Get relevant styling
-        relevant_styles = self.get_relevant_styling(plan_result.plan)
-        
-        # Step 5: Generate D3 code
-        d3_result = self.d3_generator(
-            plan=plan_result.plan,
-            dataset_context=dataset_context_str,
-            styling_instructions=str(relevant_styles)
-        )
-        
-        # Step 6: Generate metadata
-        metadata = self.metadata_generator(
-            query=query,
-            plan=plan_result.plan,
-            chart_type=plan_result.chart_type if hasattr(plan_result, 'chart_type') else "unknown"
-        )
-        
-        # Prepare response
-        response = {
-            "type": self.extract_chart_type(plan_result.plan),
-            "data": aggregated_df.to_dict('records'),
-            "spec": {
-                "code": d3_result.d3_js_code,
-                "styling": relevant_styles,
-                "renderer": "d3"
-            },
-            "metadata": {
-                "title": metadata.title if hasattr(metadata, 'title') else query,
-                "x_label": metadata.x_label if hasattr(metadata, 'x_label') else "",
-                "y_label": metadata.y_label if hasattr(metadata, 'y_label') else "",
-                "description": metadata.description if hasattr(metadata, 'description') else "",
-                "columns_used": validation.suggested_columns if hasattr(validation, 'suggested_columns') else [],
-                "generated_by": "dspy_d3_module",
-                "chart_category": plan_result.chart_type if hasattr(plan_result, 'chart_type') else "unknown"
-            },
-            "plan": plan_result.plan
-        }
-        
-        if return_aggregation_code and aggregation_code:
-            response["aggregation_code"] = aggregation_code
-        
-        return response
+        self.plan_to_d3_sign = dspy.Predict(plan_to_d3)
+        self.fail = FAIL_MESSAGE
 
+    async def aforward(self, query, dataset_context):
+        with dspy.context(lm=dspy.LM("openai/gpt-4o-mini", max_tokens=1200 )):
+            plan = self.planner(query=query, dataset_context=dataset_context)
 
-# ============================================================================
-# CONVENIENCE FUNCTIONS
-# ============================================================================
+        logger.info("GenerateVisualizationPlan result: %s", plan.plan)
+        # logger.info("DSPy inspect_history:\n%s", dspy.inspect_history(n=1))
 
-def initialize_dspy(
-    model: str = "gpt-4o-mini",
-    api_key: Optional[str] = None
-) -> D3VisualizationModule:
-    """
-    Initialize DSPy with a language model and return the module.
-    
-    Args:
-        model: Model name (e.g., "gpt-4o-mini", "gpt-3.5-turbo")
-        api_key: OpenAI API key (if not set in environment)
-        
-    Returns:
-        Initialized D3VisualizationModule
-    """
-    import os
-    
-    if api_key:
-        os.environ["OPENAI_API_KEY"] = api_key
-    
-    # Configure DSPy
-    lm = dspy.OpenAI(model=model)
-    dspy.settings.configure(lm=lm)
-    
-    # Return initialized module
-    return D3VisualizationModule(STYLING_INSTRUCTIONS)
+        if 'False' in str(plan.relevant_query):
+            styling = []
+            for c in self.styling_instructions:
+                if c.get("category") in plan.plan:
+                    styling.append(c)
+            d3_code = self.plan_to_d3_sign(
+                plan=plan.plan,
+                dataset_context=dataset_context,
+                styling_instructions=str(styling)
+            )
 
-
-def generate_visualization(
-    query: str,
-    df: pd.DataFrame,
-    module: Optional[D3VisualizationModule] = None
-) -> Dict[str, Any]:
-    """
-    Convenience function to generate visualization.
-    
-    Args:
-        query: Natural language query
-        df: Pandas DataFrame
-        module: Pre-initialized module (or will create new one)
-        
-    Returns:
-        Chart specification dictionary
-    """
-    if module is None:
-        module = initialize_dspy()
-    
-    return module.forward(query, df)
-
-
-# ============================================================================
-# EXAMPLE USAGE
-# ============================================================================
-
-if __name__ == "__main__":
-    # Example usage
-    import os
-    
-    # Initialize DSPy
-    print("Initializing DSPy...")
-    viz_module = initialize_dspy()
-    
-    # Create sample data
-    sample_df = pd.DataFrame({
-        "month": ["Jan", "Feb", "Mar", "Apr", "May"],
-        "sales": [10000, 15000, 12000, 18000, 22000],
-        "region": ["North", "North", "South", "South", "North"]
-    })
-    
-    # Generate visualization
-    print("Generating visualization...")
-    result = viz_module.forward(
-        query="Show me a bar chart of sales by month",
-        df=sample_df
-    )
-    
-    print(f"\nChart Type: {result['type']}")
-    print(f"Title: {result['metadata']['title']}")
-    print(f"\nD3 Code Preview:")
-    print(result['spec']['code'][:200] + "...")
+            logger.info("plan_to_d3 result: %s", d3_code)
+            # logger.info("DSPy inspect_history after plan_to_d3 (last 3):\n%s", "\n"+ dspy.inspect_history(n=1))
+            return d3_code.d3_js_code
+        else:
+            logger.info("Query found not relevant for visualization. Returning FAIL_MESSAGE.")
+            return self.fail
 
