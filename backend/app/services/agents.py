@@ -38,7 +38,8 @@ STYLING_INSTRUCTIONS = [
             "axes": {
                 "stroke_width": 0.2,
                 "grid_stroke_width": 1,
-                "grid_color": "#e0e0e0"
+                "grid_color": "#e0e0e0",
+                "label_title_spacing": 14  # ensure good distance between axis labels and axis titles
             },
             "title": {
                 "bold_html": True,
@@ -47,8 +48,12 @@ STYLING_INSTRUCTIONS = [
             "colors": "use color scale (d3.schemeCategory10 or interpolated if >10 lines)",
             "annotations": ["min", "max"],
             "number_format": {
-                "apply_k_m": True,
-                "thresholds": {"K": 1000, "M": 100000},
+                "use_abbreviations": True,
+                "kmb_only": True,   # ENSURE M, K, B shown and never commas
+                "apply_k_m_b": True,
+                "thresholds": {"K": 1_000, "M": 1_000_000, "B": 1_000_000_000},
+                "always_abbreviate": True,
+                "never_use_commas": True,
                 "percentage_decimals": 2,
                 "percentage_sign": True
             },
@@ -71,14 +76,19 @@ STYLING_INSTRUCTIONS = [
             "theme": "light",
             "axes": {
                 "stroke_width": 0.2,
-                "grid_stroke_width": 1
+                "grid_stroke_width": 1,
+                "label_title_spacing": 14
             },
             "title": {"bold_html": True, "include": True},
             "annotations": ["bar values"],
             "bar_style": {"padding": 0.1, "corner_radius": 3},
             "number_format": {
-                "apply_k_m": True,
-                "thresholds": {"K": 1000, "M": 100000},
+                "use_abbreviations": True,
+                "kmb_only": True,
+                "apply_k_m_b": True,
+                "thresholds": {"K": 1_000, "M": 1_000_000, "B": 1_000_000_000},
+                "always_abbreviate": True,
+                "never_use_commas": True,
                 "percentage_decimals": 2,
                 "percentage_sign": True
             },
@@ -99,13 +109,17 @@ STYLING_INSTRUCTIONS = [
         "styling": {
             "theme": "light",
             "bin_count": 50,
-            "axes": {"stroke_width": 0.2, "grid_stroke_width": 1},
+            "axes": {"stroke_width": 0.2, "grid_stroke_width": 1, "label_title_spacing": 14},
             "title": {"bold_html": True, "include": True},
             "annotations": ["x values"],
             "bar_style": {"opacity": 0.8, "corner_radius": 2},
             "number_format": {
-                "apply_k_m": True,
-                "thresholds": {"K": 1000, "M": 100000},
+                "use_abbreviations": True,
+                "kmb_only": True,
+                "apply_k_m_b": True,
+                "thresholds": {"K": 1_000, "M": 1_000_000, "B": 1_000_000_000},
+                "always_abbreviate": True,
+                "never_use_commas": True,
                 "percentage_decimals": 2,
                 "percentage_sign": True
             },
@@ -124,12 +138,16 @@ STYLING_INSTRUCTIONS = [
         "description": "Show relationships between two numerical variables with points.",
         "styling": {
             "theme": "light",
-            "axes": {"stroke_width": 0.2, "grid_stroke_width": 1},
+            "axes": {"stroke_width": 0.2, "grid_stroke_width": 1, "label_title_spacing": 14},
             "title": {"bold_html": True, "include": True},
             "point_style": {"radius": 4, "opacity": 0.6},
             "number_format": {
-                "apply_k_m": True,
-                "thresholds": {"K": 1000, "M": 100000}
+                "use_abbreviations": True,
+                "kmb_only": True,
+                "apply_k_m_b": True,
+                "thresholds": {"K": 1_000, "M": 1_000_000, "B": 1_000_000_000},
+                "always_abbreviate": True,
+                "never_use_commas": True
             },
             "interactivity": {
                 "hover": {"enabled": True, "show_tooltip": True},
@@ -158,8 +176,12 @@ STYLING_INSTRUCTIONS = [
             "annotations": ["percentage labels"],
             "color_scheme": "d3.schemeCategory10",
             "number_format": {
-                "apply_k_m": True,
-                "thresholds": {"K": 1000, "M": 100000},
+                "use_abbreviations": True,
+                "kmb_only": True,
+                "apply_k_m_b": True,
+                "thresholds": {"K": 1_000, "M": 1_000_000, "B": 1_000_000_000},
+                "always_abbreviate": True,
+                "never_use_commas": True,
                 "percentage_decimals": 2,
                 "percentage_sign": True
             },
@@ -178,12 +200,16 @@ STYLING_INSTRUCTIONS = [
         "description": "Applies to charts where number formatting needs flexibility, including mixed or raw data.",
         "styling": {
             "theme": "light",
-            "axes": {"stroke_width": 0.2, "grid_stroke_width": 1},
+            "axes": {"stroke_width": 0.2, "grid_stroke_width": 1, "label_title_spacing": 14},
             "title": {"bold_html": True, "include": True},
             "annotations": ["x values"],
             "number_format": {
-                "apply_k_m": True,
-                "thresholds": {"K": 1000, "M": 100000},
+                "use_abbreviations": True,
+                "kmb_only": True,
+                "apply_k_m_b": True,
+                "thresholds": {"K": 1_000, "M": 1_000_000, "B": 1_000_000_000},
+                "always_abbreviate": True,
+                "never_use_commas": True,
                 "exclude_if_commas_present": True,
                 "exclude_if_not_numeric": True,
                 "percentage_decimals": 2,
@@ -204,7 +230,8 @@ STYLING_INSTRUCTIONS = [
             "axes": {
                 "stroke_color": "black",
                 "stroke_width": 0.2,
-                "grid_stroke_width": 1
+                "grid_stroke_width": 1,
+                "label_title_spacing": 14
             },
             "color_scale": "d3.interpolateViridis",
             "title": {"bold_html": True, "include": True},
@@ -225,7 +252,8 @@ STYLING_INSTRUCTIONS = [
             "theme": "light",
             "bar_style": {"opacity": 0.75},
             "axes": {
-                "grid_stroke_width": 1
+                "grid_stroke_width": 1,
+                "label_title_spacing": 14
             },
             "title": {"bold_html": True, "include": True},
             "svg_defaults": {
@@ -235,7 +263,6 @@ STYLING_INSTRUCTIONS = [
             }
         }
     },
-
 
     {
         "category": "chord",
@@ -302,7 +329,7 @@ STYLING_INSTRUCTIONS = [
         "styling": {
             "theme": "light",
             "violin_style": {"width": 75, "color": "#8e24aa", "opacity": 0.8},
-            "axes": {"stroke_width": 0.18, "grid_stroke_width": 1, "grid_color": "#eee"},
+            "axes": {"stroke_width": 0.18, "grid_stroke_width": 1, "grid_color": "#eee", "label_title_spacing": 14},
             "title": {"bold_html": True, "include": True},
             "annotations": ["median", "quartiles"],
             "interactivity": {"hover": {"enabled": True, "show_tooltip": True}},
@@ -368,6 +395,7 @@ class GenerateVisualizationPlan(dspy.Signature):
     Generate a visualization or analytical plan from a natural language query.
     The plan should include the reasoning steps and the names of charts
     (chosen from known chart types).
+    Make the plan as concise as possible only 3-4 lines
     """
 
     query = dspy.InputField(

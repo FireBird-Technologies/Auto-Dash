@@ -31,7 +31,7 @@ export const D3ChartRenderer: React.FC<D3ChartRendererProps> = ({ chartSpec, dat
       console.error('Code snippet around error:', codeSnippet);
       setRenderError(errorMessage);
       
-      // Show "taking longer than expected" message and attempt to fix
+      // Show "taking longer than expected" message immediately and attempt to fix
       showFixingMessage();
       attemptFix(errorMessage, chartSpec, codeSnippet, errorLine);
     }
@@ -44,11 +44,14 @@ export const D3ChartRenderer: React.FC<D3ChartRendererProps> = ({ chartSpec, dat
       containerRef.current.innerHTML = `
         <div style="padding: 40px; text-align: center; color: #1976d2; background: #e3f2fd; border-radius: 8px; margin: 20px;">
           <div style="display: inline-block; margin-bottom: 15px;">
-            <div style="width: 20px; height: 20px; border: 2px solid #1976d2; border-top: 2px solid transparent; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+            <div style="width: 24px; height: 24px; border: 3px solid #1976d2; border-top: 3px solid transparent; border-radius: 50%; animation: spin 1s linear infinite;"></div>
           </div>
-          <h3 style="margin: 0 0 10px 0; font-size: 18px;">🔧 Fixing visualization...</h3>
-          <p style="margin: 0; font-size: 14px; color: #666;">Sorry for the wait, taking longer than expected</p>
-          <p style="margin: 10px 0 0 0; font-size: 12px; color: #999;">Our AI is analyzing the error and generating a fix.</p>
+          <h3 style="margin: 0 0 10px 0; font-size: 18px; color: #1976d2;">🔧 Fixing visualization...</h3>
+          <p style="margin: 0; font-size: 14px; color: #666; font-weight: 500;">Sorry for the wait, taking longer than expected</p>
+          <p style="margin: 10px 0 0 0; font-size: 12px; color: #999;">Our AI is analyzing the error and generating a fix. This may take a few moments...</p>
+          <div style="margin-top: 15px; font-size: 11px; color: #888;">
+            <span id="fix-status">Analyzing error...</span>
+          </div>
         </div>
         <style>
           @keyframes spin {
@@ -75,6 +78,15 @@ export const D3ChartRenderer: React.FC<D3ChartRendererProps> = ({ chartSpec, dat
         d3Code = chartSpec.chart_spec || chartSpec.d3_code || JSON.stringify(chartSpec);
       }
 
+      // Ensure fixing message is shown before making the request
+      showFixingMessage();
+      
+      // Update status to show request is being sent
+      setTimeout(() => {
+        const statusEl1 = document.getElementById('fix-status');
+        if (statusEl1) statusEl1.textContent = 'Sending request to AI...';
+      }, 500);
+
       // Call fix-visualization endpoint with new format
       const response = await fetch(`${config.backendUrl}/api/data/fix-visualization`, {
         method: 'POST',
@@ -87,12 +99,21 @@ export const D3ChartRenderer: React.FC<D3ChartRendererProps> = ({ chartSpec, dat
           error_message: errorMessage
         })
       });
+      
+      // Update status to show AI is processing
+      const statusEl2 = document.getElementById('fix-status');
+      if (statusEl2) statusEl2.textContent = 'AI is generating fix...';
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const result = await response.json();
+      
+      // Update status to show processing is complete
+      const statusEl3 = document.getElementById('fix-status');
+      if (statusEl3) statusEl3.textContent = 'Processing response...';
+      
       setIsFixing(false);
 
       if (result.fix_failed) {
@@ -101,7 +122,18 @@ export const D3ChartRenderer: React.FC<D3ChartRendererProps> = ({ chartSpec, dat
       } else if (result.fixed_complete_code) {
         // Try to render the fixed code
         try {
-          const executeD3Code = new Function('d3', 'data', result.fixed_complete_code);
+          let fixedCode = result.fixed_complete_code;
+          
+          // Strip markdown formatting if present
+          if (fixedCode.includes('```javascript')) {
+            fixedCode = fixedCode.replace(/```javascript\n?/g, '').replace(/```\n?/g, '').trim();
+          } else if (fixedCode.includes('```js')) {
+            fixedCode = fixedCode.replace(/```js\n?/g, '').replace(/```\n?/g, '').trim();
+          } else if (fixedCode.includes('```')) {
+            fixedCode = fixedCode.replace(/```\n?/g, '').trim();
+          }
+          
+          const executeD3Code = new Function('d3', 'data', fixedCode);
           if (containerRef.current) {
             d3.select(containerRef.current).selectAll('*').remove();
             executeD3Code(d3, data);

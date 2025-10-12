@@ -9,6 +9,16 @@ import json
 import chardet
 import tempfile
 import os
+from dotenv import load_dotenv
+
+# Load .env file from the parent directory (above 'app')
+from pathlib import Path
+import os
+
+env_path = Path(__file__).parent.parent / ".env"
+load_dotenv(dotenv_path=env_path)
+
+
 import uuid
 import asyncio
 from pathlib import Path
@@ -23,6 +33,7 @@ from ..services.agents import fix_d3
 import logging
 import re
 import dspy
+
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -875,11 +886,20 @@ async def fix_visualization_error(
         # Extract only the relevant error context (5 lines above/below error)
         error_context = extract_error_context(request.d3_code, request.error_message)
         
-        refine_fixer = dspy.Refine(fix_d3, metric=d3_fix_metric, N=3, threshold=0.7)
-        with dspy.context(lm = dspy.LM("openai/gpt-4o-mini", max_tokens=3000)):
+        refine_fixer = dspy.Refine(module=fix_d3, reward_fn=d3_fix_metric, N=3, threshold=0.7)
+        
+        with dspy.context(lm = dspy.LM("openai/gpt-4o-mini", max_tokens=3000, api_key= os.getenv("OPENAI_API_KEY"))):
             response = refine_fixer(d3_code=error_context, error=request.error_message)
 
         fix_code = response.fix
+        
+        # Strip markdown formatting if present
+        if fix_code.startswith('```javascript'):
+            fix_code = fix_code.replace('```javascript', '').replace('```', '').strip()
+        elif fix_code.startswith('```js'):
+            fix_code = fix_code.replace('```js', '').replace('```', '').strip()
+        elif fix_code.startswith('```'):
+            fix_code = fix_code.replace('```', '').strip()
 
         # Stitch the fix to the original code at the error location
         original_lines = request.d3_code.splitlines()
@@ -915,12 +935,15 @@ async def fix_visualization_error(
     except Exception as e:
         logger.error(f"Error fixing D3 visualization: {str(e)}")
         
+        # Check for specific DSPy errors
+        error_msg = str(e)
+        
         # Fallback to original code if fixing fails
         return {
             "fixed_complete_code": request.d3_code,  # Return original code as fallback
             "user_id": current_user.id,
             "fix_failed": True,
-            "error_reason": str(e),
+            "error_reason": error_msg,
             "original_error_message": request.error_message
         }
 
