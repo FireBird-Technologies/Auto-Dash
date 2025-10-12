@@ -355,14 +355,20 @@ export const Landing: React.FC<LandingProps> = ({ onStart }) => {
       <footer className="landing-footer">
         <div className="footer-content">
           <div className="footer-brand">
-            <div className="logo" />
-            <span>AutoDash</span>
+            <img 
+              src="/logo.svg" 
+              alt="AutoDash" 
+              style={{
+                width: '120px',
+                height: 'auto',
+                marginBottom: '10px'
+              }}
+            />
           </div>
           <div className="footer-links">
-            <a href="#docs">Documentation</a>
-            <a href="#github">GitHub</a>
-            <a href="#community">Community</a>
-            <a href="#blog">Blog</a>
+            <a href="https://github.com" target="_blank" rel="noopener noreferrer">GitHub</a>
+            <a href="#features">Features</a>
+            <a href="#benefits">Benefits</a>
           </div>
         </div>
       </footer>

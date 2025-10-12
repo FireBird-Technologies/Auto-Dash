@@ -42,9 +42,14 @@ router = APIRouter(prefix="/api/data", tags=["data"])
 
 
 # Request/Response models
-class QueryRequest(BaseModel):
+class FirstQueryRequest(BaseModel):
     query: str
+    color_theme:Optional[str] = None
     dataset_id: Optional[str] = None
+
+class ChatQueryRequest(BaseModel):
+    query:str
+    dataset_id:Optional[str] = None
 
 
 class ChartResponse(BaseModel):
@@ -549,11 +554,13 @@ async def get_full_dataset(
     
     # Store original row count
     total_rows = len(df)
+
+
     
     # Apply limit (default 5000 rows for performance)
     # Use limit=0 in query params to get unlimited rows
-    if limit is not None and limit > 0:
-        df = df.head(limit)
+    if total_rows > limit:
+        df = df.sample(n=limit) 
     
     # Replace NaN with None (which becomes null in JSON)
     df_clean = df.replace({np.nan: None, np.inf: None, -np.inf: None})
@@ -630,7 +637,7 @@ async def prepare_dataset_context(
 
 @router.post("/analyze")
 async def analyze_data(
-    request: QueryRequest,
+    request: FirstQueryRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -664,9 +671,11 @@ async def analyze_data(
     
     # Generate chart specification using DSPy agents with context
     from ..services.chart_creator import generate_chart_spec
+
+    query = request.query + "/n use these colors "+ str(request.color_theme)
     
     try:
-        chart_spec = await generate_chart_spec(df, request.query, dataset_context)
+        chart_spec = await generate_chart_spec(df, query, dataset_context)
         
         return {
             "message": "Chart generated successfully",
@@ -683,7 +692,7 @@ async def analyze_data(
 
 @router.post("/chat")
 async def chat_with_data(
-    request: QueryRequest,
+    request: ChatQueryRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -880,72 +889,85 @@ async def fix_visualization_error(
     Returns:
         Request data with extracted error context for you to implement the module logic
     """
-    try:
+    # try:
         
         
-        # Extract only the relevant error context (5 lines above/below error)
-        error_context = extract_error_context(request.d3_code, request.error_message)
-        
-        refine_fixer = dspy.Refine(module=fix_d3, reward_fn=d3_fix_metric, N=3, threshold=0.7)
-        
-        with dspy.context(lm = dspy.LM("openai/gpt-4o-mini", max_tokens=3000, api_key= os.getenv("OPENAI_API_KEY"))):
-            response = refine_fixer(d3_code=error_context, error=request.error_message)
+    # Extract only the relevant error context (5 lines above/below error)
+    error_context = extract_error_context(request.d3_code, request.error_message)
+    # Use gpt-4o-mini (original LM), async thread-safe execution (like deep_coder example)
+    lm = dspy.LM("openai/gpt-4o-mini", api_key=os.getenv("OPENAI_API_KEY"), max_tokens=3000)
 
-        fix_code = response.fix
-        
-        # Strip markdown formatting if present
-        if fix_code.startswith('```javascript'):
-            fix_code = fix_code.replace('```javascript', '').replace('```', '').strip()
-        elif fix_code.startswith('```js'):
-            fix_code = fix_code.replace('```js', '').replace('```', '').strip()
-        elif fix_code.startswith('```'):
-            fix_code = fix_code.replace('```', '').strip()
+    logger.info("Starting D3 code fixing with GPT-4o-mini...")
+    start_time = datetime.now()
+    logger.info(f"Code fixing started at: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-        # Stitch the fix to the original code at the error location
-        original_lines = request.d3_code.splitlines()
-        error_lines = error_context.splitlines()
-        # Find the error line in the context (marked by >>> Line X:)
-        error_line_nums = [
-            int(line.split(':')[0].replace('>>> Line', '').strip())
-            for line in error_lines if line.startswith('>>> Line')
-        ]
-        if error_line_nums:
-            fix_insertion_idx = error_line_nums[0] - 1  # 0-indexed
-            # Replace just the error line with fix_code, keep rest
-            stitched_lines = []
-            for i, line in enumerate(original_lines):
-                if i == fix_insertion_idx:
-                    stitched_lines.append(fix_code)
-                else:
-                    stitched_lines.append(line)
-            stitched_code = '\n'.join(stitched_lines)
-        else:
-            # If cannot localize, just return the fix as whole
-            stitched_code = fix_code
+    refine_fixer = dspy.Refine(module=fix_d3, reward_fn=d3_fix_metric, N=3, threshold=0.7)
 
+    def run_refine_fixer():
+        with dspy.context(lm=lm):
+            return refine_fixer(d3_code=error_context, error=request.error_message)
+
+    response = await asyncio.to_thread(run_refine_fixer)
+    # lm = dspy.LM('openai/gpt-4o-mini', max_tokens=3000, api_key= os.getenv("OPENAI_API_KEY"))
+
+    # with dspy.settings.context(lm=lm):
+    
+
+    fix_code = response.fix
+    
+    # Strip markdown formatting if present
+    if fix_code.startswith('```javascript'):
+        fix_code = fix_code.replace('```javascript', '').replace('```', '').strip()
+    elif fix_code.startswith('```js'):
+        fix_code = fix_code.replace('```js', '').replace('```', '').strip()
+    elif fix_code.startswith('```'):
+        fix_code = fix_code.replace('```', '').strip()
+
+    # Stitch the fix to the original code at the error location
+    original_lines = request.d3_code.splitlines()
+    error_lines = error_context.splitlines()
+    # Find the error line in the context (marked by >>> Line X:)
+    error_line_nums = [
+        int(line.split(':')[0].replace('>>> Line', '').strip())
+        for line in error_lines if line.startswith('>>> Line')
+    ]
+    if error_line_nums:
+        fix_insertion_idx = error_line_nums[0] - 1  # 0-indexed
+        # Replace just the error line with fix_code, keep rest
+        stitched_lines = []
+        for i, line in enumerate(original_lines):
+            if i == fix_insertion_idx:
+                stitched_lines.append(fix_code)
+            else:
+                stitched_lines.append(line)
+        stitched_code = '\n'.join(stitched_lines)
+    else:
+        # If cannot localize, just return the fix as whole
+        stitched_code = fix_code
+
+    
+    logger.info("Extracted error context for D3 code fix")
+    
+    return {
+        "fixed_complete_code": stitched_code,  
+        "user_id": current_user.id,
+        "fix_failed": False
+    }
+    
+    # except Exception as e:
+    #     logger.error(f"Error fixing D3 visualization: {str(e)}")
         
-        logger.info("Extracted error context for D3 code fix")
+    #     # Check for specific DSPy errors
+    #     error_msg = str(e)
         
-        return {
-            "fixed_complete_code": stitched_code,  
-            "user_id": current_user.id,
-            "fix_failed": False
-        }
-        
-    except Exception as e:
-        logger.error(f"Error fixing D3 visualization: {str(e)}")
-        
-        # Check for specific DSPy errors
-        error_msg = str(e)
-        
-        # Fallback to original code if fixing fails
-        return {
-            "fixed_complete_code": request.d3_code,  # Return original code as fallback
-            "user_id": current_user.id,
-            "fix_failed": True,
-            "error_reason": error_msg,
-            "original_error_message": request.error_message
-        }
+    #     # Fallback to original code if fixing fails
+    #     return {
+    #         "fixed_complete_code": request.d3_code,  # Return original code as fallback
+    #         "user_id": current_user.id,
+    #         "fix_failed": True,
+    #         "error_reason": error_msg,
+    #         "original_error_message": request.error_message
+    #     }
 
 
 @router.get("/dashboard-count")

@@ -9,6 +9,7 @@ interface VisualizationProps {
   datasetId: string;
   context: {
     description: string;
+    colorTheme?: string;
   };
 }
 
@@ -55,7 +56,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
 
     try {
       console.log(`Loading full dataset for visualization (currently have ${data.length} rows)...`);
-      const response = await fetch(`${config.backendUrl}/api/data/datasets/${datasetId}/full`, {
+      const response = await fetch(`${config.backendUrl}/api/data/datasets/${datasetId}/full?limit=5000`, {
         method: 'GET',
         headers: getAuthHeaders(),
         credentials: 'include',
@@ -132,7 +133,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
         credentials: 'include',
         body: JSON.stringify({
           query: userQuery,
-          dataset_id: datasetId
+          dataset_id: datasetId,
+          color_theme: context.colorTheme
         })
       });
 

@@ -20,6 +20,10 @@ export const D3ChartRenderer: React.FC<D3ChartRendererProps> = ({ chartSpec, dat
     setRenderError(null);
     setIsFixing(false);
 
+    // Debug: Log data sample
+    console.log('D3 Renderer - Data sample:', data.slice(0, 3));
+    console.log('D3 Renderer - Data length:', data.length);
+
     try {
       executeChartSpec(containerRef.current, chartSpec, data);
     } catch (error: any) {
