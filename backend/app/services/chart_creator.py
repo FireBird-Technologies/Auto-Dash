@@ -63,7 +63,18 @@ def clean_d3_code(d3_code: str) -> str:
     # Pattern 7: Remove lines that define data loading promises
     d3_code = re.sub(r'(const|let|var)\s+\w+\s*=\s*d3\.(csv|json|tsv|xml)\([^)]*\);?', '', d3_code)
     
-    # Pattern 8: Clean up multiple empty lines
+    # Pattern 8: Remove d3.dsv (delimiter-separated values loader)
+    d3_code = re.sub(r'd3\.dsv\([^)]*\)\s*\.then\s*\([^)]*\)\s*=>\s*\{', '// Data loading removed\n', d3_code)
+    d3_code = re.sub(r'd3\.dsv\([^)]*\)', '', d3_code)
+    
+    # Pattern 9: Remove d3.text, d3.blob, d3.buffer, d3.image (other data loaders)
+    d3_code = re.sub(r'd3\.(text|blob|buffer|image)\([^)]*\)', '', d3_code)
+    
+    # Pattern 10: Comment out any remaining data loading that might have been missed
+    if 'd3.csv' in d3_code or 'd3.json' in d3_code or 'fetch(' in d3_code:
+        d3_code = f"// NOTE: Any data loading code has been removed.\n// The 'data' parameter contains your dataset.\n\n{d3_code}"
+    
+    # Pattern 11: Clean up multiple empty lines
     d3_code = re.sub(r'\n{3,}', '\n\n', d3_code)
     
     return d3_code.strip()
@@ -128,7 +139,13 @@ async def generate_chart_spec(
             dataset_context=dataset_context
         )
         
-        # Clean the D3 code to remove any data loading statements
+        # Handle array of chart specs (new format)
+        if isinstance(result, list):
+            # Return the array of chart specs directly
+            # Each chart_spec already has 'chart_spec' (code), 'chart_type', 'title', 'chart_index'
+            return result
+        
+        # Handle old format (string or dict) for backward compatibility
         if isinstance(result, str):
             result = clean_d3_code(result)
         elif isinstance(result, dict) and 'code' in result:

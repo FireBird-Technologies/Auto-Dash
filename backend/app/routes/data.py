@@ -132,13 +132,16 @@ def auto_convert_datatypes(df: pd.DataFrame) -> pd.DataFrame:
     
     # Process each column
     for col in df.columns:
+        # Ensure col is a string for name checking
+        col_name = str(col)
+        
         # Check if column name suggests it's a date/time column
-        if any(keyword in col.lower() for keyword in ['date', 'time', 'datetime', 'timestamp']):
-            df[col] = try_convert_to_datetime(df[col], col)
+        if any(keyword in col_name.lower() for keyword in ['date', 'time', 'datetime', 'timestamp']):
+            df[col] = try_convert_to_datetime(df[col], col_name)
         
         # Try to convert string columns with numbers to float
         elif df[col].dtype == 'object':
-            df[col] = try_convert_to_numeric(df[col], col)
+            df[col] = try_convert_to_numeric(df[col], col_name)
     
     logger.info(f"Data type conversion complete")
     
@@ -642,7 +645,7 @@ async def get_dataset_preview(
 @router.get("/datasets/{dataset_id}/full")
 async def get_full_dataset(
     dataset_id: str,
-    limit: Optional[int] = 5000,
+    limit: Optional[int] = 1000,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -782,14 +785,24 @@ async def analyze_data(
     query = request.query + "/n use these colors "+ str(request.color_theme)
     
     try:
-        chart_spec = await generate_chart_spec(df, query, dataset_context)
+        chart_specs = await generate_chart_spec(df, query, dataset_context)
         
-        return {
-            "message": "Chart generated successfully",
-            "query": request.query,
-            "dataset_id": dataset_id,
-            "chart_spec": chart_spec
-        }
+        # Handle array of chart specs (new format) or single chart (old format)
+        if isinstance(chart_specs, list):
+            return {
+                "message": f"{len(chart_specs)} chart(s) generated successfully",
+                "query": request.query,
+                "dataset_id": dataset_id,
+                "charts": chart_specs  # Array of chart specs
+            }
+        else:
+            # Backward compatibility for single chart
+            return {
+                "message": "Chart generated successfully",
+                "query": request.query,
+                "dataset_id": dataset_id,
+                "chart_spec": chart_specs
+            }
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -835,14 +848,24 @@ async def chat_with_data(
     from ..services.chart_creator import generate_chart_spec
     
     try:
-        chart_spec = await generate_chart_spec(df, request.query, dataset_context)
+        chart_specs = await generate_chart_spec(df, request.query, dataset_context)
         
-        return {
-            "message": "Visualization updated",
-            "query": request.query,
-            "dataset_id": dataset_id,
-            "chart_spec": chart_spec
-        }
+        # Handle array of chart specs (new format) or single chart (old format)
+        if isinstance(chart_specs, list):
+            return {
+                "message": f"Visualization updated - {len(chart_specs)} chart(s) generated",
+                "query": request.query,
+                "dataset_id": dataset_id,
+                "charts": chart_specs  # Array of chart specs
+            }
+        else:
+            # Backward compatibility for single chart
+            return {
+                "message": "Visualization updated",
+                "query": request.query,
+                "dataset_id": dataset_id,
+                "chart_spec": chart_specs
+            }
     except Exception as e:
         raise HTTPException(
             status_code=500,

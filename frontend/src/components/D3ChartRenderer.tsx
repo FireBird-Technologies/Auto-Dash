@@ -5,9 +5,16 @@ import { config, getAuthHeaders } from '../config';
 interface D3ChartRendererProps {
   chartSpec: any;
   data: any[];
+  chartIndex?: number; // Index of this chart in the array
+  onChartFixed?: (chartIndex: number, fixedCode: string) => void; // Callback when chart is fixed
 }
 
-export const D3ChartRenderer: React.FC<D3ChartRendererProps> = ({ chartSpec, data }) => {
+export const D3ChartRenderer: React.FC<D3ChartRendererProps> = ({ 
+  chartSpec, 
+  data, 
+  chartIndex = 0,
+  onChartFixed
+}) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [, setRenderError] = useState<string | null>(null);
   const [isFixing, setIsFixing] = useState(false);
@@ -15,23 +22,30 @@ export const D3ChartRenderer: React.FC<D3ChartRendererProps> = ({ chartSpec, dat
   useEffect(() => {
     if (!containerRef.current || !chartSpec || !data) return;
 
-    // Clear previous chart and errors
-    d3.select(containerRef.current).selectAll('*').remove();
+    // Always clear the container first to prevent duplicates
+    containerRef.current.innerHTML = '';
+    
     setRenderError(null);
     setIsFixing(false);
 
     // Debug: Log data sample
-    console.log('D3 Renderer - Data sample:', data.slice(0, 3));
-    console.log('D3 Renderer - Data length:', data.length);
+    console.log(`Chart ${chartIndex} - Data sample:`, data.slice(0, 3));
+    console.log(`Chart ${chartIndex} - Data length:`, data.length);
+
+    // Create a new container div for this chart
+    const chartContainer = document.createElement('div');
+    chartContainer.className = 'chart-item';
+    chartContainer.style.marginBottom = '20px';
+    containerRef.current.appendChild(chartContainer);
 
     try {
-      executeChartSpec(containerRef.current, chartSpec, data);
+      executeChartSpec(chartContainer, chartSpec, data);
     } catch (error: any) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown rendering error';
       const codeSnippet = error.codeSnippet || '';
       const errorLine = error.errorLine || null;
       
-      console.error('Error rendering chart:', error);
+      console.error(`Chart ${chartIndex} - Error rendering:`, error);
       console.error('Code snippet around error:', codeSnippet);
       setRenderError(errorMessage);
       
@@ -39,7 +53,7 @@ export const D3ChartRenderer: React.FC<D3ChartRendererProps> = ({ chartSpec, dat
       showFixingMessage();
       attemptFix(errorMessage, chartSpec, codeSnippet, errorLine);
     }
-  }, [chartSpec, data]);
+  }, [chartSpec, data, chartIndex]);
 
   const showFixingMessage = () => {
     if (containerRef.current) {
@@ -142,7 +156,12 @@ export const D3ChartRenderer: React.FC<D3ChartRendererProps> = ({ chartSpec, dat
             d3.select(containerRef.current).selectAll('*').remove();
             executeD3Code(d3, data);
             setRenderError(null);
-            console.log('Successfully rendered fixed visualization');
+            console.log(`Chart ${chartIndex}: Successfully rendered fixed visualization`);
+            
+            // Notify parent component that this chart was fixed
+            if (onChartFixed) {
+              onChartFixed(chartIndex, fixedCode);
+            }
           }
         } catch (fixError) {
           console.error('Fixed code still has errors:', fixError);
@@ -175,6 +194,61 @@ export const D3ChartRenderer: React.FC<D3ChartRendererProps> = ({ chartSpec, dat
         </div>
       `;
     }
+  };
+
+  const removeDataLoadingCode = (code: string): string => {
+    /**
+     * Neutralizes any data loading code (d3.csv, d3.json, fetch, etc.)
+     * Replaces with comments to ensure code uses the provided 'data' parameter
+     */
+    let cleanedCode = code;
+    
+    // Pattern 1: d3.csv/json/tsv/xml with .then() callback
+    const dataLoadingPatterns = [
+      /d3\.(csv|json|tsv|xml|dsv)\s*\([^)]*\)\s*\.then\s*\([^)]*\)\s*=>\s*\{/g,
+      /d3\.(csv|json|tsv|xml|dsv)\s*\([^)]*\)\s*\.then\s*\(\s*function\s*\([^)]*\)\s*\{/g,
+    ];
+    
+    for (const pattern of dataLoadingPatterns) {
+      if (pattern.test(cleanedCode)) {
+        console.warn('⚠️ Detected data loading code - commenting out');
+        cleanedCode = cleanedCode.replace(pattern, '// DATA LOADING COMMENTED OUT - Using provided data parameter\n// $&\n');
+      }
+    }
+    
+    // Pattern 2: Standalone d3.csv/json/tsv/xml calls
+    cleanedCode = cleanedCode.replace(
+      /d3\.(csv|json|tsv|xml|dsv)\s*\([^)]*\)/g,
+      (match) => {
+        console.warn('⚠️ Commenting out data loading:', match);
+        return `// ${match} // Using provided 'data' parameter instead`;
+      }
+    );
+    
+    // Pattern 3: fetch() API calls
+    cleanedCode = cleanedCode.replace(
+      /fetch\s*\([^)]*\)\s*\.then/g,
+      (match) => {
+        console.warn('⚠️ Commenting out fetch call:', match);
+        return `// ${match} // Using provided 'data' parameter instead\n// `;
+      }
+    );
+    
+    // Pattern 4: d3.text, d3.blob, d3.buffer (other D3 data loaders)
+    cleanedCode = cleanedCode.replace(
+      /d3\.(text|blob|buffer|image)\s*\([^)]*\)/g,
+      (match) => {
+        console.warn('⚠️ Commenting out D3 data loader:', match);
+        return `// ${match} // Using provided 'data' parameter instead`;
+      }
+    );
+    
+    // Add a helpful comment at the top if we found data loading
+    if (cleanedCode !== code) {
+      cleanedCode = `// NOTE: Data loading code has been commented out.\n// The 'data' parameter contains your dataset and is ready to use.\n\n${cleanedCode}`;
+    }
+    
+    return cleanedCode;
   };
 
   const fixIncompleteD3Code = (code: string): string => {
@@ -246,26 +320,41 @@ export const D3ChartRenderer: React.FC<D3ChartRendererProps> = ({ chartSpec, dat
       throw new Error('No D3 code found in chart specification');
     }
 
-    // Fix incomplete D3 code if needed
+    // Step 1: Remove any data loading code (d3.csv, fetch, etc.)
+    d3Code = removeDataLoadingCode(d3Code);
+
+    // Step 2: Fix incomplete D3 code if needed
     d3Code = fixIncompleteD3Code(d3Code);
 
-    // Set up the container with an ID that the D3 code expects
-    container.id = 'visualization';
+    // Use unique IDs per chart to avoid conflicts
+    const uniqueId = `visualization-${chartIndex}`;
+    const wrapperId = `visualization-wrapper-${chartIndex}`;
+    
+    // Set up the container with a unique ID
+    container.id = uniqueId;
     
     // Add a wrapper div for better layout control
     const wrapper = document.createElement('div');
     wrapper.style.width = '100%';
     wrapper.style.height = '100%';
     wrapper.style.position = 'relative';
-    wrapper.id = 'visualization-wrapper';
+    wrapper.id = wrapperId;
     container.appendChild(wrapper);
     
-    // Create a function from the D3 code string and execute it
-    // We need to make d3 available in the execution context
-    // Also make sure the visualization selects the wrapper
-    const wrappedCode = d3Code.replace(
+    // Replace all #visualization references with the unique wrapper ID
+    let wrappedCode = d3Code.replace(
       /d3\.select\(["']#visualization["']\)/g,
-      'd3.select("#visualization-wrapper")'
+      `d3.select("#${wrapperId}")`
+    );
+    
+    // Also replace string references to #visualization in tooltip/element creation
+    wrappedCode = wrappedCode.replace(
+      /"#visualization"/g,
+      `"#${wrapperId}"`
+    );
+    wrappedCode = wrappedCode.replace(
+      /'#visualization'/g,
+      `'#${wrapperId}'`
     );
     
     // Add line numbers to code for better error tracking

@@ -16,7 +16,7 @@ interface VisualizationProps {
 export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, context }) => {
   const [query, setQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [chartSpec, setChartSpec] = useState<any>(null);
+  const [chartSpecs, setChartSpecs] = useState<any[]>([]);  // Changed to array
   const [error, setError] = useState<string | null>(null);
   const [chatHistory, setChatHistory] = useState<Array<{type: 'user' | 'assistant', message: string}>>([]);
   const [contextPrepared, setContextPrepared] = useState(false);
@@ -39,7 +39,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
 
   // Clear visualization state on mount (fresh session)
   useEffect(() => {
-    setChartSpec(null);
+    setChartSpecs([]);  // Changed from setChartSpec(null)
     setChatHistory([]);
     setError(null);
     setQuery('');
@@ -58,7 +58,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
 
     try {
       console.log(`Loading full dataset for visualization (currently have ${data.length} rows)...`);
-      const response = await fetch(`${config.backendUrl}/api/data/datasets/${datasetId}/full?limit=5000`, {
+      const response = await fetch(`${config.backendUrl}/api/data/datasets/${datasetId}/full?limit=1000`, {
         method: 'GET',
         headers: getAuthHeaders(),
         credentials: 'include',
@@ -95,8 +95,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
 
   // Prepare context when user starts typing (only before first chart)
   const prepareContext = async () => {
-    // Skip if context already prepared, no dataset, or chart already generated
-    if (contextPrepared || !datasetId || chartSpec) return;
+    // Skip if context already prepared, no dataset, or charts already generated
+    if (contextPrepared || !datasetId || chartSpecs.length > 0) return;
     
     try {
       await fetch(`${config.backendUrl}/api/data/datasets/${datasetId}/prepare-context`, {
@@ -108,6 +108,21 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     } catch (err) {
       console.error('Failed to prepare context:', err);
     }
+  };
+
+  // Callback to handle when a specific chart is fixed
+  const handleChartFixed = (chartIndex: number, fixedCode: string) => {
+    console.log(`Updating chart ${chartIndex} with fixed code`);
+    setChartSpecs(prevSpecs => {
+      const newSpecs = [...prevSpecs];
+      if (newSpecs[chartIndex]) {
+        newSpecs[chartIndex] = {
+          ...newSpecs[chartIndex],
+          chart_spec: fixedCode
+        };
+      }
+      return newSpecs;
+    });
   };
 
   const generateChart = async (userQuery: string) => {
@@ -125,7 +140,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
 
     try {
       // Use /analyze for first chart, /chat for subsequent queries
-      const endpoint = chartSpec ? 'chat' : 'analyze';
+      const endpoint = chartSpecs.length > 0 ? 'chat' : 'analyze';
       
       const response = await fetch(`${config.backendUrl}/api/data/${endpoint}`, {
         method: 'POST',
@@ -150,9 +165,17 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
       // Fetch full dataset before rendering chart (if not already fetched)
       await fetchFullDataset();
       
-      // Remove the thinking message and update chart spec
+      // Remove the thinking message and update chart specs
       setChatHistory(prev => prev.slice(0, -1));
-      setChartSpec(result.chart_spec);
+      
+      // Handle both array (new format) and single chart (old format)
+      if (result.charts && Array.isArray(result.charts)) {
+        // New format: array of charts
+        setChartSpecs(result.charts);
+      } else if (result.chart_spec) {
+        // Old format: single chart - wrap in array
+        setChartSpecs([{ chart_spec: result.chart_spec, chart_type: 'unknown', title: 'Visualization', chart_index: 0 }]);
+      }
       
     } catch (err) {
       console.error('Error generating chart:', err);
@@ -178,7 +201,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     setQuery(newQuery);
     
     // Trigger context preparation when user starts typing (only before first chart)
-    if (newQuery.length > 0 && !contextPrepared && !chartSpec) {
+    if (newQuery.length > 0 && !contextPrepared && chartSpecs.length === 0) {
       prepareContext();
     }
   };
@@ -363,7 +386,15 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
               </svg>
             </button>
                     <div className="fullscreen-chart">
-                      {chartSpec && <D3ChartRenderer chartSpec={chartSpec} data={localData} />}
+                      {chartSpecs.map((spec, index) => (
+                        <D3ChartRenderer 
+                          key={`chart-${index}`}
+                          chartSpec={spec.chart_spec} 
+                          data={localData}
+                          chartIndex={index}
+                          onChartFixed={handleChartFixed}
+                        />
+                      ))}
                     </div>
           </div>
         </div>
@@ -376,14 +407,6 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
           <div className="chat-header">
             <div className="chat-header-content">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <img 
-                  src="/logo.svg" 
-                  alt="AutoDash" 
-                  style={{
-                    width: '24px',
-                    height: '24px'
-                  }}
-                />
                 <h3>AI Assistant</h3>
               </div>
               <span className={`chat-status ${isLoading ? 'thinking' : 'online'}`}>
@@ -469,7 +492,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                 <button 
                   onClick={() => setShowDownloadMenu(!showDownloadMenu)} 
                   className="control-button"
-                  disabled={!chartSpec}
+                  disabled={chartSpecs.length === 0}
                   title="Download Chart"
                 >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -532,8 +555,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
           </div>
 
           <div className="visualization-container-large" ref={visualizationRef}>
-            {/* Magic Loading Animation - Show when loading and no chart yet */}
-            {isLoading && !chartSpec && (
+            {/* Magic Loading Animation - Show when loading and no charts yet */}
+            {isLoading && chartSpecs.length === 0 && (
             <div className="magic-loading">
               <div className="magic-sparkles">
                 <span className="sparkle">•</span>
@@ -542,15 +565,23 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                 <span className="sparkle">•</span>
                 <span className="sparkle">•</span>
               </div>
-              <p className="magic-text">Making ..</p>
+              <p className="magic-text">Transforming your data into art..</p>
             </div>
             )}
 
-            {/* Chart Display - Show when not loading OR when chart exists */}
-            {(!isLoading || chartSpec) && (
+            {/* Chart Display - Show when not loading OR when charts exist */}
+            {(!isLoading || chartSpecs.length > 0) && (
                     <div className="chart-display">
-                      {chartSpec ? (
-                        <D3ChartRenderer chartSpec={chartSpec} data={localData} />
+                      {chartSpecs.length > 0 ? (
+                        chartSpecs.map((spec, index) => (
+                          <D3ChartRenderer 
+                            key={`chart-${index}`}
+                            chartSpec={spec.chart_spec} 
+                            data={localData}
+                            chartIndex={index}
+                            onChartFixed={handleChartFixed}
+                          />
+                        ))
                       ) : (
                         <div className="empty-state">
                           <p>Ask a question about your data to generate a visualization</p>
