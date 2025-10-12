@@ -1987,6 +1987,62 @@ body {
   flex-shrink: 0;
 }
 
+/* Download Dropdown */
+.download-dropdown {
+  position: relative;
+}
+
+.download-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  padding: 8px;
+  min-width: 180px;
+  z-index: 1000;
+  animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.download-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 16px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+}
+
+.download-menu-item:hover {
+  background: linear-gradient(135deg, #fff5f5, #ffe4e6);
+  color: var(--aa-primary);
+}
+
+.download-menu-item svg {
+  flex-shrink: 0;
+  stroke: currentColor;
+}
+
 /* Fullscreen Modal */
 .fullscreen-modal {
   position: fixed;

@@ -8,7 +8,7 @@ interface StyleContextProps {
 }
 
 const predefinedThemes = [
-  { name: 'Default', colors: ['#000000', '#ffffff', '#808080'] },
+  { name: 'Default', colors: ['#FF516B', '#99C3FA', '#99FABE'] },
   { name: 'Ocean', colors: ['#003f5c', '#2f4b7c', '#665191'] },
   { name: 'Forest', colors: ['#1a472a', '#2d6a4f', '#52b788'] },
   { name: 'Sunset', colors: ['#d62828', '#f77f00', '#fcbf49'] },
@@ -19,7 +19,7 @@ const predefinedThemes = [
 export const StyleContext: React.FC<StyleContextProps> = ({ onComplete }) => {
   const [description, setDescription] = useState('');
   const [selectedTheme, setSelectedTheme] = useState(0);
-  const [customColors, setCustomColors] = useState(['#000000', '#0066cc', '#ffffff']);
+  const [customColors, setCustomColors] = useState(['#FF516B', '#99C3FA', '#99FABE']);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [isThemePickerExpanded, setIsThemePickerExpanded] = useState(false);
 

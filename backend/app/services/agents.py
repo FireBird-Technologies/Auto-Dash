@@ -395,7 +395,9 @@ class GenerateVisualizationPlan(dspy.Signature):
     Generate a visualization or analytical plan from a natural language query.
     The plan should include the reasoning steps and the names of charts
     (chosen from known chart types).
-    Make the plan as concise as possible only 3-4 lines
+    Make the plan as concise as possible only 3-4 lines.
+    Use the color theme for data points etc, not background
+    Also instruct in the plan how to aggregate the data in d3 to build the best visual
     """
 
     query = dspy.InputField(
@@ -419,9 +421,6 @@ class GenerateVisualizationPlan(dspy.Signature):
         type=bool
     )
     
-    chart_type = dspy.OutputField(
-        desc="Primary chart type from the list above"
-    )
 
 
 class fix_d3(dspy.Signature):
@@ -434,6 +433,8 @@ class CreateDatasetContext(dspy.Signature):
     """
     DSPy signature to generate dataset context for visualization tasks.
     The dataset context should describe columns, types, sample values, and relevant statistics.
+    in json but keep it concise
+    Make the dataset_context as concise as possible to deliver insights quickly!
     """
 
     dataframe_info = dspy.InputField(
@@ -441,7 +442,7 @@ class CreateDatasetContext(dspy.Signature):
     )
 
     dataset_context = dspy.OutputField(
-        desc="A textual or structured summary describing the columns, their data types, sample values, value ranges, and any key statistics that help downstream modules reason about what visualizations are possible."
+        desc="A json like str with the columns, their data types, sample values, value ranges, and any key statistics that help downstream modules reason about what visualizations are possible."
     )
 
 
@@ -468,8 +469,9 @@ d3.select("body")
 # ============================================================================
 
 class plan_to_d3(dspy.Signature):
-    """Generate D3.js visualization code that uses data passed as a parameter.
-    
+    """
+    Generate D3.js visualization code that uses data passed as a parameter.
+
     CRITICAL REQUIREMENTS:
     1. The data is already available as a JavaScript array called 'data'
     2. DO NOT use d3.csv(), d3.json(), or any data loading methods
@@ -478,33 +480,71 @@ class plan_to_d3(dspy.Signature):
     5. For regression/trendlines, use manual calculations or d3.line() with computed slope/intercept
     6. Use D3 v7 syntax (d3.group, d3.rollup instead of d3.nest)
     7. The container div with id="visualization" is already created for you
-    
+    8. BUILD BOTH WHITE AND BLACK THEME AND ADD A SWITCH
+
+    D3.js Aggregation Reference:
+
+    BASIC AGGREGATIONS:
+    - d3.sum(data, d => d.value) - sum all values
+    - d3.mean(data, d => d.value) - average
+    - d3.median(data, d => d.value) - median
+    - d3.min/max(data, d => d.value) - min/max
+    - d3.extent(data, d => d.value) - returns [min, max]
+
+    GROUPING:
+    - d3.group(data, d => d.category) - returns Map with grouped data
+    - d3.rollup(data, values => AGGREGATE_FUNC, d => d.groupKey) - group + aggregate
+    - d3.flatRollup(...) - same as rollup but returns array instead of Map
+
+    EXAMPLES:
+    // Simple sum by group
+    d3.rollup(data, v => d3.sum(v, d => d.value), d => d.category)
+
+    // Multiple aggregations
+    d3.rollup(data, v => ({
+      count: v.length,
+      sum: d3.sum(v, d => d.value),
+      avg: d3.mean(v, d => d.value)
+    }), d => d.category)
+
+    // Nested grouping (multiple keys)
+    d3.rollup(data, v => d3.sum(v, d => d.value), 
+      d => d.date,      // first level
+      d => d.category   // second level
+    )
+
+    STATISTICS:
+    - d3.quantile(data, 0.5) - percentiles (0.5 = median)
+    - d3.variance(data, d => d.value) - variance
+    - d3.deviation(data, d => d.value) - standard deviation
+
     AVAILABLE D3 FUNCTIONS (core only):
     - Scales: d3.scaleLinear, d3.scaleOrdinal, d3.scaleBand, d3.scaleTime, d3.scaleLog
     - Shapes: d3.line, d3.area, d3.arc, d3.pie, d3.symbol
     - Arrays: d3.group, d3.rollup, d3.mean, d3.sum, d3.extent, d3.min, d3.max, d3.median
     - Axes: d3.axisBottom, d3.axisLeft, d3.axisRight, d3.axisTop
     - Colors: d3.schemeCategory10, d3.interpolateViridis, d3.scaleOrdinal
-    
+
     Example start of D3 code:
     // Data is already available as 'data' parameter
     // Select the provided container
     const container = d3.select("#visualization");
-    
+
     // Create your visualization
     const svg = container.append("svg")
         .attr("width", 800)
         .attr("height", 600);
-    
+
     // For trendlines, calculate manually:
     // const xMean = d3.mean(data, d => d.x);
     // const yMean = d3.mean(data, d => d.y);
     // const slope = d3.sum(data, d => (d.x - xMean) * (d.y - yMean)) / d3.sum(data, d => (d.x - xMean) ** 2);
     // const intercept = yMean - slope * xMean;
-    
-    Ensure the visualization is interactive with buttons, legends axis controls etc
-    Make the chart modern sleek
+
+    Ensure the visualization is interactive with buttons, legends, axis controls etc.
+    Make the chart modern and sleek.
     """
+    
     plan = dspy.InputField(desc="Planner instructions around what they want to visualize")
     dataset_context = dspy.InputField(desc="Information about the dataset, columns, stats")
     styling_instructions = dspy.InputField(desc="Styling instructions for the charts / dashboard")

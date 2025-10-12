@@ -25,8 +25,10 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   const [isResizing, setIsResizing] = useState(false);
   const [localData, setLocalData] = useState<Row[]>(data); // Local copy that may be full dataset
   const [fullDataFetched, setFullDataFetched] = useState(false); // Track if we've fetched full data
+  const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const hasGeneratedInitialChart = useRef(false);
   const visualizationRef = useRef<HTMLDivElement>(null);
+  const downloadMenuRef = useRef<HTMLDivElement>(null);
 
   // Update local data when prop changes
   useEffect(() => {
@@ -196,32 +198,113 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     setIsFullscreen(!isFullscreen);
   };
 
-  const downloadChart = () => {
+  const downloadChart = (format: 'png' | 'pdf' | 'svg') => {
     if (!visualizationRef.current) return;
 
-    // Get all SVG elements
-    const svgs = visualizationRef.current.querySelectorAll('svg');
-    
-    if (svgs.length === 0) {
+    // Check if there's any content to download
+    if (visualizationRef.current.children.length === 0) {
       alert('No chart to download');
       return;
     }
 
-    // Download the first SVG (or combine multiple if needed)
-    const svg = svgs[0];
-    const serializer = new XMLSerializer();
-    const svgString = serializer.serializeToString(svg);
-    const blob = new Blob([svgString], { type: 'image/svg+xml' });
-    const url = URL.createObjectURL(blob);
-    
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `dashboard-${new Date().getTime()}.svg`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    const timestamp = new Date().getTime();
+
+    if (format === 'svg') {
+      // For SVG, we'll use html2canvas to convert the entire container to SVG
+      // This ensures we capture all content including multiple charts
+      import('html2canvas').then((html2canvas) => {
+        html2canvas.default(visualizationRef.current!, {
+          scale: 2,
+          backgroundColor: '#ffffff',
+          useCORS: true,
+          allowTaint: true
+        }).then(canvas => {
+          // Convert canvas to SVG
+          const svgData = `<svg width="${canvas.width}" height="${canvas.height}" xmlns="http://www.w3.org/2000/svg">
+            <image href="${canvas.toDataURL()}" width="${canvas.width}" height="${canvas.height}"/>
+          </svg>`;
+          
+          const blob = new Blob([svgData], { type: 'image/svg+xml' });
+          const url = URL.createObjectURL(blob);
+          
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `dashboard-${timestamp}.svg`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        });
+      });
+    } else if (format === 'png') {
+      // Download as PNG - capture entire visualization area
+      // Use html2canvas to capture the entire container
+      import('html2canvas').then((html2canvas) => {
+        html2canvas.default(visualizationRef.current!, {
+          scale: 2,
+          backgroundColor: '#ffffff',
+          useCORS: true,
+          allowTaint: true
+        }).then(canvas => {
+          canvas.toBlob((blob) => {
+            if (blob) {
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement('a');
+              link.href = url;
+              link.download = `dashboard-${timestamp}.png`;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              URL.revokeObjectURL(url);
+            }
+          });
+        });
+      });
+    } else if (format === 'pdf') {
+      // Download as PDF - capture entire visualization area
+      const containerRect = visualizationRef.current.getBoundingClientRect();
+      
+      import('html2canvas').then((html2canvas) => {
+        import('jspdf').then(({ jsPDF }) => {
+          html2canvas.default(visualizationRef.current!, {
+            scale: 2,
+            backgroundColor: '#ffffff',
+            useCORS: true,
+            allowTaint: true
+          }).then(canvas => {
+            const imgData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF({
+              orientation: containerRect.width > containerRect.height ? 'landscape' : 'portrait',
+              unit: 'px',
+              format: [containerRect.width, containerRect.height]
+            });
+            
+            pdf.addImage(imgData, 'PNG', 0, 0, containerRect.width, containerRect.height);
+            pdf.save(`dashboard-${timestamp}.pdf`);
+          });
+        });
+      });
+    }
+
+    setShowDownloadMenu(false);
   };
+
+  // Close download menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (downloadMenuRef.current && !downloadMenuRef.current.contains(event.target as Node)) {
+        setShowDownloadMenu(false);
+      }
+    };
+
+    if (showDownloadMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showDownloadMenu]);
 
   // Close fullscreen on ESC key
   useEffect(() => {
@@ -382,19 +465,53 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
               <p className="step-description">Ask questions to generate visualizations</p>
             </div>
             <div className="dashboard-controls">
-              <button 
-                onClick={downloadChart} 
-                className="control-button"
-                disabled={!chartSpec}
-                title="Download Chart"
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="7 10 12 15 17 10" />
-                  <line x1="12" y1="15" x2="12" y2="3" />
-                </svg>
-                Download
-              </button>
+              <div className="download-dropdown" ref={downloadMenuRef}>
+                <button 
+                  onClick={() => setShowDownloadMenu(!showDownloadMenu)} 
+                  className="control-button"
+                  disabled={!chartSpec}
+                  title="Download Chart"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                  Download
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" style={{ marginLeft: '4px' }}>
+                    <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="2" fill="none" />
+                  </svg>
+                </button>
+                {showDownloadMenu && (
+                  <div className="download-menu">
+                    <button onClick={() => downloadChart('png')} className="download-menu-item">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                        <circle cx="8.5" cy="8.5" r="1.5" />
+                        <polyline points="21 15 16 10 5 21" />
+                      </svg>
+                      PNG Image
+                    </button>
+                    <button onClick={() => downloadChart('svg')} className="download-menu-item">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="16 18 22 12 16 6" />
+                        <polyline points="8 6 2 12 8 18" />
+                      </svg>
+                      SVG Vector
+                    </button>
+                    <button onClick={() => downloadChart('pdf')} className="download-menu-item">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="16" y1="13" x2="8" y2="13" />
+                        <line x1="16" y1="17" x2="8" y2="17" />
+                        <polyline points="10 9 9 9 8 9" />
+                      </svg>
+                      PDF Document
+                    </button>
+                  </div>
+                )}
+              </div>
               <button 
                 onClick={toggleFullscreen} 
                 className="control-button"
@@ -425,7 +542,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                 <span className="sparkle">•</span>
                 <span className="sparkle">•</span>
               </div>
-              <p className="magic-text">Creating your visualization...</p>
+              <p className="magic-text">Making ..</p>
             </div>
             )}
 

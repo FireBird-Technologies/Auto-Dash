@@ -41,6 +41,110 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/data", tags=["data"])
 
 
+# Automatic data type conversion functions
+def try_convert_to_numeric(series: pd.Series, col_name: str) -> pd.Series:
+    """
+    Attempts to convert a series to numeric by cleaning string values.
+    Removes commas, dollar signs, parentheses, and other common characters.
+    """
+    try:
+        # Skip if already numeric
+        if pd.api.types.is_numeric_dtype(series):
+            return series
+        
+        # Try direct conversion first
+        try:
+            return pd.to_numeric(series, errors='raise')
+        except:
+            pass
+        
+        # Clean string values if they contain numbers
+        if series.dtype == 'object':
+            # Check if any value contains digits
+            has_digits = series.astype(str).str.contains(r'\d', na=False).any()
+            
+            if has_digits:
+                # Remove common characters: commas, dollar signs, spaces, parentheses, etc.
+                cleaned = series.astype(str).str.replace(r'[\$,\s\(\)]', '', regex=True)
+                
+                # Handle percentages
+                is_percentage = cleaned.str.contains('%', na=False).any()
+                cleaned = cleaned.str.replace('%', '', regex=False)
+                
+                # Try to convert to numeric
+                converted = pd.to_numeric(cleaned, errors='coerce')
+                
+                # If percentage, divide by 100
+                if is_percentage:
+                    converted = converted / 100
+                
+                # Only return converted if we successfully converted at least some values
+                if converted.notna().sum() > 0:
+                    logger.info(f"✓ Converted '{col_name}' to numeric (float)")
+                    return converted
+        
+        return series
+        
+    except Exception as e:
+        logger.warning(f"✗ Could not convert '{col_name}' to numeric: {e}")
+        return series
+
+
+def try_convert_to_datetime(series: pd.Series, col_name: str) -> pd.Series:
+    """
+    Attempts to convert a series to datetime format.
+    Tries multiple common datetime formats.
+    """
+    try:
+        # Skip if already datetime
+        if pd.api.types.is_datetime64_any_dtype(series):
+            return series
+        
+        # Try pandas automatic datetime conversion
+        converted = pd.to_datetime(series, errors='coerce', infer_datetime_format=True)
+        
+        # Only return converted if we successfully converted at least some values
+        if converted.notna().sum() > 0:
+            logger.info(f"✓ Converted '{col_name}' to datetime")
+            return converted
+        
+        return series
+        
+    except Exception as e:
+        logger.warning(f"✗ Could not convert '{col_name}' to datetime: {e}")
+        return series
+
+
+def auto_convert_datatypes(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Automatically converts DataFrame columns to appropriate data types.
+    
+    - Converts string columns with numbers to float (removes commas, $, etc.)
+    - Converts columns with 'time', 'date', etc. in name to datetime if they match a datetime format
+    
+    Args:
+        df: Input DataFrame
+        
+    Returns:
+        DataFrame with converted columns
+    """
+    logger.info(f"Starting automatic data type conversion for {len(df.columns)} columns")
+    
+    # Process each column
+    for col in df.columns:
+        # Check if column name suggests it's a date/time column
+        if any(keyword in col.lower() for keyword in ['date', 'time', 'datetime', 'timestamp']):
+            df[col] = try_convert_to_datetime(df[col], col)
+        
+        # Try to convert string columns with numbers to float
+        elif df[col].dtype == 'object':
+            df[col] = try_convert_to_numeric(df[col], col)
+    
+    logger.info(f"Data type conversion complete")
+    
+    return df
+
+
 # Request/Response models
 class FirstQueryRequest(BaseModel):
     query: str
@@ -368,6 +472,9 @@ async def upload_data(
             df = processor.read_csv()
         else:  # Excel files
             df = processor.read_excel()
+        
+        # Automatically convert data types (numeric, datetime, etc.)
+        df = auto_convert_datatypes(df)
         
         # Replace NaN with None (which becomes null in JSON)
         df = df.replace({np.nan: None, np.inf: None, -np.inf: None})
@@ -752,9 +859,10 @@ def d3_fix_metric(example, pred, trace=None) -> float:
     Returns:
         float: Score between 0.0 and 1.0
     """
-    original_code = example.d3_code
-    error_message = example.error
-    fixed_code = pred.fix if hasattr(pred, 'fix') else pred
+    # Handle both dict and object inputs
+    original_code = example.get('d3_code') if isinstance(example, dict) else example.d3_code
+    error_message = example.get('error') if isinstance(example, dict) else example.error
+    fixed_code = pred.get('fix') if isinstance(pred, dict) else (pred.fix if hasattr(pred, 'fix') else pred)
     
     score = 0.0
     
@@ -895,16 +1003,18 @@ async def fix_visualization_error(
     # Extract only the relevant error context (5 lines above/below error)
     error_context = extract_error_context(request.d3_code, request.error_message)
     # Use gpt-4o-mini (original LM), async thread-safe execution (like deep_coder example)
-    lm = dspy.LM("openai/gpt-4o-mini", api_key=os.getenv("OPENAI_API_KEY"), max_tokens=3000)
+    lm = dspy.LM("anthropic/claude-3-7-sonnet-latest", api_key=os.getenv("ANTHROPIC_API_KEY"), max_tokens=4000)
+
+    print(dspy.settings.lm)
 
     logger.info("Starting D3 code fixing with GPT-4o-mini...")
     start_time = datetime.now()
     logger.info(f"Code fixing started at: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-    refine_fixer = dspy.Refine(module=fix_d3, reward_fn=d3_fix_metric, N=3, threshold=0.7)
+    refine_fixer = dspy.Refine(module=dspy.Predict(fix_d3), reward_fn=d3_fix_metric, N=5, threshold=0.7)
 
     def run_refine_fixer():
-        with dspy.context(lm=lm):
+        with dspy.settings.context(lm=lm):
             return refine_fixer(d3_code=error_context, error=request.error_message)
 
     response = await asyncio.to_thread(run_refine_fixer)

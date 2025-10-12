@@ -177,13 +177,77 @@ export const D3ChartRenderer: React.FC<D3ChartRendererProps> = ({ chartSpec, dat
     }
   };
 
+  const fixIncompleteD3Code = (code: string): string => {
+    /**
+     * Fixes incomplete D3 code by:
+     * 1. Commenting out the last incomplete line
+     * 2. Adding necessary closing brackets/parentheses
+     */
+    let fixedCode = code;
+    
+    try {
+      // Check if code is syntactically complete by trying to parse it
+      new Function(fixedCode);
+      return fixedCode; // Code is complete, return as-is
+    } catch (error) {
+      console.log('D3 code appears incomplete, attempting to fix...');
+      
+      // Split into lines
+      const lines = fixedCode.split('\n');
+      const lastLineIndex = lines.length - 1;
+      const lastLine = lines[lastLineIndex].trim();
+      
+      // If last line is not empty and doesn't end with proper punctuation
+      if (lastLine && !lastLine.match(/[;})\]]$/)) {
+        console.log(`Commenting out incomplete last line: "${lastLine}"`);
+        // Comment out the last line
+        lines[lastLineIndex] = `// ${lastLine}`;
+      }
+      
+      fixedCode = lines.join('\n');
+      
+      // Count open brackets and add closing ones
+      const openBraces = (fixedCode.match(/\{/g) || []).length;
+      const closeBraces = (fixedCode.match(/\}/g) || []).length;
+      const openParens = (fixedCode.match(/\(/g) || []).length;
+      const closeParens = (fixedCode.match(/\)/g) || []).length;
+      const openBrackets = (fixedCode.match(/\[/g) || []).length;
+      const closeBrackets = (fixedCode.match(/\]/g) || []).length;
+      
+      // Add missing closing brackets
+      const missingBraces = openBraces - closeBraces;
+      const missingParens = openParens - closeParens;
+      const missingBrackets = openBrackets - closeBrackets;
+      
+      if (missingBraces > 0 || missingParens > 0 || missingBrackets > 0) {
+        console.log(`Adding missing brackets: {${missingBraces}} (${missingParens}) [${missingBrackets}]`);
+        
+        // Add closing brackets at the end
+        fixedCode += '\n' + '}'.repeat(missingBraces) + ')'.repeat(missingParens) + ']'.repeat(missingBrackets);
+      }
+      
+      // Verify the fix worked
+      try {
+        new Function(fixedCode);
+        console.log('D3 code successfully fixed');
+        return fixedCode;
+      } catch (fixError) {
+        console.warn('Could not fully fix D3 code, using original:', fixError);
+        return code; // Return original if fix failed
+      }
+    }
+  };
+
   const executeChartSpec = (container: HTMLElement, spec: any, dataset: any[]) => {
     // The backend returns either a string (D3 code) or an object with chart_spec property
-    const d3Code = typeof spec === 'string' ? spec : spec.chart_spec || spec.code;
+    let d3Code = typeof spec === 'string' ? spec : spec.chart_spec || spec.code;
     
     if (!d3Code) {
       throw new Error('No D3 code found in chart specification');
     }
+
+    // Fix incomplete D3 code if needed
+    d3Code = fixIncompleteD3Code(d3Code);
 
     // Set up the container with an ID that the D3 code expects
     container.id = 'visualization';
