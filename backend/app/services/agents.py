@@ -380,7 +380,7 @@ class GenerateVisualizationPlan(dspy.Signature):
             "Step-by-step plan describing what to compute or visualize, "
             "including which chart types to use. "
             "Chart names must be chosen from: "
-            "[line_charts, bar_charts, histograms, scatter_plots, treemaps, "
+            "[line_charts, bar_charts, histograms,chords, scatter_plots, treemaps, "
             "sankey, heat_maps,d3graphs histogram_distribution]."
             "but only choose as much as needed don't repeat charts"
         )
@@ -394,6 +394,8 @@ class GenerateVisualizationPlan(dspy.Signature):
     chart_type = dspy.OutputField(
         desc="Primary chart type from the list above"
     )
+
+
 class fix_d3(dspy.Signature):
     """"""
     d3_code = dspy.InputField(desc="The error based d3 code")

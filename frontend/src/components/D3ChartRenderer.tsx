@@ -10,6 +10,7 @@ interface D3ChartRendererProps {
 export const D3ChartRenderer: React.FC<D3ChartRendererProps> = ({ chartSpec, data }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [, setRenderError] = useState<string | null>(null);
+  const [isFixing, setIsFixing] = useState(false);
 
   useEffect(() => {
     if (!containerRef.current || !chartSpec || !data) return;
@@ -17,6 +18,7 @@ export const D3ChartRenderer: React.FC<D3ChartRendererProps> = ({ chartSpec, dat
     // Clear previous chart and errors
     d3.select(containerRef.current).selectAll('*').remove();
     setRenderError(null);
+    setIsFixing(false);
 
     try {
       executeChartSpec(containerRef.current, chartSpec, data);
@@ -29,61 +31,113 @@ export const D3ChartRenderer: React.FC<D3ChartRendererProps> = ({ chartSpec, dat
       console.error('Code snippet around error:', codeSnippet);
       setRenderError(errorMessage);
       
-      // Report error to backend with code context
-      reportRenderingError(errorMessage, chartSpec, codeSnippet, errorLine);
-      
-      // Show user-friendly error in container with code snippet
-      if (containerRef.current) {
-        const snippetHtml = codeSnippet ? `
-          <details style="margin-top: 15px; text-align: left; max-width: 600px; margin-left: auto; margin-right: auto;">
-            <summary style="cursor: pointer; font-size: 12px; color: #666;">Show error location</summary>
-            <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 11px; margin-top: 10px; text-align: left;">${codeSnippet}</pre>
-          </details>
-        ` : '';
-        
-        containerRef.current.innerHTML = `
-          <div style="padding: 40px; text-align: center; color: #d32f2f; background: #ffebee; border-radius: 8px; margin: 20px;">
-            <h3 style="margin: 0 0 10px 0; font-size: 18px;">⚠️ Visualization Rendering Error</h3>
-            <p style="margin: 0; font-size: 14px; color: #666;">${errorMessage}</p>
-            ${errorLine ? `<p style="margin: 5px 0 0 0; font-size: 12px; color: #999;">Error at line ${errorLine}</p>` : ''}
-            ${snippetHtml}
-            <p style="margin: 10px 0 0 0; font-size: 12px; color: #999;">Try rephrasing your query or asking for a different type of visualization.</p>
-          </div>
-        `;
-      }
+      // Show "taking longer than expected" message and attempt to fix
+      showFixingMessage();
+      attemptFix(errorMessage, chartSpec, codeSnippet, errorLine);
     }
   }, [chartSpec, data]);
 
-  const reportRenderingError = async (
+  const showFixingMessage = () => {
+    if (containerRef.current) {
+      setIsFixing(true);
+      console.log('Starting fix process, isFixing:', isFixing);
+      containerRef.current.innerHTML = `
+        <div style="padding: 40px; text-align: center; color: #1976d2; background: #e3f2fd; border-radius: 8px; margin: 20px;">
+          <div style="display: inline-block; margin-bottom: 15px;">
+            <div style="width: 20px; height: 20px; border: 2px solid #1976d2; border-top: 2px solid transparent; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+          </div>
+          <h3 style="margin: 0 0 10px 0; font-size: 18px;">🔧 Fixing visualization...</h3>
+          <p style="margin: 0; font-size: 14px; color: #666;">Sorry for the wait, taking longer than expected</p>
+          <p style="margin: 10px 0 0 0; font-size: 12px; color: #999;">Our AI is analyzing the error and generating a fix.</p>
+        </div>
+        <style>
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        </style>
+      `;
+    }
+  };
+
+  const attemptFix = async (
     errorMessage: string, 
     chartSpec: any, 
     codeSnippet?: string,
     errorLine?: number | null
   ) => {
     try {
-      // Call fix-visualization endpoint with detailed error info
-      await fetch(`${config.backendUrl}/api/data/fix-visualization`, {
+      // Extract D3 code from chartSpec
+      let d3Code = '';
+      if (typeof chartSpec === 'string') {
+        d3Code = chartSpec;
+      } else if (chartSpec && typeof chartSpec === 'object') {
+        d3Code = chartSpec.chart_spec || chartSpec.d3_code || JSON.stringify(chartSpec);
+      }
+
+      // Call fix-visualization endpoint with new format
+      const response = await fetch(`${config.backendUrl}/api/data/fix-visualization`, {
         method: 'POST',
         headers: getAuthHeaders({
           'Content-Type': 'application/json',
         }),
         credentials: 'include',
         body: JSON.stringify({
-          query: '', // Will be populated when implementing fix logic
-          dataset_id: '',
-          error_details: {
-            message: errorMessage,
-            code_snippet: codeSnippet || '',
-            error_line: errorLine,
-            chart_spec_preview: typeof chartSpec === 'string' 
-              ? chartSpec.substring(0, 500) 
-              : JSON.stringify(chartSpec).substring(0, 500),
-            timestamp: new Date().toISOString()
-          }
+          d3_code: d3Code,
+          error_message: errorMessage
         })
       });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      setIsFixing(false);
+
+      if (result.fix_failed) {
+        // Show error message if fix failed
+        showError(errorMessage, codeSnippet, errorLine);
+      } else if (result.fixed_complete_code) {
+        // Try to render the fixed code
+        try {
+          const executeD3Code = new Function('d3', 'data', result.fixed_complete_code);
+          if (containerRef.current) {
+            d3.select(containerRef.current).selectAll('*').remove();
+            executeD3Code(d3, data);
+            setRenderError(null);
+            console.log('Successfully rendered fixed visualization');
+          }
+        } catch (fixError) {
+          console.error('Fixed code still has errors:', fixError);
+          showError(errorMessage, codeSnippet, errorLine);
+        }
+      }
     } catch (err) {
-      console.error('Failed to call fix-visualization endpoint:', err);
+      console.error('Failed to fix visualization:', err);
+      setIsFixing(false);
+      showError(errorMessage, codeSnippet, errorLine);
+    }
+  };
+
+  const showError = (errorMessage: string, codeSnippet?: string, errorLine?: number | null) => {
+    if (containerRef.current) {
+      const snippetHtml = codeSnippet ? `
+        <details style="margin-top: 15px; text-align: left; max-width: 600px; margin-left: auto; margin-right: auto;">
+          <summary style="cursor: pointer; font-size: 12px; color: #666;">Show error location</summary>
+          <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 11px; margin-top: 10px; text-align: left;">${codeSnippet}</pre>
+        </details>
+      ` : '';
+      
+      containerRef.current.innerHTML = `
+        <div style="padding: 40px; text-align: center; color: #d32f2f; background: #ffebee; border-radius: 8px; margin: 20px;">
+          <h3 style="margin: 0 0 10px 0; font-size: 18px;">⚠️ Visualization Error</h3>
+          <p style="margin: 0; font-size: 14px; color: #666;">${errorMessage}</p>
+          ${errorLine ? `<p style="margin: 5px 0 0 0; font-size: 12px; color: #999;">Error at line ${errorLine}</p>` : ''}
+          ${snippetHtml}
+          <p style="margin: 10px 0 0 0; font-size: 12px; color: #999;">Try rephrasing your query or asking for a different type of visualization.</p>
+        </div>
+      `;
     }
   };
 

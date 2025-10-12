@@ -36,7 +36,6 @@ body {
 .navbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   padding: 20px 32px;
   background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(10px);
@@ -61,7 +60,11 @@ body {
 }
 
 .logo {
-  /* Remove background and styling - let the actual logo show */
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--aa-primary), var(--aa-primary-600));
+  box-shadow: 0 8px 24px rgba(255, 107, 107, 0.25);
 }
 
 /* Progress Bar */

@@ -18,7 +18,11 @@ from ..core.db import get_db
 from ..core.security import get_current_user
 from ..models import User, Dataset as DatasetModel
 from ..services.dataset_service import dataset_service
+from ..schemas.chat import FixVisualizationRequest
+from ..services.agents import fix_d3
 import logging
+import re
+import dspy
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -717,6 +721,208 @@ async def chat_with_data(
             status_code=500,
             detail=f"Error updating visualization: {str(e)}"
         )
+def d3_fix_metric(example, pred, trace=None) -> float:
+    """
+    Metric for DSPy Refine to evaluate D3.js error fixes.
+    
+    Args:
+        example: Contains 'd3_code' and 'error'
+        pred: Contains 'fix'
+    
+    Returns:
+        float: Score between 0.0 and 1.0
+    """
+    original_code = example.d3_code
+    error_message = example.error
+    fixed_code = pred.fix if hasattr(pred, 'fix') else pred
+    
+    score = 0.0
+    
+    # 1. Code was modified (0.1)
+    if fixed_code.strip() != original_code.strip():
+        score += 0.1
+    else:
+        return 0.0
+    
+    # 2. Common D3 error patterns (0.3)
+    error_lower = error_message.lower()
+    
+    if "cannot read property" in error_lower or "undefined" in error_lower:
+        if "d3.select" in fixed_code or "d3.selectAll" in fixed_code:
+            score += 0.1
+        if ".empty()" in fixed_code or "if (" in fixed_code:
+            score += 0.1
+    
+    if "is not a function" in error_lower:
+        if re.search(r"\.attr\s*\(|\.style\s*\(|\.append\s*\(|\.data\s*\(", fixed_code):
+            score += 0.1
+    
+    if "d3.scale" in error_lower or "d3.svg" in error_lower:
+        if "d3.scaleLinear" in fixed_code or "d3.scaleOrdinal" in fixed_code:
+            score += 0.1
+    
+    # 3. D3 best practices (0.3)
+    if re.search(r"\.data\s*\([^)]+\)", fixed_code):
+        score += 0.075
+    if re.search(r"\.enter\s*\(\s*\)", fixed_code):
+        score += 0.075
+    if re.search(r"\.exit\s*\(\s*\)\.remove\s*\(\s*\)", fixed_code):
+        score += 0.075
+    if re.search(r"function\s*\(d\)|d\s*=>|datum", fixed_code):
+        score += 0.075
+    
+    # 4. Error terms addressed (0.3)
+    error_terms = re.findall(r"'(\w+)'|\"(\w+)\"|`(\w+)`", error_message)
+    error_terms = [t for group in error_terms for t in group if t]
+    
+    if error_terms:
+        changes_count = sum(1 for term in error_terms if term in fixed_code)
+        score += 0.3 * (changes_count / len(error_terms))
+    
+    return min(score, 1.0)
+
+def extract_error_context(d3_code, error_message):
+    """
+    Extract 5 lines above and below the error line from D3 code.
+    Returns the relevant context with line numbers for easier debugging.
+    """
+    import re
+    
+    lines = d3_code.split('\n')
+    
+    # Try to extract line number from various error message formats
+    error_line = None
+    
+    # Pattern 1: "line X" or "at line X"
+    line_match = re.search(r'(?:at\s+)?line\s+(\d+)', error_message, re.IGNORECASE)
+    if line_match:
+        error_line = int(line_match.group(1)) - 1  # Convert to 0-indexed
+    
+    # Pattern 2: "Line X:" format
+    elif re.search(r'Line\s+(\d+):', error_message, re.IGNORECASE):
+        line_match = re.search(r'Line\s+(\d+):', error_message, re.IGNORECASE)
+        error_line = int(line_match.group(1)) - 1
+    
+    # Pattern 3: Column:Line format (e.g., "15:23" means line 15, column 23)
+    elif re.search(r'(\d+):\d+', error_message):
+        line_match = re.search(r'(\d+):\d+', error_message)
+        error_line = int(line_match.group(1)) - 1
+    
+    # Pattern 4: Look for specific error patterns in the code itself
+    else:
+        # Common D3 error patterns to look for in code
+        error_patterns = [
+            r'\.select\([^)]*\)\s*$',  # Incomplete select statements
+            r'\.append\([^)]*\)\s*$',  # Incomplete append statements
+            r'undefined',              # Undefined variables
+            r'null\s*\.',             # Null reference errors
+        ]
+        
+        for i, line in enumerate(lines):
+            for pattern in error_patterns:
+                if re.search(pattern, line.strip()):
+                    error_line = i
+                    break
+            if error_line is not None:
+                break
+    
+    # If we still can't find the error line, return a portion of the code
+    if error_line is None or error_line >= len(lines):
+        # Return middle portion of code if error location unknown
+        mid_point = len(lines) // 2
+        start = max(0, mid_point - 5)
+        end = min(len(lines), mid_point + 6)
+        error_line = mid_point
+    else:
+        # Calculate start and end lines (5 above, 5 below)
+        start = max(0, error_line - 5)
+        end = min(len(lines), error_line + 6)
+    
+    # Build context with line numbers and error highlighting
+    context_lines = []
+    for i in range(start, end):
+        line_num = i + 1
+        line_content = lines[i] if i < len(lines) else ""
+        
+        if i == error_line:
+            context_lines.append(f">>> Line {line_num}: {line_content}")
+        else:
+            context_lines.append(f"    Line {line_num}: {line_content}")
+    
+    return '\n'.join(context_lines)
+
+
+@router.post("/fix-visualization")
+async def fix_visualization_error(
+    request: FixVisualizationRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Fix a failed visualization by analyzing the error and regenerating corrected D3 code.
+    
+    Args:
+        request: Contains the original D3 code and error message
+        current_user: Authenticated user
+        db: Database session
+    
+    Returns:
+        Request data with extracted error context for you to implement the module logic
+    """
+    try:
+        
+        
+        # Extract only the relevant error context (5 lines above/below error)
+        error_context = extract_error_context(request.d3_code, request.error_message)
+        
+        refine_fixer = dspy.Refine(fix_d3, metric=d3_fix_metric, N=3, threshold=0.7)
+        with dspy.context(lm = dspy.LM("openai/gpt-4o-mini", max_tokens=3000)):
+            response = refine_fixer(d3_code=error_context, error=request.error_message)
+
+        fix_code = response.fix
+
+        # Stitch the fix to the original code at the error location
+        original_lines = request.d3_code.splitlines()
+        error_lines = error_context.splitlines()
+        # Find the error line in the context (marked by >>> Line X:)
+        error_line_nums = [
+            int(line.split(':')[0].replace('>>> Line', '').strip())
+            for line in error_lines if line.startswith('>>> Line')
+        ]
+        if error_line_nums:
+            fix_insertion_idx = error_line_nums[0] - 1  # 0-indexed
+            # Replace just the error line with fix_code, keep rest
+            stitched_lines = []
+            for i, line in enumerate(original_lines):
+                if i == fix_insertion_idx:
+                    stitched_lines.append(fix_code)
+                else:
+                    stitched_lines.append(line)
+            stitched_code = '\n'.join(stitched_lines)
+        else:
+            # If cannot localize, just return the fix as whole
+            stitched_code = fix_code
+
+        
+        logger.info("Extracted error context for D3 code fix")
+        
+        return {
+            "fixed_complete_code": stitched_code,  
+            "user_id": current_user.id,
+            "fix_failed": False
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fixing D3 visualization: {str(e)}")
+        
+        # Fallback to original code if fixing fails
+        return {
+            "fixed_complete_code": request.d3_code,  # Return original code as fallback
+            "user_id": current_user.id,
+            "fix_failed": True,
+            "error_reason": str(e),
+            "original_error_message": request.error_message
+        }
 
 
 @router.get("/dashboard-count")

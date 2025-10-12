@@ -44,25 +44,26 @@ export const Landing: React.FC<LandingProps> = ({ onStart }) => {
   return (
     <div className="landing" ref={landingRef}>
       {/* Hero */}
+
       <header className="landing-hero">
-        <div className="landing-badge">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-          </svg>
-          Open Source
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '20px', gap: '0.5rem' }}>
+          <div className="landing-badge" style={{ marginBottom: 0 }}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style={{ verticalAlign: 'middle', marginRight: '0.4em' }}>
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+            </svg>
+            Open Source
+          </div>
+          <img 
+            src="/logo.svg" 
+            alt="AutoDash Logo" 
+            className="hero-logo"
+            style={{
+              width: '300px',
+              height: 'auto',
+              marginBottom: 0
+            }}
+          />
         </div>
-        <img 
-          src="/logo.svg" 
-          alt="AutoDash Logo" 
-          className="hero-logo"
-          style={{
-            width: '240px',
-            height: 'auto',
-            marginBottom: '20px',
-            display: 'block',
-            margin: '0 auto 20px auto'
-          }}
-        />
         <h1 className="landing-title">Your AI Data Artist</h1>
         <p className="landing-subtitle">
           AutoDash transforms raw data into beautiful, interactive visualizations in three simple steps.
@@ -354,15 +355,8 @@ export const Landing: React.FC<LandingProps> = ({ onStart }) => {
       <footer className="landing-footer">
         <div className="footer-content">
           <div className="footer-brand">
-            <img 
-              src="/logo.svg" 
-              alt="AutoDash Logo" 
-              className="logo"
-              style={{
-                width: '24px',
-                height: '24px'
-              }}
-            />
+            <div className="logo" />
+            <span>AutoDash</span>
           </div>
           <div className="footer-links">
             <a href="#docs">Documentation</a>

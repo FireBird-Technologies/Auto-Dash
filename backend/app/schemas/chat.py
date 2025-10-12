@@ -10,3 +10,8 @@ class ChatResponse(BaseModel):
     user: str | None = None
 
 
+class FixVisualizationRequest(BaseModel):
+    d3_code: str
+    error_message: str
+
+
