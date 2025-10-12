@@ -90,9 +90,10 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     }
   }, [context.description]); // Only depend on context.description, not datasetId
 
-  // Prepare context when user starts typing
+  // Prepare context when user starts typing (only before first chart)
   const prepareContext = async () => {
-    if (contextPrepared || !datasetId) return;
+    // Skip if context already prepared, no dataset, or chart already generated
+    if (contextPrepared || !datasetId || chartSpec) return;
     
     try {
       await fetch(`${config.backendUrl}/api/data/datasets/${datasetId}/prepare-context`, {
@@ -172,8 +173,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     const newQuery = e.target.value;
     setQuery(newQuery);
     
-    // Trigger context preparation when user starts typing
-    if (newQuery.length > 0 && !contextPrepared) {
+    // Trigger context preparation when user starts typing (only before first chart)
+    if (newQuery.length > 0 && !contextPrepared && !chartSpec) {
       prepareContext();
     }
   };
@@ -289,7 +290,17 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
         <aside className="chat-sidebar" style={{ width: `${sidebarWidth}px` }}>
           <div className="chat-header">
             <div className="chat-header-content">
-              <h3>AI Assistant</h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <img 
+                  src="/logo.svg" 
+                  alt="AutoDash" 
+                  style={{
+                    width: '24px',
+                    height: '24px'
+                  }}
+                />
+                <h3>AI Assistant</h3>
+              </div>
               <span className={`chat-status ${isLoading ? 'thinking' : 'online'}`}>
                 {isLoading ? '● Thinking...' : '● Online'}
               </span>

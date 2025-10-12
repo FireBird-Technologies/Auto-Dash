@@ -1,15 +1,48 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { FeatureCard } from './landing/FeatureCard';
 import { WorkflowStep } from './landing/WorkflowStep';
 import { GoogleAuthButton } from './GoogleAuthButton';
+import { DemoVisualization } from './landing/DemoVisualization';
 
 interface LandingProps {
   onStart: () => void;
 }
 
 export const Landing: React.FC<LandingProps> = ({ onStart }) => {
+  const landingRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const observerOptions = {
+      threshold: 0.1,
+      rootMargin: '0px 0px -100px 0px'
+    };
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('animate-in');
+        }
+      });
+    }, observerOptions);
+
+    // Observe all sections and cards
+    const elementsToAnimate = landingRef.current?.querySelectorAll(
+      '.landing-hero, .features-section, .workflow-section, .demo-section, .showcase-section, .benefits-section, .final-cta, .feature-card, .workflow-step, .viz-card, .benefit-card'
+    );
+
+    elementsToAnimate?.forEach(el => observer.observe(el));
+
+    // Animate hero section immediately on mount
+    setTimeout(() => {
+      const hero = landingRef.current?.querySelector('.landing-hero');
+      hero?.classList.add('animate-in');
+    }, 100);
+
+    return () => observer.disconnect();
+  }, []);
+
   return (
-    <div className="landing">
+    <div className="landing" ref={landingRef}>
       {/* Hero */}
       <header className="landing-hero">
         <div className="landing-badge">
@@ -18,6 +51,18 @@ export const Landing: React.FC<LandingProps> = ({ onStart }) => {
           </svg>
           Open Source
         </div>
+        <img 
+          src="/logo.svg" 
+          alt="AutoDash Logo" 
+          className="hero-logo"
+          style={{
+            width: '240px',
+            height: 'auto',
+            marginBottom: '20px',
+            display: 'block',
+            margin: '0 auto 20px auto'
+          }}
+        />
         <h1 className="landing-title">Your AI Data Artist</h1>
         <p className="landing-subtitle">
           AutoDash transforms raw data into beautiful, interactive visualizations in three simple steps.
@@ -155,6 +200,34 @@ export const Landing: React.FC<LandingProps> = ({ onStart }) => {
         </div>
       </section>
 
+      {/* Interactive Demo */}
+      <section className="demo-section">
+        <div className="section-container">
+          <div className="demo-header">
+            <span className="demo-badge">Live Demo</span>
+            <h2 className="section-heading">See AutoDash in Action</h2>
+            <p className="section-subheading">
+              Try interacting with this fully functional visualization below. 
+              Hover, filter, and sort to explore the data—all powered by D3.js and natural language.
+            </p>
+          </div>
+          <DemoVisualization />
+          <div className="demo-cta">
+            <p className="demo-cta-text">
+              This is just one example. AutoDash can create <strong>any visualization you can imagine</strong>—just describe it.
+            </p>
+            <GoogleAuthButton
+              onSuccess={(token) => {
+                localStorage.setItem('auth_token', token);
+                onStart();
+              }}
+            >
+              Create Your Own Visualization
+            </GoogleAuthButton>
+          </div>
+        </div>
+      </section>
+
       {/* D3 Visualizations Showcase */}
       <section className="showcase-section">
         <div className="section-container">
@@ -281,8 +354,15 @@ export const Landing: React.FC<LandingProps> = ({ onStart }) => {
       <footer className="landing-footer">
         <div className="footer-content">
           <div className="footer-brand">
-            <div className="logo" />
-            <span>AutoDash</span>
+            <img 
+              src="/logo.svg" 
+              alt="AutoDash Logo" 
+              className="logo"
+              style={{
+                width: '24px',
+                height: '24px'
+              }}
+            />
           </div>
           <div className="footer-links">
             <a href="#docs">Documentation</a>

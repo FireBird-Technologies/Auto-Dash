@@ -86,8 +86,15 @@ export const Navbar: React.FC<NavbarProps> = ({ onAccountClick }) => {
   return (
     <nav className="navbar">
       <div className="brand">
-        <div className="logo" />
-        <span>AutoDash</span>
+        <img 
+          src="/logo.svg" 
+          alt="AutoDash" 
+          className="logo" 
+          style={{
+            width: '150px',
+            height: 'auto'
+          }}
+        />
       </div>
 
       {user && (

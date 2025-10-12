@@ -9,9 +9,24 @@ export const config = {
 /**
  * Helper to get auth headers with JWT token
  */
-export const getAuthHeaders = (additionalHeaders: HeadersInit = {}): HeadersInit => {
+export const getAuthHeaders = (additionalHeaders: HeadersInit = {}): Record<string, string> => {
   const token = localStorage.getItem('auth_token');
-  const headers: HeadersInit = { ...additionalHeaders };
+  const headers: Record<string, string> = {};
+  
+  // Copy additional headers
+  if (additionalHeaders) {
+    if (Array.isArray(additionalHeaders)) {
+      additionalHeaders.forEach(([key, value]) => {
+        headers[key] = value;
+      });
+    } else if (additionalHeaders instanceof Headers) {
+      additionalHeaders.forEach((value, key) => {
+        headers[key] = value;
+      });
+    } else {
+      Object.assign(headers, additionalHeaders);
+    }
+  }
   
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;

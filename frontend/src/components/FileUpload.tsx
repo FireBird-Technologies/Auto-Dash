@@ -107,7 +107,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded }) => {
             disabled={uploading}
             className="feedback-button"
           >
-            {uploading ? 'Loading...' : 'Load Sample Data'}
+            {uploading ? 'Loading...' : 'Use Sample Data'}
           </button>
         </div>
 

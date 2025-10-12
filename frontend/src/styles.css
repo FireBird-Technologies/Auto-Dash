@@ -36,6 +36,7 @@ body {
 .navbar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   padding: 20px 32px;
   background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(10px);
@@ -60,11 +61,7 @@ body {
 }
 
 .logo {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, var(--aa-primary), var(--aa-primary-600));
-  box-shadow: 0 8px 24px rgba(255, 107, 107, 0.25);
+  /* Remove background and styling - let the actual logo show */
 }
 
 /* Progress Bar */
@@ -375,7 +372,84 @@ body {
 /* Landing Page */
 .landing {
   width: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  height: 100%;
+  scroll-behavior: smooth;
 }
+
+.landing::-webkit-scrollbar {
+  width: 8px;
+}
+
+.landing::-webkit-scrollbar-track {
+  background: #f3e5e7;
+}
+
+.landing::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #ff6b6b 0%, #ff8787 100%);
+  border-radius: 4px;
+}
+
+.landing::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #ff5252 0%, #ff6b6b 100%);
+}
+
+/* Scroll Animations */
+.landing-hero,
+.features-section,
+.workflow-section,
+.demo-section,
+.showcase-section,
+.benefits-section,
+.final-cta,
+.feature-card,
+.workflow-step,
+.viz-card,
+.benefit-card {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+}
+
+.landing-hero.animate-in,
+.features-section.animate-in,
+.workflow-section.animate-in,
+.demo-section.animate-in,
+.showcase-section.animate-in,
+.benefits-section.animate-in,
+.final-cta.animate-in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.feature-card.animate-in,
+.workflow-step.animate-in,
+.viz-card.animate-in,
+.benefit-card.animate-in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Stagger animations for grid items */
+.feature-card:nth-child(1) { transition-delay: 0.1s; }
+.feature-card:nth-child(2) { transition-delay: 0.2s; }
+.feature-card:nth-child(3) { transition-delay: 0.3s; }
+.feature-card:nth-child(4) { transition-delay: 0.4s; }
+.feature-card:nth-child(5) { transition-delay: 0.5s; }
+.feature-card:nth-child(6) { transition-delay: 0.6s; }
+
+.viz-card:nth-child(1) { transition-delay: 0.1s; }
+.viz-card:nth-child(2) { transition-delay: 0.2s; }
+.viz-card:nth-child(3) { transition-delay: 0.3s; }
+
+.benefit-card:nth-child(1) { transition-delay: 0.1s; }
+.benefit-card:nth-child(2) { transition-delay: 0.2s; }
+.benefit-card:nth-child(3) { transition-delay: 0.3s; }
+
+.workflow-step:nth-child(1) { transition-delay: 0.1s; }
+.workflow-step:nth-child(2) { transition-delay: 0.2s; }
+.workflow-step:nth-child(3) { transition-delay: 0.3s; }
 
 .landing-hero {
   text-align: center;
@@ -593,6 +667,79 @@ body {
   content: '✓';
   position: absolute;
   left: 0;
+  color: var(--aa-primary);
+  font-weight: 600;
+}
+
+/* Demo Section */
+.demo-section {
+  padding: 80px 0;
+  background: linear-gradient(135deg, #ffffff 0%, #fff7f8 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.demo-section::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -10%;
+  width: 120%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(255, 107, 107, 0.05) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.demo-header {
+  text-align: center;
+  margin-bottom: 48px;
+  position: relative;
+  z-index: 1;
+}
+
+.demo-badge {
+  display: inline-block;
+  padding: 8px 20px;
+  background: linear-gradient(135deg, #ff6b6b 0%, #ff8787 100%);
+  color: white;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 12px rgba(255, 107, 107, 0.3);
+  animation: pulseBadge 2s ease-in-out infinite;
+}
+
+@keyframes pulseBadge {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 4px 12px rgba(255, 107, 107, 0.3);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 6px 20px rgba(255, 107, 107, 0.4);
+  }
+}
+
+.demo-cta {
+  text-align: center;
+  margin-top: 48px;
+  padding: 40px;
+  background: linear-gradient(135deg, #fff7f8 0%, #ffffff 100%);
+  border-radius: 20px;
+  border: 2px solid var(--aa-border);
+  position: relative;
+  z-index: 1;
+}
+
+.demo-cta-text {
+  font-size: 18px;
+  color: var(--aa-text);
+  margin-bottom: 24px;
+  line-height: 1.6;
+}
+
+.demo-cta-text strong {
   color: var(--aa-primary);
   font-weight: 600;
 }

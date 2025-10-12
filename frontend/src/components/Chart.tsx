@@ -128,9 +128,11 @@ export const Chart: React.FC<ChartProps> = ({ data, xKey, yKey, onLoading }) => 
           .attr('r', 6)
           .attr('opacity', 1);
 
-        tooltip
-          .style('opacity', 1)
-          .html(`${xKey}: ${d.original[xKey]}<br/>${yKey}: ${d.original[yKey]}`);
+        if (xKey && yKey) {
+          tooltip
+            .style('opacity', 1)
+            .html(`${xKey}: ${d.original[xKey]}<br/>${yKey}: ${d.original[yKey]}`);
+        }
       })
       .on('mousemove', (event) => {
         tooltip

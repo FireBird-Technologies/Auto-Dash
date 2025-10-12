@@ -8,7 +8,7 @@ interface ConnectDataProps {
 }
 
 export const ConnectData: React.FC<ConnectDataProps> = ({ onDataLoaded }) => {
-  const handleDataLoaded = (data: Row[], columns: string[], datasetId: string) => {
+  const handleDataLoaded = (data: Row[], _columns: string[], datasetId: string) => {
     onDataLoaded(data, datasetId);
   };
 
