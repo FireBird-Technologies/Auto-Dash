@@ -29,19 +29,54 @@ from ..core.security import get_current_user
 from ..models import User, Dataset as DatasetModel
 from ..services.dataset_service import dataset_service
 from ..schemas.chat import FixVisualizationRequest
-from ..services.agents import fix_d3
+from ..services.agents import fix_plotly
 import logging
 import re
 import dspy
 
-
 # Set up logging
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+if not logger.hasHandlers():
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+
 
 router = APIRouter(prefix="/api/data", tags=["data"])
 
 
 # Automatic data type conversion functions
+def restore_headers_if_lost(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    If column names are numeric (likely lost headers), try to promote the first row
+    to headers when it looks like valid names. Always normalize columns to strings.
+    """
+    try:
+        if df is None or df.empty:
+            return df
+        numeric_like = all(isinstance(c, (int, np.integer)) for c in df.columns)
+        if numeric_like and len(df) > 0:
+            first_row = df.iloc[0]
+            proposed = [str(v).strip() for v in first_row.tolist()]
+            unique = len(set(proposed)) == len(proposed)
+            looks_textual = any(any(ch.isalpha() for ch in name) for name in proposed)
+            # Avoid promoting if many empty names
+            non_empty_ratio = sum(1 for n in proposed if n) / max(1, len(proposed))
+            if unique and looks_textual and non_empty_ratio > 0.7:
+                df = df.iloc[1:].reset_index(drop=True)
+                df.columns = proposed
+        # Ensure columns are strings
+        df.columns = [str(c) for c in df.columns]
+        return df
+    except Exception:
+        try:
+            df.columns = [str(c) for c in df.columns]
+        except Exception:
+            pass
+        return df
+
 def try_convert_to_numeric(series: pd.Series, col_name: str) -> pd.Series:
     """
     Attempts to convert a series to numeric by cleaning string values.
@@ -181,7 +216,15 @@ class FileProcessor:
     
     def read_csv(self):
         """Read CSV with multiple fallback strategies"""
-        encodings = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
+        encodings = [
+            'utf-8', 'utf-8-sig', 'latin-1', 'cp1252', 'ascii',
+            'iso-8859-1', 'iso-8859-2', 'iso-8859-3', 'iso-8859-4', 'iso-8859-5',
+            'iso-8859-6', 'iso-8859-7', 'iso-8859-8', 'iso-8859-9', 'iso-8859-15',
+            'cp1250', 'cp1251', 'cp1254', 'cp1255', 'cp1256', 'cp1257',
+            'cp932', 'shift_jis', 'euc-jp', 'euc-kr',
+            'gb2312', 'gbk', 'gb18030', 'big5', 'mac-roman',
+            'koi8-r', 'koi8-u'
+        ]
         delimiters = [',', ';', '\t', '|', ':', ' ']
         
         # Try auto-detect encoding first
@@ -203,7 +246,7 @@ class FileProcessor:
                         on_bad_lines='skip',  # Skip bad lines instead of failing
                         engine='python',  # More flexible parser
                         low_memory=False,
-                        encoding_errors='replace'  # Replace problematic characters
+                        encoding_errors='ignore'  # Skip undecodable bytes rather than replace
                     )
                     
                     # Check if we got meaningful data (more than 1 column)
@@ -220,8 +263,14 @@ class FileProcessor:
                 encoding='latin-1',
                 engine='python',
                 on_bad_lines='skip',
-                header=None
+                header=None,
+                encoding_errors='ignore'
             )
+            # Attempt to promote first row to headers if they look like column names
+            try:
+                self.df = restore_headers_if_lost(self.df)
+            except Exception:
+                pass
             print("✓ Read CSV as single column (may need manual parsing)")
             return self.df
         except Exception as e:
@@ -753,7 +802,7 @@ async def analyze_data(
 ):
     """
     Initial visualization generation endpoint - used for first chart after upload.
-    Generates a complete D3.js visualization from natural language query.
+    Generates Plotly visualizations from natural language query.
     """
     # Get the dataset
     if request.dataset_id:
@@ -871,19 +920,19 @@ async def chat_with_data(
             status_code=500,
             detail=f"Error updating visualization: {str(e)}"
         )
-def d3_fix_metric(example, pred, trace=None) -> float:
+def plotly_fix_metric(example, pred, trace=None) -> float:
     """
-    Metric for DSPy Refine to evaluate D3.js error fixes.
+    Metric for DSPy Refine to evaluate Plotly code error fixes.
     
     Args:
-        example: Contains 'd3_code' and 'error'
+        example: Contains 'plotly_code' and 'error'
         pred: Contains 'fix'
     
     Returns:
         float: Score between 0.0 and 1.0
     """
     # Handle both dict and object inputs
-    original_code = example.get('d3_code') if isinstance(example, dict) else example.d3_code
+    original_code = example.get('plotly_code') if isinstance(example, dict) else example.plotly_code
     error_message = example.get('error') if isinstance(example, dict) else example.error
     fixed_code = pred.get('fix') if isinstance(pred, dict) else (pred.fix if hasattr(pred, 'fix') else pred)
     
@@ -895,31 +944,31 @@ def d3_fix_metric(example, pred, trace=None) -> float:
     else:
         return 0.0
     
-    # 2. Common D3 error patterns (0.3)
+    # 2. Common Plotly error patterns (0.3)
     error_lower = error_message.lower()
     
-    if "cannot read property" in error_lower or "undefined" in error_lower:
-        if "d3.select" in fixed_code or "d3.selectAll" in fixed_code:
+    if "cannot read property" in error_lower or "undefined" in error_lower or "keyerror" in error_lower:
+        if "go.Figure" in fixed_code or "px." in fixed_code:
             score += 0.1
-        if ".empty()" in fixed_code or "if (" in fixed_code:
-            score += 0.1
-    
-    if "is not a function" in error_lower:
-        if re.search(r"\.attr\s*\(|\.style\s*\(|\.append\s*\(|\.data\s*\(", fixed_code):
+        if "if " in fixed_code or "try:" in fixed_code:
             score += 0.1
     
-    if "d3.scale" in error_lower or "d3.svg" in error_lower:
-        if "d3.scaleLinear" in fixed_code or "d3.scaleOrdinal" in fixed_code:
+    if "is not a function" in error_lower or "has no attribute" in error_lower:
+        if re.search(r"\.add_trace\s*\(|\.update_layout\s*\(|\.update_xaxes\s*\(", fixed_code):
             score += 0.1
     
-    # 3. D3 best practices (0.3)
-    if re.search(r"\.data\s*\([^)]+\)", fixed_code):
+    if "import" in error_lower or "module" in error_lower:
+        if "import plotly.graph_objects as go" in fixed_code or "import plotly.express as px" in fixed_code:
+            score += 0.1
+    
+    # 3. Plotly best practices (0.3)
+    if re.search(r"go\.Figure\s*\(", fixed_code):
         score += 0.075
-    if re.search(r"\.enter\s*\(\s*\)", fixed_code):
+    if re.search(r"\.add_trace\s*\(", fixed_code):
         score += 0.075
-    if re.search(r"\.exit\s*\(\s*\)\.remove\s*\(\s*\)", fixed_code):
+    if re.search(r"\.update_layout\s*\(", fixed_code):
         score += 0.075
-    if re.search(r"function\s*\(d\)|d\s*=>|datum", fixed_code):
+    if fixed_code.strip().endswith('fig'):
         score += 0.075
     
     # 4. Error terms addressed (0.3)
@@ -934,8 +983,9 @@ def d3_fix_metric(example, pred, trace=None) -> float:
 
 def extract_error_context(d3_code, error_message):
     """
-    Extract 5 lines above and below the error line from D3 code.
-    Returns the relevant context with line numbers for easier debugging.
+    Extract a broader error context around the suspected error location,
+    but return ONLY raw code lines (no "Line X:" markers).
+    Default: 15 lines before and 15 lines after. Falls back to a middle slice.
     """
     import re
     
@@ -977,29 +1027,23 @@ def extract_error_context(d3_code, error_message):
             if error_line is not None:
                 break
     
+    # Window size around the error line
+    window = 15
+
     # If we still can't find the error line, return a portion of the code
     if error_line is None or error_line >= len(lines):
         # Return middle portion of code if error location unknown
         mid_point = len(lines) // 2
-        start = max(0, mid_point - 5)
-        end = min(len(lines), mid_point + 6)
+        start = max(0, mid_point - window)
+        end = min(len(lines), mid_point + window + 1)
         error_line = mid_point
     else:
-        # Calculate start and end lines (5 above, 5 below)
-        start = max(0, error_line - 5)
-        end = min(len(lines), error_line + 6)
+        # Calculate start and end lines (window above and below)
+        start = max(0, error_line - window)
+        end = min(len(lines), error_line + window + 1)
     
-    # Build context with line numbers and error highlighting
-    context_lines = []
-    for i in range(start, end):
-        line_num = i + 1
-        line_content = lines[i] if i < len(lines) else ""
-        
-        if i == error_line:
-            context_lines.append(f">>> Line {line_num}: {line_content}")
-        else:
-            context_lines.append(f"    Line {line_num}: {line_content}")
-    
+    # Build plain code context (no line labels)
+    context_lines = [lines[i] if i < len(lines) else "" for i in range(start, end)]
     return '\n'.join(context_lines)
 
 
@@ -1010,82 +1054,87 @@ async def fix_visualization_error(
     db: Session = Depends(get_db)
 ):
     """
-    Fix a failed visualization by analyzing the error and regenerating corrected D3 code.
+    Fix a failed visualization by analyzing the error and regenerating corrected Plotly code.
     
     Args:
-        request: Contains the original D3 code and error message
+        request: Contains the original Plotly code and error message
         current_user: Authenticated user
         db: Database session
     
     Returns:
-        Request data with extracted error context for you to implement the module logic
+        Fixed Plotly code or error information
     """
-    # try:
+    try:
+        # Extract error context (5 lines above/below error)
+        error_context = extract_error_context(request.d3_code, request.error_message)
+        logger.info(f"Extracted error context:\n{error_context}")
+
+        # Use Claude for code fixing
+        lm = dspy.LM("anthropic/claude-3-7-sonnet-latest", api_key=os.getenv("ANTHROPIC_API_KEY"), max_tokens=8000)
+
+        logger.info("Starting Plotly code fixing...")
+        start_time = datetime.now()
+        logger.info(f"Code fixing started at: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+        refine_fixer = dspy.Refine(module=dspy.Predict(fix_plotly), reward_fn=plotly_fix_metric, N=5, threshold=0.7)
+        logger.info("Refine fixer instantiated with dspy.Predict(fix_plotly)")
+
+        def run_refine_fixer():
+            logger.info("Calling Refine fixer...")
+            with dspy.settings.context(lm=lm):
+                result = refine_fixer(plotly_code=error_context, error=request.error_message)
+                logger.info(f"Refine fixer result: {result}")
+                return result
+
+        response = await asyncio.to_thread(run_refine_fixer)
+        fix_code = response.fix
         
+        # Strip markdown formatting if present
+        if fix_code.startswith('```python'):
+            fix_code = fix_code.replace('```python', '').replace('```', '').strip()
+        elif fix_code.startswith('```'):
+            fix_code = fix_code.replace('```', '').strip()
+
+        # Stitch the fix to the original code at the error location
+        original_lines = request.d3_code.splitlines()
+        error_lines = error_context.splitlines()
         
-    # Extract only the relevant error context (5 lines above/below error)
-    error_context = extract_error_context(request.d3_code, request.error_message)
-    # Use gpt-4o-mini (original LM), async thread-safe execution (like deep_coder example)
-    lm = dspy.LM("anthropic/claude-3-7-sonnet-latest", api_key=os.getenv("ANTHROPIC_API_KEY"), max_tokens=4000)
-
-    print(dspy.settings.lm)
-
-    logger.info("Starting D3 code fixing with GPT-4o-mini...")
-    start_time = datetime.now()
-    logger.info(f"Code fixing started at: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
-
-    refine_fixer = dspy.Refine(module=dspy.Predict(fix_d3), reward_fn=d3_fix_metric, N=5, threshold=0.7)
-
-    def run_refine_fixer():
-        with dspy.settings.context(lm=lm):
-            return refine_fixer(d3_code=error_context, error=request.error_message)
-
-    response = await asyncio.to_thread(run_refine_fixer)
-    # lm = dspy.LM('openai/gpt-4o-mini', max_tokens=3000, api_key= os.getenv("OPENAI_API_KEY"))
-
-    # with dspy.settings.context(lm=lm):
-    
-
-    fix_code = response.fix
-    
-    # Strip markdown formatting if present
-    if fix_code.startswith('```javascript'):
-        fix_code = fix_code.replace('```javascript', '').replace('```', '').strip()
-    elif fix_code.startswith('```js'):
-        fix_code = fix_code.replace('```js', '').replace('```', '').strip()
-    elif fix_code.startswith('```'):
-        fix_code = fix_code.replace('```', '').strip()
-
-    # Stitch the fix to the original code at the error location
-    original_lines = request.d3_code.splitlines()
-    error_lines = error_context.splitlines()
-    # Find the error line in the context (marked by >>> Line X:)
-    error_line_nums = [
-        int(line.split(':')[0].replace('>>> Line', '').strip())
-        for line in error_lines if line.startswith('>>> Line')
-    ]
-    if error_line_nums:
-        fix_insertion_idx = error_line_nums[0] - 1  # 0-indexed
-        # Replace just the error line with fix_code, keep rest
-        stitched_lines = []
-        for i, line in enumerate(original_lines):
-            if i == fix_insertion_idx:
-                stitched_lines.append(fix_code)
-            else:
-                stitched_lines.append(line)
-        stitched_code = '\n'.join(stitched_lines)
-    else:
-        # If cannot localize, just return the fix as whole
-        stitched_code = fix_code
-
-    
-    logger.info("Extracted error context for D3 code fix")
-    
-    return {
-        "fixed_complete_code": stitched_code,  
-        "user_id": current_user.id,
-        "fix_failed": False
-    }
+        # Find the error line in the context (marked by >>> Line X:)
+        error_line_nums = [
+            int(line.split(':')[0].replace('>>> Line', '').strip())
+            for line in error_lines if line.startswith('>>> Line')
+        ]
+        
+        if error_line_nums:
+            fix_insertion_idx = error_line_nums[0] - 1  # 0-indexed
+            # Replace the error line with fix_code
+            stitched_lines = []
+            for i, line in enumerate(original_lines):
+                if i == fix_insertion_idx:
+                    stitched_lines.append(fix_code)
+                else:
+                    stitched_lines.append(line)
+            stitched_code = '\n'.join(stitched_lines)
+        else:
+            # If cannot localize, return the fix as whole
+            stitched_code = fix_code
+        
+        logger.info("Extracted error context for Plotly code fix")
+        
+        return {
+            "fixed_complete_code": stitched_code,  
+            "user_id": current_user.id,
+            "fix_failed": False
+        }
+    except Exception as e:
+        logger.error(f"Error fixing Plotly visualization: {str(e)}")
+        return {
+            "fixed_complete_code": request.d3_code,  # Return original code as fallback
+            "user_id": current_user.id,
+            "fix_failed": True,
+            "error_reason": str(e),
+            "original_error_message": request.error_message
+        }
     
     # except Exception as e:
     #     logger.error(f"Error fixing D3 visualization: {str(e)}")

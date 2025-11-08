@@ -15,8 +15,10 @@
     "html2canvas": "^1.4.1",
     "jspdf": "^3.0.3",
     "papaparse": "^5.4.1",
+    "plotly.js": "^3.1.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-plotly.js": "^2.6.0",
     "react-router-dom": "^6.20.0",
     "xlsx": "^0.18.5"
   },

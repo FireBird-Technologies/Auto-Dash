@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { D3ChartRenderer } from '../D3ChartRenderer';
+import { PlotlyChartRenderer } from '../PlotlyChartRenderer';
 import { config, getAuthHeaders } from '../../config';
 
 type Row = Record<string, number | string>;
@@ -26,6 +26,9 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   const [localData, setLocalData] = useState<Row[]>(data); // Local copy that may be full dataset
   const [fullDataFetched, setFullDataFetched] = useState(false); // Track if we've fetched full data
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
+  const [showDatasetPreview, setShowDatasetPreview] = useState(false);
+  const [previewData, setPreviewData] = useState<{ preview: Row[], total_rows: number } | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
   const hasGeneratedInitialChart = useRef(false);
   const visualizationRef = useRef<HTMLDivElement>(null);
   const downloadMenuRef = useRef<HTMLDivElement>(null);
@@ -82,6 +85,32 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     } catch (err) {
       console.error('Failed to load full dataset:', err);
       // Not critical - we can still work with preview data
+    }
+  };
+
+  // Function to fetch dataset preview
+  const fetchDatasetPreview = async () => {
+    if (!datasetId) return;
+    
+    setLoadingPreview(true);
+    try {
+      const response = await fetch(`${config.backendUrl}/api/data/datasets/${datasetId}/preview?rows=20`, {
+        method: 'GET',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        setPreviewData(result);
+        setShowDatasetPreview(true);
+      } else {
+        console.error('Failed to fetch dataset preview');
+      }
+    } catch (err) {
+      console.error('Error fetching dataset preview:', err);
+    } finally {
+      setLoadingPreview(false);
     }
   };
 
@@ -387,15 +416,70 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
             </button>
                     <div className="fullscreen-chart">
                       {chartSpecs.map((spec, index) => (
-                        <D3ChartRenderer 
+                        <PlotlyChartRenderer 
                           key={`chart-${index}`}
-                          chartSpec={spec.chart_spec} 
+                          chartSpec={spec} 
                           data={localData}
                           chartIndex={index}
                           onChartFixed={handleChartFixed}
                         />
                       ))}
                     </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dataset Preview Modal */}
+      {showDatasetPreview && previewData && (
+        <div className="fullscreen-modal" onClick={() => setShowDatasetPreview(false)}>
+          <div className="preview-modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="preview-header">
+              <div>
+                <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 600 }}>Dataset Preview</h2>
+                <p style={{ margin: '0.5rem 0 0 0', color: '#666', fontSize: '0.9rem' }}>
+                  Showing {previewData.preview.length} of {previewData.total_rows.toLocaleString()} total rows
+                </p>
+              </div>
+              <button className="fullscreen-close" onClick={() => setShowDatasetPreview(false)}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+            <div className="preview-table-container">
+              {previewData.preview.length > 0 && (
+                <table className="preview-table">
+                  <thead>
+                    <tr>
+                      <th style={{ background: '#f8f9fa', fontWeight: 600 }}>#</th>
+                      {Object.keys(previewData.preview[0]).map((column) => (
+                        <th key={column} style={{ background: '#f8f9fa', fontWeight: 600 }}>
+                          {column}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {previewData.preview.map((row, rowIndex) => (
+                      <tr key={rowIndex}>
+                        <td style={{ background: '#f8f9fa', fontWeight: 500 }}>{rowIndex + 1}</td>
+                        {Object.entries(row).map(([column, value]) => (
+                          <td key={column}>
+                            {value === null || value === undefined 
+                              ? <span style={{ color: '#999', fontStyle: 'italic' }}>null</span>
+                              : typeof value === 'number' 
+                                ? value.toLocaleString(undefined, { maximumFractionDigits: 4 })
+                                : String(value)
+                            }
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -488,6 +572,22 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
               <p className="step-description">Ask questions to generate visualizations</p>
             </div>
             <div className="dashboard-controls">
+              {/* Dataset Preview Button - Show after first query */}
+              {chatHistory.length > 0 && (
+                <button 
+                  onClick={fetchDatasetPreview} 
+                  className="control-button"
+                  disabled={loadingPreview}
+                  title="View Dataset Preview"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                    <line x1="3" y1="9" x2="21" y2="9" />
+                    <line x1="9" y1="21" x2="9" y2="9" />
+                  </svg>
+                  {loadingPreview ? 'Loading...' : 'Dataset Preview'}
+                </button>
+              )}
               <div className="download-dropdown" ref={downloadMenuRef}>
                 <button 
                   onClick={() => setShowDownloadMenu(!showDownloadMenu)} 
@@ -574,9 +674,9 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                     <div className="chart-display">
                       {chartSpecs.length > 0 ? (
                         chartSpecs.map((spec, index) => (
-                          <D3ChartRenderer 
+                          <PlotlyChartRenderer 
                             key={`chart-${index}`}
-                            chartSpec={spec.chart_spec} 
+                            chartSpec={spec} 
                             data={localData}
                             chartIndex={index}
                             onChartFixed={handleChartFixed}

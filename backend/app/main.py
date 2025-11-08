@@ -30,7 +30,7 @@ elif "gemini" in default_model:
 else:
     provider = "UNKNOWN"
 
-default_lm = dspy.LM(os.getenv("DEFAULT_MODEL"), max_tokens=2500,api_key=os.getenv(provider+'_API_KEY'), temperature=1, cache=False)
+default_lm = dspy.LM(os.getenv("DEFAULT_MODEL"), max_tokens=3500,api_key=os.getenv(provider+'_API_KEY'), temperature=1, cache=False)
 
 dspy.configure(lm=default_lm)
 

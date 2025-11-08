@@ -118,7 +118,7 @@ export const Landing: React.FC<LandingProps> = ({ onStart }) => {
                 </svg>
               }
               title="Real-time Updates"
-              description="Iteratively refine your charts with feedback. Change appears instantly as our backend generates new D3 instructions."
+              description="Iteratively refine your charts with feedback. Change appears instantly as our backend generates new Plotly visualizations."
             />
             <FeatureCard
               icon={
@@ -137,8 +137,8 @@ export const Landing: React.FC<LandingProps> = ({ onStart }) => {
                   <line x1="9" y1="21" x2="9" y2="9" />
                 </svg>
               }
-              title="D3-Powered"
-              description="Beautiful, interactive charts built with D3.js. Hover, zoom, pan, and explore your data like never before."
+              title="Plotly-Powered"
+              description="Beautiful, interactive charts built with Plotly. Hover, zoom, pan, and explore your data like never before."
             />
             <FeatureCard
               icon={
@@ -191,7 +191,7 @@ export const Landing: React.FC<LandingProps> = ({ onStart }) => {
               title="Visualize & Refine"
               description="Get instant visualizations and iterate with real-time feedback."
               details={[
-                "D3-powered interactive charts",
+                "Plotly-powered interactive charts",
                 "Request changes in plain English",
                 "Real-time updates from backend",
                 "Export and share your dashboards"
@@ -209,7 +209,7 @@ export const Landing: React.FC<LandingProps> = ({ onStart }) => {
             <h2 className="section-heading">See AutoDash in Action</h2>
             <p className="section-subheading">
               Try interacting with this fully functional visualization below. 
-              Hover, filter, and sort to explore the data—all powered by D3.js and natural language.
+              Hover, filter, and sort to explore the data—all powered by Plotly and natural language.
             </p>
           </div>
           <DemoVisualization />
@@ -229,10 +229,10 @@ export const Landing: React.FC<LandingProps> = ({ onStart }) => {
         </div>
       </section>
 
-      {/* D3 Visualizations Showcase */}
+      {/* Plotly Visualizations Showcase */}
       <section className="showcase-section">
         <div className="section-container">
-          <h2 className="section-heading">Beautiful D3-powered visualizations</h2>
+          <h2 className="section-heading">Beautiful Plotly-powered visualizations</h2>
           <p className="section-subheading">
             Interactive charts that bring your data to life
           </p>

@@ -56,10 +56,10 @@ export const D3ChartRenderer: React.FC<D3ChartRendererProps> = ({
   }, [chartSpec, data, chartIndex]);
 
   const showFixingMessage = () => {
-    if (containerRef.current) {
+      if (containerRef.current) {
       setIsFixing(true);
       console.log('Starting fix process, isFixing:', isFixing);
-      containerRef.current.innerHTML = `
+        containerRef.current.innerHTML = `
         <div style="padding: 40px; text-align: center; color: #1976d2; background: #e3f2fd; border-radius: 8px; margin: 20px;">
           <div style="display: inline-block; margin-bottom: 15px;">
             <div style="width: 24px; height: 24px; border: 3px solid #1976d2; border-top: 3px solid transparent; border-radius: 50%; animation: spin 1s linear infinite;"></div>
@@ -211,8 +211,12 @@ export const D3ChartRenderer: React.FC<D3ChartRendererProps> = ({
     
     for (const pattern of dataLoadingPatterns) {
       if (pattern.test(cleanedCode)) {
-        console.warn('⚠️ Detected data loading code - commenting out');
-        cleanedCode = cleanedCode.replace(pattern, '// DATA LOADING COMMENTED OUT - Using provided data parameter\n// $&\n');
+        console.warn('⚠️ Detected data loading code - removing entire then/catch block');
+        // Remove entire then/catch block content following the match
+        cleanedCode = cleanedCode.replace(
+          new RegExp(`${pattern.source}[\\s\\S]*?\\}\n?\\)\\s*(?:\\.catch\\s*\\([^)]*\\)\\s*\\{[\\s\\S]*?\\}\\s*\\)\\s*)?;?`, 'g'),
+          '// DATA LOADING REMOVED — using provided "data" parameter\n'
+        );
       }
     }
     
@@ -227,10 +231,10 @@ export const D3ChartRenderer: React.FC<D3ChartRendererProps> = ({
     
     // Pattern 3: fetch() API calls
     cleanedCode = cleanedCode.replace(
-      /fetch\s*\([^)]*\)\s*\.then/g,
+      /fetch\s*\([^)]*\)\s*\.then[\s\S]*?\{[\s\S]*?\}[\s\S]*?(?:;|$)/g,
       (match) => {
-        console.warn('⚠️ Commenting out fetch call:', match);
-        return `// ${match} // Using provided 'data' parameter instead\n// `;
+        console.warn('⚠️ Removing fetch chain:', match.slice(0, 60));
+        return `// FETCH REMOVED — Using provided 'data' parameter instead`;
       }
     );
     
@@ -249,6 +253,42 @@ export const D3ChartRenderer: React.FC<D3ChartRendererProps> = ({
     }
     
     return cleanedCode;
+  };
+
+  // Strip line markers like "Line 7:" and balance brackets/parens
+  const sanitizeD3Code = (code: string): string => {
+    let c = code;
+    // Remove standalone line markers
+    c = c.replace(/^\s*Line\s+\d+\s*:\s*$/gm, '');
+    c = c.replace(/\n\s*Line\s+\d+\s*:\s*\n/g, '\n');
+    // Balance braces/parens/brackets
+    const count = (s: string, ch: string) => (s.match(new RegExp(`\\${ch}`, 'g')) || []).length;
+    const ob = count(c, '{'), cb = count(c, '}');
+    const op = count(c, '('), cp = count(c, ')');
+    const os = count(c, '['), cs = count(c, ']');
+    let out = c;
+    // Trim extra closers from end if any
+    const trimTail = (text: string, ch: string, excess: number) => {
+      if (excess <= 0) return text;
+      let i = text.length - 1, removed = 0, acc = '';
+      while (i >= 0) {
+        const chNow = text[i];
+        if (chNow === ch && removed < excess) { removed++; i--; continue; }
+        acc = chNow + acc; i--;
+      }
+      return acc;
+    };
+    if (cb > ob) out = trimTail(out, '}', cb - ob);
+    if (cp > op) out = trimTail(out, ')', cp - op);
+    if (cs > os) out = trimTail(out, ']', cs - os);
+    // Append missing closers
+    const ob2 = count(out, '{'), cb2 = count(out, '}');
+    const op2 = count(out, '('), cp2 = count(out, ')');
+    const os2 = count(out, '['), cs2 = count(out, ']');
+    if (ob2 > cb2) out += '}'.repeat(ob2 - cb2);
+    if (op2 > cp2) out += ')'.repeat(op2 - cp2);
+    if (os2 > cs2) out += ']'.repeat(os2 - cs2);
+    return out;
   };
 
   const fixIncompleteD3Code = (code: string): string => {
@@ -320,8 +360,8 @@ export const D3ChartRenderer: React.FC<D3ChartRendererProps> = ({
       throw new Error('No D3 code found in chart specification');
     }
 
-    // Step 1: Remove any data loading code (d3.csv, fetch, etc.)
-    d3Code = removeDataLoadingCode(d3Code);
+    // Step 1: Remove any data loading code (d3.csv, fetch, etc.) and sanitize
+    d3Code = sanitizeD3Code(removeDataLoadingCode(d3Code));
 
     // Step 2: Fix incomplete D3 code if needed
     d3Code = fixIncompleteD3Code(d3Code);

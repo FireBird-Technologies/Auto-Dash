@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import * as d3 from 'd3';
+import * as d3 from 'd3'; // Using D3 for demo only - production uses Plotly
 
 // Bar chart data - Tech Startup Valuations
 const barChartData = [
