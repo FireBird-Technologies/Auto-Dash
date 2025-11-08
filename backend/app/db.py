@@ -3,7 +3,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./autodash.db")
+# Get DATABASE_URL, but treat empty string as None to use default
+database_url = os.getenv("DATABASE_URL", "").strip()
+DATABASE_URL = database_url if database_url else "sqlite:///./autodash.db"
 
 
 class Base(DeclarativeBase):

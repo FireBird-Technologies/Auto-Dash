@@ -1002,8 +1002,8 @@ async def fix_visualization_error(
         
     # Extract only the relevant error context (5 lines above/below error)
     error_context = extract_error_context(request.d3_code, request.error_message)
-    # Use gpt-4o-mini (original LM), async thread-safe execution (like deep_coder example)
-    lm = dspy.LM("anthropic/claude-3-7-sonnet-latest", api_key=os.getenv("ANTHROPIC_API_KEY"), max_tokens=4000)
+    # Use Claude for D3 code fixing, async thread-safe execution (like deep_coder example)
+    lm = dspy.Claude(model="claude-3-7-sonnet-latest", api_key=os.getenv("ANTHROPIC_API_KEY"), max_tokens=4000)
 
     print(dspy.settings.lm)
 

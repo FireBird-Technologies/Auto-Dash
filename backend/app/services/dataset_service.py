@@ -175,7 +175,7 @@ class DatasetService:
             
             # Generate context using DSPy
             context_info ={"columns": df.describe().to_dict(), "sample_values": df.head(2).to_markdown(), }
-            with dspy.context(lm = dspy.LM('openai/gpt-4o-mini', max_tokens =2500)):
+            with dspy.context(lm = dspy.OpenAI(model='gpt-4o-mini', max_tokens =2500)):
                 result = self.context_creator(
                     dataframe_info=str(context_info)
                 )

@@ -558,7 +558,7 @@ class D3VisualizationModule(dspy.Module):
         self.fail = FAIL_MESSAGE
 
     async def aforward(self, query, dataset_context):
-        with dspy.context(lm=dspy.LM("openai/gpt-4o-mini", max_tokens=1200 )):
+        with dspy.context(lm=dspy.OpenAI(model="gpt-4o-mini", max_tokens=1200 )):
             plan = self.planner(query=query, dataset_context=dataset_context)
 
         logger.info("GenerateVisualizationPlan result: %s", plan.plan)

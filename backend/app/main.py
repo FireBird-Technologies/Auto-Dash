@@ -23,25 +23,58 @@ app = FastAPI(title="AutoDash Backend", version="0.1.0")
 default_model = os.getenv("DEFAULT_MODEL", "").lower()
 if "anthropic" in default_model:
     provider = "ANTHROPIC"
+    model_name = os.getenv("DEFAULT_MODEL").replace("anthropic/", "") if "/" in os.getenv("DEFAULT_MODEL", "") else os.getenv("DEFAULT_MODEL")
+    default_lm = dspy.Claude(
+        model=model_name,
+        max_tokens=7000,
+        api_key=os.getenv("ANTHROPIC_API_KEY"),
+        temperature=1
+    )
 elif "openai" in default_model:
     provider = "OPENAI"
+    model_name = os.getenv("DEFAULT_MODEL").replace("openai/", "") if "/" in os.getenv("DEFAULT_MODEL", "") else os.getenv("DEFAULT_MODEL")
+    default_lm = dspy.OpenAI(
+        model=model_name,
+        max_tokens=7000,
+        api_key=os.getenv("OPENAI_API_KEY"),
+        temperature=1
+    )
 elif "gemini" in default_model:
     provider = "GEMINI"
+    model_name = os.getenv("DEFAULT_MODEL").replace("gemini/", "").replace("google/", "") if "/" in os.getenv("DEFAULT_MODEL", "") else os.getenv("DEFAULT_MODEL")
+    default_lm = dspy.Google(
+        model=model_name,
+        max_tokens=7000,
+        api_key=os.getenv("GEMINI_API_KEY"),
+        temperature=1
+    )
 else:
     provider = "UNKNOWN"
-
-default_lm = dspy.LM(os.getenv("DEFAULT_MODEL"), max_tokens=7000,api_key=os.getenv(provider+'_API_KEY'), temperature=1, cache=False)
+    # Fallback to OpenAI if unknown
+    model_name = os.getenv("DEFAULT_MODEL", "gpt-4o-mini").replace("openai/", "") if "/" in os.getenv("DEFAULT_MODEL", "") else os.getenv("DEFAULT_MODEL", "gpt-4o-mini")
+    default_lm = dspy.OpenAI(
+        model=model_name,
+        max_tokens=7000,
+        api_key=os.getenv("OPENAI_API_KEY"),
+        temperature=1
+    )
 
 dspy.configure(lm=default_lm)
 
 # CORS middleware - allow frontend to access backend
+frontend_url = os.getenv("FRONTEND_URL", "")
+cors_origins = [
+    "http://localhost:5173",  # Vite dev server
+    "http://127.0.0.1:5173",  # Alternative localhost
+    "http://localhost:3000",  # Alternative port
+]
+# Add production frontend URL if provided
+if frontend_url:
+    cors_origins.append(frontend_url)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",  # Vite dev server
-        "http://127.0.0.1:5173",  # Alternative localhost
-        "http://localhost:3000",  # Alternative port
-    ],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
