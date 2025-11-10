@@ -20,33 +20,22 @@ from .routes.data import router as data_router
 
 app = FastAPI(title="AutoDash Backend", version="0.1.0")
 
-default_model = os.getenv("DEFAULT_MODEL", "").lower()
-if "anthropic" in default_model:
-    provider = "ANTHROPIC"
-elif "openai" in default_model:
-    provider = "OPENAI"
-elif "gemini" in default_model:
-    provider = "GEMINI"
-else:
-    provider = "UNKNOWN"
 
-default_lm = dspy.LM(os.getenv("DEFAULT_MODEL"), max_tokens=3500,api_key=os.getenv(provider+'_API_KEY'), temperature=1, cache=False)
+
+# CORS middleware - allow frontend to access backend
+default_lm = dspy.LM('openai/gpt-4o-mini', max_tokens=3500,api_key=os.getenv(provider+'_API_KEY'), temperature=1, cache=False)
 
 dspy.configure(lm=default_lm)
 
 # CORS middleware - allow frontend to access backend
+frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",  # Vite dev server
-        "http://127.0.0.1:5173",  # Alternative localhost
-        "http://localhost:3000",  # Alternative port
-    ],
+    allow_origins=[frontend_url],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 # Session support for OAuth (Authlib requires request.session)
 app.add_middleware(
     SessionMiddleware,
