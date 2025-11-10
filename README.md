@@ -6,7 +6,7 @@
   
   <p>
     <img src="https://img.shields.io/badge/Open%20Source-♥-red?style=flat-square" alt="Open Source" />
-    <img src="https://img.shields.io/badge/D3.js-Powered-orange?style=flat-square" alt="D3.js Powered" />
+    <img src="https://img.shields.io/badge/Plotly-Powered-orange?style=flat-square" alt="Plotly Powered" />
     <img src="https://img.shields.io/badge/AI-Enabled-blue?style=flat-square" alt="AI Enabled" />
   </p>
 
@@ -33,7 +33,7 @@
     </td>
     <td width="33%" valign="top">
       <h3>⚡ Real-time Updates</h3>
-      <p>Iteratively refine your charts with feedback. Changes appear instantly as our backend generates new D3 instructions.</p>
+      <p>Iteratively refine your charts with feedback. Changes appear instantly as our backend generates new Plotly configurations.</p>
     </td>
   </tr>
   <tr>
@@ -42,8 +42,8 @@
       <p>Automatic correlation detection, trend analysis, and anomaly identification powered by backend intelligence.</p>
     </td>
     <td width="33%" valign="top">
-      <h3>🎨 D3-Powered</h3>
-      <p>Beautiful, interactive charts built with D3.js. Hover, zoom, pan, and explore your data like never before.</p>
+      <h3>🎨 Plotly-Powered</h3>
+      <p>Beautiful, interactive charts built with Plotly. Hover, zoom, pan, and explore your data like never before.</p>
     </td>
     <td width="33%" valign="top">
       <h3>👥 Collaborative</h3>
@@ -76,14 +76,14 @@ Tell us what you want to discover in plain language.
 
 #### **03. Visualize & Refine**
 Get instant visualizations and iterate with real-time feedback.
-- ✅ D3-powered interactive charts
+- ✅ Plotly-powered interactive charts
 - ✅ Request changes in plain English
 - ✅ Real-time updates from backend
 - ✅ Export and share your dashboards
 
 ---
 
-## 🎯 Beautiful D3-powered Visualizations
+## 🎯 Beautiful Plotly-powered Visualizations
 
 **Interactive charts that bring your data to life**
 
@@ -127,7 +127,7 @@ Get instant visualizations and iterate with real-time feedback.
 
 ### Frontend
 - **React** + **TypeScript** - Modern, type-safe UI
-- **D3.js** - Powerful data visualization library
+- **Plotly.js** - Powerful data visualization library
 - **Vite** - Lightning-fast build tool
 
 ### Backend
@@ -138,7 +138,7 @@ Get instant visualizations and iterate with real-time feedback.
 
 ### AI & Intelligence
 - **Natural Language Processing** - Understand user intent
-- **Code Generation** - Automatic D3.js code creation
+- **Code Generation** - Automatic Plotly spec creation
 - **Error Recovery** - Self-healing visualizations
 - **Context-Aware** - Smart recommendations based on data
 
@@ -230,7 +230,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🌟 Acknowledgments
 
-- **D3.js** - For the incredible visualization library
+- **Plotly** - For the incredible visualization library
 - **FastAPI** - For the blazing-fast Python framework
 - **DSPy** - For AI-powered code generation
 - **Open Source Community** - For inspiration and support
