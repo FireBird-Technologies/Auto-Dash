@@ -20,7 +20,15 @@ from .routes.data import router as data_router
 
 app = FastAPI(title="AutoDash Backend", version="0.1.0")
 
-
+default_model = os.getenv("DEFAULT_MODEL", "").lower()
+if "anthropic" in default_model:
+    provider = "ANTHROPIC"
+elif "openai" in default_model:
+    provider = "OPENAI"
+elif "gemini" in default_model:
+    provider = "GEMINI"
+else:
+    provider = "UNKNOWN"
 
 # CORS middleware - allow frontend to access backend
 default_lm = dspy.LM('openai/gpt-4o-mini', max_tokens=3500,api_key=os.getenv(provider+'_API_KEY'), temperature=1, cache=False)
