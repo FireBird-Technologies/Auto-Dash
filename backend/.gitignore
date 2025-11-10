@@ -3,3 +3,4 @@
 
 app/.env
 *.db 
+.venv
