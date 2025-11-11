@@ -755,4 +755,4 @@ class PlotlyVisualizationModule(dspy.Module):
             return chart_specs
         else:
             logger.info("Query not relevant for visualization. Returning FAIL_MESSAGE.")
-            return self.fail
+            return self.fail + str(plan.relevant_query)
