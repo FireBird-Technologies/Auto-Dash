@@ -7,11 +7,14 @@ to create Plotly chart specifications from natural language queries.
 """
 
 import pandas as pd
+import numpy as np
 import os
 import re
 import json
 import plotly
 import plotly.graph_objects as go
+import scipy
+from scipy import stats, signal, optimize
 from typing import Dict, Any, List
 from .agents import PlotlyVisualizationModule
 import logging
@@ -19,25 +22,32 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def execute_plotly_code(code: str, data: pd.DataFrame) -> Dict[str, Any]:
+def execute_plotly_code(code: str, data: pd.DataFrame | Dict[str, pd.DataFrame]) -> Dict[str, Any]:
     """
     Execute Plotly Python code and return the figure as JSON.
     
     Args:
         code: Python code that generates a Plotly figure
-        data: pandas DataFrame to pass to the code
+        data: pandas DataFrame (for CSV) or dict of DataFrames (for multi-sheet Excel)
         
     Returns:
         dict: Plotly figure as JSON
     """
     try:
         # Create execution environment with necessary imports
+        # For multi-sheet Excel, code should use: df = data['SheetName']
+        # For CSV/single sheet, code can use: df = data or just data
         exec_globals = {
             'pd': pd,
+            'np': np,
             'go': go,
             'plotly': plotly,
+            'scipy': scipy,
+            'stats': stats,
+            'signal': signal,
+            'optimize': optimize,
             'data': data,
-            'np': pd.np if hasattr(pd, 'np') else None
+            'df': data if not isinstance(data, dict) else None  # Only set df for non-dict data
         }
         
         # Try to import plotly.express if available
@@ -80,7 +90,7 @@ def execute_plotly_code(code: str, data: pd.DataFrame) -> Dict[str, Any]:
 
 
 async def generate_chart_spec(
-    df: pd.DataFrame, 
+    df: pd.DataFrame | Dict[str, pd.DataFrame], 
     query: str, 
     dataset_context: str = None
 ) -> List[Dict[str, Any]]:
@@ -88,7 +98,7 @@ async def generate_chart_spec(
     Generate Plotly chart specifications based on the user's query.
     
     Args:
-        df: pandas DataFrame containing the data
+        df: pandas DataFrame (CSV) or dict of DataFrames (multi-sheet Excel)
         query: Natural language query describing what visualization is needed
         dataset_context: Rich textual description of the dataset
         
@@ -101,78 +111,90 @@ async def generate_chart_spec(
             - figure: Executed Plotly figure as JSON (if successful)
             - error: Error message (if execution failed)
     """
-    try:
+    # try:
         # Get or initialize the visualization module
-        viz_module = PlotlyVisualizationModule()
-        
-        # Use dataset context or provide fallback
-        if not dataset_context:
+    viz_module = PlotlyVisualizationModule()
+    
+    # Use dataset context or provide fallback
+    if not dataset_context:
+        if isinstance(df, dict):
+            # Multi-sheet Excel
+            sheet_names = list(df.keys())
+            first_sheet = df[sheet_names[0]]
+            columns = [str(col) for col in first_sheet.columns.tolist()]
+            dataset_context = f"Multi-sheet Excel with {len(df)} sheets: {', '.join(sheet_names)}. First sheet has {len(first_sheet)} rows and columns: {', '.join(columns)}"
+        else:
+            # Single DataFrame
             columns = [str(col) for col in df.columns.tolist()]
             dataset_context = f"Dataset with {len(df)} rows and {len(df.columns)} columns: {', '.join(columns)}"
-        
-        # Generate the visualization with dataset context
-        result = await viz_module.aforward(
-            query=query,
-            dataset_context=dataset_context
-        )
-        
-        # Handle array of chart specs
-        if isinstance(result, list):
-            # Execute each chart spec and add the figure JSON
-            for chart_spec in result:
-                code = chart_spec.get('chart_spec', '')
-                execution_result = execute_plotly_code(code, df)
-                
-                chart_spec['figure'] = execution_result.get('figure')
-                chart_spec['execution_success'] = execution_result.get('success')
-                if not execution_result.get('success'):
-                    chart_spec['execution_error'] = execution_result.get('error')
-                    logger.warning(f"Chart execution failed: {execution_result.get('error')}")
+    
+    # Generate the visualization with dataset context
+    result = await viz_module.aforward(
+        query=query,
+        dataset_context=dataset_context
+    )
+    
+    # Handle array of chart specs
+    if isinstance(result, list):
+        # Execute each chart spec and add the figure JSON
+        for chart_spec in result:
+            code = chart_spec.get('chart_spec', '')
+            execution_result = execute_plotly_code(code, df)
             
-            return result
-        
-        # Handle fail message (string)
-        if isinstance(result, str):
-            # Create a simple error figure
-            execution_result = execute_plotly_code(result, df)
-            return [{
-                'chart_spec': result,
-                'chart_type': 'error',
-                'title': 'Error',
-                'chart_index': 0,
-                'figure': execution_result.get('figure'),
-                'execution_success': execution_result.get('success'),
-                'execution_error': execution_result.get('error')
-            }]
+            chart_spec['figure'] = execution_result.get('figure')
+            chart_spec['execution_success'] = execution_result.get('success')
+            if not execution_result.get('success'):
+                chart_spec['execution_error'] = execution_result.get('error')
+                logger.warning(f"Chart execution failed: {execution_result.get('error')}")
         
         return result
-        
-    except Exception as e:
-        logger.error(f"Failed to generate visualization: {e}")
-        # Return error response with a simple error figure
-        error_code = f"""
-import plotly.graph_objects as go
-
-fig = go.Figure()
-fig.add_annotation(
-    text="Error: {str(e)}",
-    xref="paper", yref="paper",
-    x=0.5, y=0.5, showarrow=False,
-    font=dict(size=14, color="red")
-)
-fig.update_layout(title="Visualization Error")
-fig
-"""
-        execution_result = execute_plotly_code(error_code, df)
+    
+    # Handle fail message (string)
+    if isinstance(result, str):
+        execution_result = execute_plotly_code(result, df)
 
         figure = execution_result.get('figure') if isinstance(execution_result, dict) else None
+        success = execution_result.get('success') if isinstance(execution_result, dict) else False
+        error = execution_result.get('error') if isinstance(execution_result, dict) else str(execution_result)
 
         return [{
-            "chart_type": "error",
-            "title": "Error",
-            "chart_index": 0,
-            "chart_spec": error_code,
-            "figure": figure,
-            "execution_success": False,
-            "execution_error": f"Failed to generate visualization: {str(e)}"
+            'chart_spec': result,
+            'chart_type': 'error',
+            'title': 'Error',
+            'chart_index': 0,
+            'figure': figure,
+            'execution_success': success,
+            'execution_error': error
         }]
+    
+    return result
+        
+#     except Exception as e:
+#         logger.error(f"Failed to generate visualization: {e}")
+#         # Return error response with a simple error figure
+#         error_code = f"""
+# import plotly.graph_objects as go
+
+# fig = go.Figure()
+# fig.add_annotation(
+#     text="Error: {str(e)}",
+#     xref="paper", yref="paper",
+#     x=0.5, y=0.5, showarrow=False,
+#     font=dict(size=14, color="red")
+# )
+# fig.update_layout(title="Visualization Error")
+# fig
+# """
+#         execution_result = execute_plotly_code(error_code, df)
+
+#         figure = execution_result.get('figure') if isinstance(execution_result, dict) else None
+
+#         return [{
+#             "chart_type": "error",
+#             "title": "Error",
+#             "chart_index": 0,
+#             "chart_spec": error_code,
+#             "figure": figure,
+#             "execution_success": False,
+#             "execution_error": f"Failed to generate visualization: {str(e)}"
+#         }]

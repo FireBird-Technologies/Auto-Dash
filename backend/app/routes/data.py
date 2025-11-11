@@ -516,20 +516,70 @@ async def upload_data(
             temp_file.write(content)
             temp_file_path = temp_file.name
         
-        # Use robust file processor
-        processor = FileProcessor(temp_file_path)
-        
         # Parse based on file type
         if file_extension == 'csv':
+            # CSV files - single DataFrame
+            processor = FileProcessor(temp_file_path)
             df = processor.read_csv()
-        else:  # Excel files
-            df = processor.read_excel()
-        
-        # Automatically convert data types (numeric, datetime, etc.)
-        df = auto_convert_datatypes(df)
-        
-        # Replace NaN with None (which becomes null in JSON)
-        df = df.replace({np.nan: None, np.inf: None, -np.inf: None})
+            
+            # Automatically convert data types
+            df = auto_convert_datatypes(df)
+            
+            # Replace NaN with None
+            df = df.replace({np.nan: None, np.inf: None, -np.inf: None})
+            
+            file_type = "csv"
+            total_rows = len(df)
+            total_columns = len(df.columns)
+            
+        else:  # Excel files - read all sheets
+            import io as iolib
+            
+            # Read all sheets from Excel
+            excel_file = pd.ExcelFile(iolib.BytesIO(content))
+            sheet_names = excel_file.sheet_names
+            
+            datasets_dict = {}
+            for sheet_name in sheet_names:
+                try:
+                    # Read each sheet
+                    sheet_df = pd.read_excel(iolib.BytesIO(content), sheet_name=sheet_name)
+                    
+                    # Preprocessing
+                    sheet_df.dropna(how='all', inplace=True)  # Drop empty rows
+                    sheet_df.dropna(how='all', axis=1, inplace=True)  # Drop empty columns
+                    
+                    # Clean column names
+                    if not sheet_df.empty:
+                        sheet_df.columns = sheet_df.columns.str.strip()
+                    
+                    # Skip empty sheets
+                    if sheet_df.empty:
+                        continue
+                    
+                    # Replace NaN/inf
+                    sheet_df = sheet_df.replace({np.nan: None, np.inf: None, -np.inf: None})
+                    
+                    # Auto-convert datatypes
+                    sheet_df = auto_convert_datatypes(sheet_df)
+                    
+                    datasets_dict[sheet_name] = sheet_df
+                    
+                except Exception as e:
+                    logger.warning(f"Error processing sheet '{sheet_name}': {str(e)}")
+                    continue
+            
+            # Use dict of DataFrames for multi-sheet Excel
+            df = datasets_dict if len(datasets_dict) > 1 else list(datasets_dict.values())[0]
+            file_type = "excel"
+            
+            # Calculate total rows and columns
+            if isinstance(df, dict):
+                total_rows = sum(len(sheet_df) for sheet_df in df.values())
+                total_columns = len(list(df.values())[0].columns) if df else 0
+            else:
+                total_rows = len(df)
+                total_columns = len(df.columns)
         
         # Generate unique dataset ID
         dataset_id = f"upload_{uuid.uuid4().hex[:8]}"
@@ -539,8 +589,8 @@ async def upload_data(
             user_id=current_user.id,
             dataset_id=dataset_id,
             filename=file.filename,
-            row_count=len(df),
-            column_count=len(df.columns),
+            row_count=total_rows,
+            column_count=total_columns,
             file_size_bytes=len(content),
             context_status="pending"
         )
@@ -553,27 +603,52 @@ async def upload_data(
             user_id=current_user.id,
             dataset_id=dataset_id,
             df=df,
-            filename=file.filename
+            filename=file.filename,
+            file_type=file_type
         )
         
         # Generate context asynchronously (with user_id for DB updates)
+        df_copy = {k: v.copy() for k, v in df.items()} if isinstance(df, dict) else df.copy()
         asyncio.create_task(
-            dataset_service.generate_context_async(dataset_id, df.copy(), current_user.id)
+            dataset_service.generate_context_async(dataset_id, df_copy, current_user.id)
         )
         
-        # Basic data info
-        data_info = {
-            "dataset_id": dataset_id,
-            "filename": file.filename,
-            "rows": len(df),
-            "columns": len(df.columns),
-            "column_names": df.columns.tolist(),
-            "data_types": df.dtypes.astype(str).to_dict(),
-            "preview": df.head(5).to_dict('records'),
-            "file_size_bytes": len(content),
-            "processing_method": "robust_parser",
-            "context_status": "pending"
-        }
+        # Basic data info - handle both dict and DataFrame
+        if isinstance(df, dict):
+            # Multi-sheet Excel
+            first_sheet = list(df.values())[0]
+            data_info = {
+                "dataset_id": dataset_id,
+                "filename": file.filename,
+                "file_type": file_type,
+                "is_multisheet": True,
+                "sheet_names": list(df.keys()),
+                "rows": total_rows,
+                "columns": total_columns,
+                "column_names": first_sheet.columns.tolist(),
+                "data_types": first_sheet.dtypes.astype(str).to_dict(),
+                "preview": first_sheet.head(5).to_dict('records'),
+                "file_size_bytes": len(content),
+                "processing_method": "robust_parser",
+                "context_status": "pending"
+            }
+        else:
+            # CSV or single-sheet Excel
+            data_info = {
+                "dataset_id": dataset_id,
+                "filename": file.filename,
+                "file_type": file_type,
+                "is_multisheet": False,
+                "sheet_names": None,
+                "rows": total_rows,
+                "columns": total_columns,
+                "column_names": df.columns.tolist(),
+                "data_types": df.dtypes.astype(str).to_dict(),
+                "preview": df.head(5).to_dict('records'),
+                "file_size_bytes": len(content),
+                "processing_method": "robust_parser",
+                "context_status": "pending"
+            }
         
         return {
             "message": "File uploaded successfully. Context generation in progress.",
@@ -833,30 +908,30 @@ async def analyze_data(
 
     query = request.query + "/n use these colors "+ str(request.color_theme)
     
-    try:
-        chart_specs = await generate_chart_spec(df, query, dataset_context)
-        
-        # Handle array of chart specs (new format) or single chart (old format)
-        if isinstance(chart_specs, list):
-            return {
-                "message": f"{len(chart_specs)} chart(s) generated successfully",
-                "query": request.query,
-                "dataset_id": dataset_id,
-                "charts": chart_specs  # Array of chart specs
-            }
-        else:
-            # Backward compatibility for single chart
-            return {
-                "message": "Chart generated successfully",
-                "query": request.query,
-                "dataset_id": dataset_id,
-                "chart_spec": chart_specs
-            }
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error generating chart: {str(e)}"
-        )
+    # try:
+    chart_specs = await generate_chart_spec(df, query, dataset_context)
+    
+    # Handle array of chart specs (new format) or single chart (old format)
+    if isinstance(chart_specs, list):
+        return {
+            "message": f"{len(chart_specs)} chart(s) generated successfully",
+            "query": request.query,
+            "dataset_id": dataset_id,
+            "charts": chart_specs  # Array of chart specs
+        }
+    else:
+        # Backward compatibility for single chart
+        return {
+            "message": "Chart generated successfully",
+            "query": request.query,
+            "dataset_id": dataset_id,
+            "chart_spec": chart_specs
+        }
+    # except Exception as e:
+    #     raise HTTPException(
+    #         status_code=500,
+    #         detail=f"Error generating chart: {str(e)}"
+    #     )
 
 
 @router.post("/chat")

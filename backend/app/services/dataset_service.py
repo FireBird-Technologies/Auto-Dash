@@ -32,25 +32,49 @@ class DatasetService:
         self, 
         user_id: int, 
         dataset_id: str, 
-        df: pd.DataFrame, 
-        filename: str
+        df: pd.DataFrame | Dict[str, pd.DataFrame], 
+        filename: str,
+        file_type: str = "csv"
     ) -> dict:
         """
         Store a dataset in memory for a user.
+        For CSV: df is a single DataFrame
+        For Excel: df can be a dict of {sheet_name: DataFrame}
         Returns metadata about the stored dataset.
         """
         if user_id not in self._store:
             self._store[user_id] = {}
         
+        # Determine if multi-sheet
+        is_multisheet = isinstance(df, dict)
+        
+        # Calculate metadata
+        if is_multisheet:
+            sheet_names = list(df.keys())
+            total_rows = sum(len(sheet_df) for sheet_df in df.values())
+            # Use first sheet for column info
+            first_sheet = df[sheet_names[0]]
+            columns = first_sheet.columns.tolist()
+            column_count = len(columns)
+        else:
+            sheet_names = None
+            total_rows = len(df)
+            columns = df.columns.tolist()
+            column_count = len(columns)
+        
         self._store[user_id][dataset_id] = {
             "df": df,
             "filename": filename,
+            "file_type": file_type,
+            "is_multisheet": is_multisheet,
+            "sheet_names": sheet_names,
             "uploaded_at": datetime.utcnow(),
-            "row_count": len(df),
-            "column_count": len(df.columns),
-            "columns": df.columns.tolist(),
+            "row_count": total_rows,
+            "column_count": column_count,
+            "columns": columns,
             "context": None,  # Will be populated after context generation
             "context_status": "pending",
+            "refine_attempts": 0,
         }
         
         return self.get_dataset_info(user_id, dataset_id)
@@ -60,6 +84,28 @@ class DatasetService:
         if user_id in self._store and dataset_id in self._store[user_id]:
             return self._store[user_id][dataset_id]["df"]
         return None
+
+    def reset_refine_attempts(self, user_id: int, dataset_id: str) -> None:
+        """Reset refine attempt counter for a dataset."""
+        if user_id in self._store and dataset_id in self._store[user_id]:
+            self._store[user_id][dataset_id]["refine_attempts"] = 0
+
+    def increment_refine_attempt(self, user_id: int, dataset_id: str, limit: int) -> bool:
+        """
+        Increment refine attempts for a dataset.
+        Returns True if under limit, False if limit exceeded.
+        """
+        if user_id not in self._store or dataset_id not in self._store[user_id]:
+            return False
+
+        entry = self._store[user_id][dataset_id]
+        attempts = entry.get("refine_attempts", 0)
+
+        if attempts >= limit:
+            return False
+
+        entry["refine_attempts"] = attempts + 1
+        return True
     
     def get_dataset_info(self, user_id: int, dataset_id: str) -> Optional[dict]:
         """Get metadata about a dataset without returning the full DataFrame"""
@@ -68,12 +114,16 @@ class DatasetService:
             return {
                 "dataset_id": dataset_id,
                 "filename": data["filename"],
+                "file_type": data.get("file_type", "csv"),
+                "is_multisheet": data.get("is_multisheet", False),
+                "sheet_names": data.get("sheet_names"),
                 "uploaded_at": data["uploaded_at"].isoformat(),
                 "row_count": data["row_count"],
                 "column_count": data["column_count"],
                 "columns": data["columns"],
                 "context": data.get("context"),
                 "context_status": data.get("context_status", "pending"),
+                "refine_attempts": data.get("refine_attempts", 0),
             }
         return None
     
@@ -146,10 +196,10 @@ class DatasetService:
     def _generate_context_sync(
         self, 
         dataset_id: str, 
-        df: pd.DataFrame,
+        df: pd.DataFrame | Dict[str, pd.DataFrame],
         user_id: Optional[int] = None
     ) -> str:
-        """Synchronous context generation using DSPy"""
+        """Synchronous context generation using DSPy. Handles both single DataFrames and multi-sheet Excel."""
         db = SessionLocal()
         
         try:
@@ -164,17 +214,56 @@ class DatasetService:
             if user_id and user_id in self._store and dataset_id in self._store[user_id]:
                 self._store[user_id][dataset_id]["context_status"] = "generating"
             
-            # Prepare dataframe info
-            dataframe_info = {
-                "columns": df.columns.tolist(),
-                "dtypes": df.dtypes.astype(str).to_dict(),
-                "shape": df.shape,
-                "sample_values": df.head(3).to_dict('records'),
-                "statistics": df.describe().to_dict() if len(df) > 0 else {}
-            }
+            # Prepare dataframe info - handle multi-sheet Excel
+            is_multisheet = isinstance(df, dict)
+            
+            if is_multisheet:
+                # Multi-sheet Excel: describe all sheets
+                sheets_info = {}
+                for sheet_name, sheet_df in df.items():
+                    sheets_info[sheet_name] = {
+                        "columns": sheet_df.columns.tolist(),
+                        "dtypes": sheet_df.dtypes.astype(str).to_dict(),
+                        "shape": sheet_df.shape,
+                        "sample_values": sheet_df.head(2).to_dict('records'),
+                        "statistics": sheet_df.describe().to_dict() if len(sheet_df) > 0 else {}
+                    }
+                
+                dataframe_info = {
+                    "file_type": "excel",
+                    "sheets": sheets_info
+                }
+                
+                # For DSPy input, create a summary
+                context_info = {
+                    "file_type": "excel",
+                    "sheets": {
+                        name: {
+                            "columns": info["columns"],
+                            "shape": info["shape"],
+                            "sample": df[name].head(2).to_markdown()
+                        }
+                        for name, info in sheets_info.items()
+                    }
+                }
+            else:
+                # Single DataFrame (CSV or single-sheet Excel)
+                dataframe_info = {
+                    "file_type": "csv",
+                    "columns": df.columns.tolist(),
+                    "dtypes": df.dtypes.astype(str).to_dict(),
+                    "shape": df.shape,
+                    "sample_values": df.head(3).to_dict('records'),
+                    "statistics": df.describe().to_dict() if len(df) > 0 else {}
+                }
+                
+                context_info = {
+                    "file_type": "csv",
+                    "columns": df.describe().to_dict(),
+                    "sample_values": df.head(2).to_markdown()
+                }
             
             # Generate context using DSPy
-            context_info ={"columns": df.describe().to_dict(), "sample_values": df.head(2).to_markdown(), }
             with dspy.context(lm = dspy.LM('openai/gpt-4o-mini', max_tokens =2500)):
                 result = self.context_creator(
                     dataframe_info=str(context_info)
