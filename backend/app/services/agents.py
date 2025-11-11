@@ -683,14 +683,23 @@ class PlotlyVisualizationModule(dspy.Module):
         with dspy.context(lm=dspy.LM("openai/gpt-4o-mini", max_tokens=1500)):
             plan = self.planner(query=query, dataset_context=dataset_context)
 
-        logger.info("GenerateVisualizationPlan result: %s", plan.plan)
+        plan_output = plan.plan
+
+        if isinstance(plan_output, str):
+            try:
+                plan_output = json.loads(plan_output)
+            except json.JSONDecodeError:
+                logger.error("Failed to parse plan JSON: %s", plan.plan)
+                return self.fail
+
+        logger.info("GenerateVisualizationPlan result: %s", plan_output)
         
         tasks = []
         
         if 'False' in str(plan.relevant_query):
             # Query is relevant for visualization
             for chart_key in self.chart_sigs.keys():
-                if chart_key in plan.plan:
+                if chart_key in plan_output:
                     # Find styling for this chart type
                     style = next(
                         (s['styling'] for s in self.styling_instructions if s.get('category') == chart_key + 's'),
@@ -698,7 +707,7 @@ class PlotlyVisualizationModule(dspy.Module):
                     )
                     
                     try:
-                        chart_plan = plan.plan[chart_key]
+                        chart_plan = plan_output[chart_key]
                     except Exception as e:
                         logger.error(f"Failed to extract chart plan for {chart_key}: {e}")
                         continue
@@ -735,8 +744,8 @@ class PlotlyVisualizationModule(dspy.Module):
                 title = "Visualization"
                 
                 try:
-                    if chart_type in plan.plan:
-                        chart_info = plan.plan[chart_type]
+                if chart_type in plan_output:
+                    chart_info = plan_output[chart_type]
                         if isinstance(chart_info, dict) and 'title' in chart_info:
                             title = chart_info['title']
                 except:
