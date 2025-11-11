@@ -30,8 +30,9 @@ elif "gemini" in default_model:
 else:
     provider = "UNKNOWN"
 
-# CORS middleware - allow frontend to access backend
-default_lm = dspy.LM('openai/gpt-4o-mini', max_tokens=3500,api_key=os.getenv(provider+'_API_KEY'), temperature=1, cache=False)
+
+
+default_lm = dspy.LM(default_model, max_tokens=3500,api_key=os.getenv(provider+'_API_KEY'), temperature=1, cache=False)
 
 dspy.configure(lm=default_lm)
 
@@ -44,6 +45,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 # Session support for OAuth (Authlib requires request.session)
 app.add_middleware(
     SessionMiddleware,
