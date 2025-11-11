@@ -1,2 +1,16 @@
 node_modules
 .env
+
+frontend/.env
+frontend/*.ipynb
+
+frontend/app/.env
+frontend/*.db 
+frontend/.venv
+
+backend/.env
+backend/*.ipynb
+
+backend/app/.env
+backend/*.db 
+backend/venv/

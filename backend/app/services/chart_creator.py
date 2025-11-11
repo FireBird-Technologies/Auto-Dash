@@ -164,13 +164,15 @@ fig.update_layout(title="Visualization Error")
 fig
 """
         execution_result = execute_plotly_code(error_code, df)
-        
+
+        figure = execution_result.get('figure') if isinstance(execution_result, dict) else None
+
         return [{
             "chart_type": "error",
             "title": "Error",
             "chart_index": 0,
             "chart_spec": error_code,
-            "figure": execution_result.get('figure'),
+            "figure": figure,
             "execution_success": False,
             "execution_error": f"Failed to generate visualization: {str(e)}"
         }]
