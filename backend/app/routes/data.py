@@ -833,30 +833,30 @@ async def analyze_data(
 
     query = request.query + "/n use these colors "+ str(request.color_theme)
     
-    try:
-        chart_specs = await generate_chart_spec(df, query, dataset_context)
-        
-        # Handle array of chart specs (new format) or single chart (old format)
-        if isinstance(chart_specs, list):
-            return {
-                "message": f"{len(chart_specs)} chart(s) generated successfully",
-                "query": request.query,
-                "dataset_id": dataset_id,
-                "charts": chart_specs  # Array of chart specs
-            }
-        else:
-            # Backward compatibility for single chart
-            return {
-                "message": "Chart generated successfully",
-                "query": request.query,
-                "dataset_id": dataset_id,
-                "chart_spec": chart_specs
-            }
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error generating chart: {str(e)}"
-        )
+    # try:
+    chart_specs = await generate_chart_spec(df, query, dataset_context)
+    
+    # Handle array of chart specs (new format) or single chart (old format)
+    if isinstance(chart_specs, list):
+        return {
+            "message": f"{len(chart_specs)} chart(s) generated successfully",
+            "query": request.query,
+            "dataset_id": dataset_id,
+            "charts": chart_specs  # Array of chart specs
+        }
+    else:
+        # Backward compatibility for single chart
+        return {
+            "message": "Chart generated successfully",
+            "query": request.query,
+            "dataset_id": dataset_id,
+            "chart_spec": chart_specs
+        }
+    # except Exception as e:
+    #     raise HTTPException(
+    #         status_code=500,
+    #         detail=f"Error generating chart: {str(e)}"
+    #     )
 
 
 @router.post("/chat")
