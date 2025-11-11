@@ -744,8 +744,8 @@ class PlotlyVisualizationModule(dspy.Module):
                 title = "Visualization"
                 
                 try:
-                if chart_type in plan_output:
-                    chart_info = plan_output[chart_type]
+                    if chart_type in plan_output:
+                        chart_info = plan_output[chart_type]
                         if isinstance(chart_info, dict) and 'title' in chart_info:
                             title = chart_info['title']
                 except:
