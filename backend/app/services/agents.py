@@ -390,14 +390,16 @@ STYLING_INSTRUCTIONS = [
 class GenerateVisualizationPlan(dspy.Signature):
     """
     Generate a structured visualization plan from a natural language query.
-    Output a JSON dictionary where keys are chart types and values contain chart specifications.
+    Output a JSON dictionary with data_source and chart specifications.
     
     Format: {
+      "data_source": {"file_type": "csv" or "excel", "sheet_name": "Sheet1" (for Excel, omit for CSV)},
       "bar_chart": {"title": "Chart Title", "instructions": "Specific Plotly instructions"},
       "line_chart": {"title": "Another Chart", "instructions": "More instructions"},
       ...
     }
     
+    For multi-sheet Excel files, specify which sheet to use in data_source.sheet_name.
     Available chart types: bar_chart, line_chart, scatter_plot, heatmap, histogram, pie_chart, box_plot, area_chart
     
     Keep instructions short (2-3 lines per chart).
@@ -407,12 +409,13 @@ class GenerateVisualizationPlan(dspy.Signature):
     query = dspy.InputField(
         desc="User's natural language query, e.g., 'Compare monthly revenue trends across regions.'"
     )
-    dataset_context = dspy.InputField(desc="Dataset information, columns, types, sample data, statistics")
+    dataset_context = dspy.InputField(desc="Dataset information including file_type, sheets (for Excel), columns, types, sample data, statistics")
     
     plan = dspy.OutputField(
         desc=(
-            "JSON dictionary where keys are chart_types (bar_chart, line_chart, scatter_plot, heatmap, histogram, pie_chart, box_plot, area_chart) "
-            'and values are objects with {"title": "Descriptive Chart Title", "instructions": "Specific Plotly visualization instructions"}.'
+            "JSON dictionary with 'data_source' key containing {'file_type': 'csv' or 'excel', 'sheet_name': 'SheetName' (for Excel only)}, "
+            "and chart_type keys (bar_chart, line_chart, scatter_plot, heatmap, histogram, pie_chart, box_plot, area_chart) "
+            'with values as objects: {"title": "Descriptive Chart Title", "instructions": "Specific Plotly visualization instructions"}.'
         ),
         type=dict
     )
@@ -698,6 +701,9 @@ class PlotlyVisualizationModule(dspy.Module):
         
         if 'False' in str(plan.relevant_query):
             # Query is relevant for visualization
+            # Extract data_source info from plan
+            data_source = plan_output.get('data_source', {'file_type': 'csv'})
+            
             for chart_key in self.chart_sigs.keys():
                 if chart_key in plan_output:
                     # Find styling for this chart type
@@ -738,6 +744,17 @@ class PlotlyVisualizationModule(dspy.Module):
             for i, r in enumerate(results):
                 raw_code = getattr(r, 'plotly_code', str(r))
                 cleaned = clean_plotly_code(raw_code)
+                
+                # Prepend data selection code for multi-sheet Excel
+                if data_source.get('file_type') == 'excel' and data_source.get('sheet_name'):
+                    sheet_name = data_source['sheet_name']
+                    # Add sheet selection at the beginning
+                    data_selection = f"# Select sheet from Excel file\ndf = data['{sheet_name}']\n\n"
+                    cleaned = data_selection + cleaned
+                elif data_source.get('file_type') == 'csv':
+                    # For CSV, ensure df is set to data
+                    if 'df = data' not in cleaned and 'df=' not in cleaned:
+                        cleaned = "df = data\n\n" + cleaned
                 
                 # Get chart type and title
                 chart_type = list(self.chart_sigs.keys())[min(i, len(self.chart_sigs) - 1)]

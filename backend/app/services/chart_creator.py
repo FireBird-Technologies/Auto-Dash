@@ -19,24 +19,27 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def execute_plotly_code(code: str, data: pd.DataFrame) -> Dict[str, Any]:
+def execute_plotly_code(code: str, data: pd.DataFrame | Dict[str, pd.DataFrame]) -> Dict[str, Any]:
     """
     Execute Plotly Python code and return the figure as JSON.
     
     Args:
         code: Python code that generates a Plotly figure
-        data: pandas DataFrame to pass to the code
+        data: pandas DataFrame (for CSV) or dict of DataFrames (for multi-sheet Excel)
         
     Returns:
         dict: Plotly figure as JSON
     """
     try:
         # Create execution environment with necessary imports
+        # For multi-sheet Excel, code should use: df = data['SheetName']
+        # For CSV/single sheet, code can use: df = data or just data
         exec_globals = {
             'pd': pd,
             'go': go,
             'plotly': plotly,
             'data': data,
+            'df': data if not isinstance(data, dict) else None,  # Only set df for non-dict data
             'np': pd.np if hasattr(pd, 'np') else None
         }
         
@@ -80,7 +83,7 @@ def execute_plotly_code(code: str, data: pd.DataFrame) -> Dict[str, Any]:
 
 
 async def generate_chart_spec(
-    df: pd.DataFrame, 
+    df: pd.DataFrame | Dict[str, pd.DataFrame], 
     query: str, 
     dataset_context: str = None
 ) -> List[Dict[str, Any]]:
@@ -88,7 +91,7 @@ async def generate_chart_spec(
     Generate Plotly chart specifications based on the user's query.
     
     Args:
-        df: pandas DataFrame containing the data
+        df: pandas DataFrame (CSV) or dict of DataFrames (multi-sheet Excel)
         query: Natural language query describing what visualization is needed
         dataset_context: Rich textual description of the dataset
         
@@ -107,8 +110,16 @@ async def generate_chart_spec(
     
     # Use dataset context or provide fallback
     if not dataset_context:
-        columns = [str(col) for col in df.columns.tolist()]
-        dataset_context = f"Dataset with {len(df)} rows and {len(df.columns)} columns: {', '.join(columns)}"
+        if isinstance(df, dict):
+            # Multi-sheet Excel
+            sheet_names = list(df.keys())
+            first_sheet = df[sheet_names[0]]
+            columns = [str(col) for col in first_sheet.columns.tolist()]
+            dataset_context = f"Multi-sheet Excel with {len(df)} sheets: {', '.join(sheet_names)}. First sheet has {len(first_sheet)} rows and columns: {', '.join(columns)}"
+        else:
+            # Single DataFrame
+            columns = [str(col) for col in df.columns.tolist()]
+            dataset_context = f"Dataset with {len(df)} rows and {len(df.columns)} columns: {', '.join(columns)}"
     
     # Generate the visualization with dataset context
     result = await viz_module.aforward(
