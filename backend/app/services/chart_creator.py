@@ -7,11 +7,14 @@ to create Plotly chart specifications from natural language queries.
 """
 
 import pandas as pd
+import numpy as np
 import os
 import re
 import json
 import plotly
 import plotly.graph_objects as go
+import scipy
+from scipy import stats, signal, optimize
 from typing import Dict, Any, List
 from .agents import PlotlyVisualizationModule
 import logging
@@ -36,11 +39,15 @@ def execute_plotly_code(code: str, data: pd.DataFrame | Dict[str, pd.DataFrame])
         # For CSV/single sheet, code can use: df = data or just data
         exec_globals = {
             'pd': pd,
+            'np': np,
             'go': go,
             'plotly': plotly,
+            'scipy': scipy,
+            'stats': stats,
+            'signal': signal,
+            'optimize': optimize,
             'data': data,
-            'df': data if not isinstance(data, dict) else None,  # Only set df for non-dict data
-            'np': pd.np if hasattr(pd, 'np') else None
+            'df': data if not isinstance(data, dict) else None  # Only set df for non-dict data
         }
         
         # Try to import plotly.express if available

@@ -74,6 +74,7 @@ class DatasetService:
             "columns": columns,
             "context": None,  # Will be populated after context generation
             "context_status": "pending",
+            "refine_attempts": 0,
         }
         
         return self.get_dataset_info(user_id, dataset_id)
@@ -83,6 +84,28 @@ class DatasetService:
         if user_id in self._store and dataset_id in self._store[user_id]:
             return self._store[user_id][dataset_id]["df"]
         return None
+
+    def reset_refine_attempts(self, user_id: int, dataset_id: str) -> None:
+        """Reset refine attempt counter for a dataset."""
+        if user_id in self._store and dataset_id in self._store[user_id]:
+            self._store[user_id][dataset_id]["refine_attempts"] = 0
+
+    def increment_refine_attempt(self, user_id: int, dataset_id: str, limit: int) -> bool:
+        """
+        Increment refine attempts for a dataset.
+        Returns True if under limit, False if limit exceeded.
+        """
+        if user_id not in self._store or dataset_id not in self._store[user_id]:
+            return False
+
+        entry = self._store[user_id][dataset_id]
+        attempts = entry.get("refine_attempts", 0)
+
+        if attempts >= limit:
+            return False
+
+        entry["refine_attempts"] = attempts + 1
+        return True
     
     def get_dataset_info(self, user_id: int, dataset_id: str) -> Optional[dict]:
         """Get metadata about a dataset without returning the full DataFrame"""
@@ -100,6 +123,7 @@ class DatasetService:
                 "columns": data["columns"],
                 "context": data.get("context"),
                 "context_status": data.get("context_status", "pending"),
+                "refine_attempts": data.get("refine_attempts", 0),
             }
         return None
     
@@ -217,9 +241,9 @@ class DatasetService:
                         name: {
                             "columns": info["columns"],
                             "shape": info["shape"],
-                            "sample": sheet_df.head(2).to_markdown()
+                            "sample": df[name].head(2).to_markdown()
                         }
-                        for name, (info, (_, sheet_df)) in zip(sheets_info.keys(), zip(sheets_info.values(), df.items()))
+                        for name, info in sheets_info.items()
                     }
                 }
             else:
