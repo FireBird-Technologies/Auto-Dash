@@ -101,82 +101,82 @@ async def generate_chart_spec(
             - figure: Executed Plotly figure as JSON (if successful)
             - error: Error message (if execution failed)
     """
-    try:
+    # try:
         # Get or initialize the visualization module
-        viz_module = PlotlyVisualizationModule()
-        
-        # Use dataset context or provide fallback
-        if not dataset_context:
-            columns = [str(col) for col in df.columns.tolist()]
-            dataset_context = f"Dataset with {len(df)} rows and {len(df.columns)} columns: {', '.join(columns)}"
-        
-        # Generate the visualization with dataset context
-        result = await viz_module.aforward(
-            query=query,
-            dataset_context=dataset_context
-        )
-        
-        # Handle array of chart specs
-        if isinstance(result, list):
-            # Execute each chart spec and add the figure JSON
-            for chart_spec in result:
-                code = chart_spec.get('chart_spec', '')
-                execution_result = execute_plotly_code(code, df)
-                
-                chart_spec['figure'] = execution_result.get('figure')
-                chart_spec['execution_success'] = execution_result.get('success')
-                if not execution_result.get('success'):
-                    chart_spec['execution_error'] = execution_result.get('error')
-                    logger.warning(f"Chart execution failed: {execution_result.get('error')}")
+    viz_module = PlotlyVisualizationModule()
+    
+    # Use dataset context or provide fallback
+    if not dataset_context:
+        columns = [str(col) for col in df.columns.tolist()]
+        dataset_context = f"Dataset with {len(df)} rows and {len(df.columns)} columns: {', '.join(columns)}"
+    
+    # Generate the visualization with dataset context
+    result = await viz_module.aforward(
+        query=query,
+        dataset_context=dataset_context
+    )
+    
+    # Handle array of chart specs
+    if isinstance(result, list):
+        # Execute each chart spec and add the figure JSON
+        for chart_spec in result:
+            code = chart_spec.get('chart_spec', '')
+            execution_result = execute_plotly_code(code, df)
             
-            return result
-        
-        # Handle fail message (string)
-        if isinstance(result, str):
-            execution_result = execute_plotly_code(result, df)
-
-            figure = execution_result.get('figure') if isinstance(execution_result, dict) else None
-            success = execution_result.get('success') if isinstance(execution_result, dict) else False
-            error = execution_result.get('error') if isinstance(execution_result, dict) else str(execution_result)
-
-            return [{
-                'chart_spec': result,
-                'chart_type': 'error',
-                'title': 'Error',
-                'chart_index': 0,
-                'figure': figure,
-                'execution_success': success,
-                'execution_error': error
-            }]
+            chart_spec['figure'] = execution_result.get('figure')
+            chart_spec['execution_success'] = execution_result.get('success')
+            if not execution_result.get('success'):
+                chart_spec['execution_error'] = execution_result.get('error')
+                logger.warning(f"Chart execution failed: {execution_result.get('error')}")
         
         return result
-        
-    except Exception as e:
-        logger.error(f"Failed to generate visualization: {e}")
-        # Return error response with a simple error figure
-        error_code = f"""
-import plotly.graph_objects as go
-
-fig = go.Figure()
-fig.add_annotation(
-    text="Error: {str(e)}",
-    xref="paper", yref="paper",
-    x=0.5, y=0.5, showarrow=False,
-    font=dict(size=14, color="red")
-)
-fig.update_layout(title="Visualization Error")
-fig
-"""
-        execution_result = execute_plotly_code(error_code, df)
+    
+    # Handle fail message (string)
+    if isinstance(result, str):
+        execution_result = execute_plotly_code(result, df)
 
         figure = execution_result.get('figure') if isinstance(execution_result, dict) else None
+        success = execution_result.get('success') if isinstance(execution_result, dict) else False
+        error = execution_result.get('error') if isinstance(execution_result, dict) else str(execution_result)
 
         return [{
-            "chart_type": "error",
-            "title": "Error",
-            "chart_index": 0,
-            "chart_spec": error_code,
-            "figure": figure,
-            "execution_success": False,
-            "execution_error": f"Failed to generate visualization: {str(e)}"
+            'chart_spec': result,
+            'chart_type': 'error',
+            'title': 'Error',
+            'chart_index': 0,
+            'figure': figure,
+            'execution_success': success,
+            'execution_error': error
         }]
+    
+    return result
+        
+#     except Exception as e:
+#         logger.error(f"Failed to generate visualization: {e}")
+#         # Return error response with a simple error figure
+#         error_code = f"""
+# import plotly.graph_objects as go
+
+# fig = go.Figure()
+# fig.add_annotation(
+#     text="Error: {str(e)}",
+#     xref="paper", yref="paper",
+#     x=0.5, y=0.5, showarrow=False,
+#     font=dict(size=14, color="red")
+# )
+# fig.update_layout(title="Visualization Error")
+# fig
+# """
+#         execution_result = execute_plotly_code(error_code, df)
+
+#         figure = execution_result.get('figure') if isinstance(execution_result, dict) else None
+
+#         return [{
+#             "chart_type": "error",
+#             "title": "Error",
+#             "chart_index": 0,
+#             "chart_spec": error_code,
+#             "figure": figure,
+#             "execution_success": False,
+#             "execution_error": f"Failed to generate visualization: {str(e)}"
+#         }]
