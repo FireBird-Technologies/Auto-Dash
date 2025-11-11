@@ -385,7 +385,7 @@ STYLING_INSTRUCTIONS = [
 # DSPY SIGNATURES
 # ============================================================================
 
-STYLING_INSTRUCTIONS = [str(x) for x in STYLING_INSTRUCTIONS]
+# STYLING_INSTRUCTIONS = [str(x) for x in STYLING_INSTRUCTIONS]
 
 class GenerateVisualizationPlan(dspy.Signature):
     """
