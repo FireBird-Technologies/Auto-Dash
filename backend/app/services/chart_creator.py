@@ -133,16 +133,20 @@ async def generate_chart_spec(
         
         # Handle fail message (string)
         if isinstance(result, str):
-            # Create a simple error figure
             execution_result = execute_plotly_code(result, df)
+
+            figure = execution_result.get('figure') if isinstance(execution_result, dict) else None
+            success = execution_result.get('success') if isinstance(execution_result, dict) else False
+            error = execution_result.get('error') if isinstance(execution_result, dict) else str(execution_result)
+
             return [{
                 'chart_spec': result,
                 'chart_type': 'error',
                 'title': 'Error',
                 'chart_index': 0,
-                'figure': execution_result.get('figure'),
-                'execution_success': execution_result.get('success'),
-                'execution_error': execution_result.get('error')
+                'figure': figure,
+                'execution_success': success,
+                'execution_error': error
             }]
         
         return result
