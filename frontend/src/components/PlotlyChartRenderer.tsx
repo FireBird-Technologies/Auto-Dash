@@ -19,10 +19,13 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
   const [renderError, setRenderError] = useState<string | null>(null);
   const [isFixing, setIsFixing] = useState(false);
   const [figureData, setFigureData] = useState<any>(null);
+  const fixAttemptedRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!chartSpec) return;
 
+    // Reset fix attempt tracking when chart spec changes
+    fixAttemptedRef.current = null;
     setRenderError(null);
     setIsFixing(false);
 
@@ -54,6 +57,14 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
   };
 
   const attemptFix = async (errorMessage: string, chartSpec: any) => {
+    // Don't attempt fix if we've already tried for this error
+    if (fixAttemptedRef.current === errorMessage) {
+      return;
+    }
+    
+    // Mark this error as attempted
+    fixAttemptedRef.current = errorMessage;
+    
     try {
       // Extract Plotly code from chartSpec
       let plotlyCode = '';
@@ -73,7 +84,7 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
         }),
         credentials: 'include',
         body: JSON.stringify({
-          d3_code: plotlyCode,  // Backend still uses this field name
+          plotly_code: plotlyCode,
           error_message: errorMessage
         })
       });

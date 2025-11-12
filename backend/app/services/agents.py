@@ -745,15 +745,18 @@ class PlotlyVisualizationModule(dspy.Module):
                 raw_code = getattr(r, 'plotly_code', str(r))
                 cleaned = clean_plotly_code(raw_code)
                 
-                # Prepend data selection code for multi-sheet Excel
-                if data_source.get('file_type') == 'excel' and data_source.get('sheet_name'):
+                # Prepend data selection code based on file type
+                file_type = data_source.get('file_type', 'csv')  # Default to CSV if not specified
+                
+                if file_type == 'excel' and data_source.get('sheet_name'):
+                    # Multi-sheet Excel: use the specified sheet
                     sheet_name = data_source['sheet_name']
-                    # Add sheet selection at the beginning
                     data_selection = f"# Select sheet from Excel file\ndf = data['{sheet_name}']\n\n"
                     cleaned = data_selection + cleaned
-                elif data_source.get('file_type') == 'csv':
-                    # For CSV, ensure df is set to data
-                    if 'df = data' not in cleaned and 'df=' not in cleaned:
+                else:
+                    # CSV or single-sheet: use data directly
+                    # Only add df = data if not already present
+                    if 'df = data' not in cleaned and 'df=' not in cleaned and 'df =' not in cleaned:
                         cleaned = "df = data\n\n" + cleaned
                 
                 # Get chart type and title

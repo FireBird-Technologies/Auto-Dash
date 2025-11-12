@@ -383,7 +383,8 @@ async def load_sample_data(
                 user_id=current_user.id,
                 dataset_id=dataset_id,
                 df=df,
-                filename="housing_sample.csv"
+                filename="housing_sample.csv",
+                file_type="csv"
             )
             
             # If context already exists, load it into memory
@@ -449,7 +450,8 @@ async def load_sample_data(
                 user_id=current_user.id,
                 dataset_id=dataset_id,
                 df=df,
-                filename="housing_sample.csv"
+                filename="housing_sample.csv",
+                file_type="csv"
             )
             
             # Load existing context into memory if we copied it
