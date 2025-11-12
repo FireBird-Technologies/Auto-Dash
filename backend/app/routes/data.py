@@ -10,6 +10,8 @@ import chardet
 import tempfile
 import os
 from dotenv import load_dotenv
+import plotly.graph_objects as go
+import plotly
 
 # Load .env file from the parent directory (above 'app')
 from pathlib import Path
@@ -997,66 +999,48 @@ async def chat_with_data(
         )
 def plotly_fix_metric(example, pred, trace=None) -> float:
     """
-    Metric for DSPy Refine to evaluate Plotly code error fixes.
-    
-    Args:
-        example: Contains 'plotly_code' and 'error'
-        pred: Contains 'fix'
+    Simple code scorer that checks if Plotly code runs successfully.
     
     Returns:
-        float: Score between 0.0 and 1.0
+        float: Score (0.0=error, 1.0=success)
     """
-    # Handle both dict and object inputs
-    original_code = example.get('plotly_code') if isinstance(example, dict) else example.plotly_code
-    error_message = example.get('error') if isinstance(example, dict) else example.error
-    fixed_code = pred.get('fix') if isinstance(pred, dict) else (pred.fix if hasattr(pred, 'fix') else pred)
-    
-    score = 0.0
-    
-    # 1. Code was modified (0.1)
-    if fixed_code.strip() != original_code.strip():
-        score += 0.1
-    else:
-        return 0.0
-    
-    # 2. Common Plotly error patterns (0.3)
-    error_lower = error_message.lower()
-    
-    if "cannot read property" in error_lower or "undefined" in error_lower or "keyerror" in error_lower:
-        if "go.Figure" in fixed_code or "px." in fixed_code:
-            score += 0.1
-        if "if " in fixed_code or "try:" in fixed_code:
-            score += 0.1
-    
-    if "is not a function" in error_lower or "has no attribute" in error_lower:
-        if re.search(r"\.add_trace\s*\(|\.update_layout\s*\(|\.update_xaxes\s*\(", fixed_code):
-            score += 0.1
-    
-    if "import" in error_lower or "module" in error_lower:
-        if "import plotly.graph_objects as go" in fixed_code or "import plotly.express as px" in fixed_code:
-            score += 0.1
-    
-    # 3. Plotly best practices (0.3)
-    if re.search(r"go\.Figure\s*\(", fixed_code):
-        score += 0.075
-    if re.search(r"\.add_trace\s*\(", fixed_code):
-        score += 0.075
-    if re.search(r"\.update_layout\s*\(", fixed_code):
-        score += 0.075
-    if fixed_code.strip().endswith('fig'):
-        score += 0.075
-    
-    # 4. Error terms addressed (0.3)
-    error_terms = re.findall(r"'(\w+)'|\"(\w+)\"|`(\w+)`", error_message)
-    error_terms = [t for group in error_terms for t in group if t]
-    
-    if error_terms:
-        changes_count = sum(1 for term in error_terms if term in fixed_code)
-        score += 0.3 * (changes_count / len(error_terms))
-    
-    return min(score, 1.0)
+    try:
+        # Handle both dict and object inputs
+        original_code = example.get('plotly_code') if isinstance(example, dict) else example.plotly_code
+        fixed_code = pred.get('fix') if isinstance(pred, dict) else (pred.fix if hasattr(pred, 'fix') else str(pred))
+        
+        # If code wasn't modified, return 0
+        if fixed_code.strip() == original_code.strip():
+            return 0.0
+        
+        # Try to execute the fixed code
+        exec_globals = {
+            'pd': pd,
+            'np': np,
+            'go': go,
+            'plotly': plotly,
+        }
+        
+        # Try to import plotly.express
+        try:
+            import plotly.express as px
+            exec_globals['px'] = px
+        except:
+            pass
+        
+        # Execute the code to test if it works
+        exec(fixed_code, exec_globals)
+        
+        # Check if 'fig' variable was created
+        if 'fig' in exec_globals:
+            return 1.0  # Success
+        else:
+            return 0.0  # No figure created
+            
+    except Exception as e:
+        return 0.0  # Error during execution
 
-def extract_error_context(d3_code, error_message):
+def extract_error_context(plotly_code, error_message):
     """
     Extract a broader error context around the suspected error location,
     but return ONLY raw code lines (no "Line X:" markers).
@@ -1064,7 +1048,7 @@ def extract_error_context(d3_code, error_message):
     """
     import re
     
-    lines = d3_code.split('\n')
+    lines = plotly_code.split('\n')
     
     # Try to extract line number from various error message formats
     error_line = None
@@ -1086,12 +1070,14 @@ def extract_error_context(d3_code, error_message):
     
     # Pattern 4: Look for specific error patterns in the code itself
     else:
-        # Common D3 error patterns to look for in code
+        # Common Plotly error patterns to look for in code
         error_patterns = [
-            r'\.select\([^)]*\)\s*$',  # Incomplete select statements
-            r'\.append\([^)]*\)\s*$',  # Incomplete append statements
-            r'undefined',              # Undefined variables
-            r'null\s*\.',             # Null reference errors
+            r'go\.Figure\([^)]*\)',     # Incomplete Figure creation
+            r'px\.(bar|scatter|line|histogram)',  # Incomplete Plotly Express calls
+            r'\.add_trace\([^)]*\)',    # Incomplete add_trace calls
+            r'\.update_layout\([^)]*\)', # Incomplete update_layout calls
+            r'undefined',               # Undefined variables
+            r'None\s*\.',               # None reference errors
         ]
         
         for i, line in enumerate(lines):
@@ -1141,7 +1127,7 @@ async def fix_visualization_error(
     """
     try:
         # Extract error context (5 lines above/below error)
-        error_context = extract_error_context(request.d3_code, request.error_message)
+        error_context = extract_error_context(request.plotly_code, request.error_message)
         logger.info(f"Extracted error context:\n{error_context}")
 
         # Use Claude for code fixing
@@ -1151,13 +1137,15 @@ async def fix_visualization_error(
         start_time = datetime.now()
         logger.info(f"Code fixing started at: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-        refine_fixer = dspy.Refine(module=dspy.Predict(fix_plotly), reward_fn=plotly_fix_metric, N=5, threshold=0.7)
+        refine_fixer = dspy.Refine(module=dspy.Predict(fix_plotly), reward_fn=plotly_fix_metric, N=3, threshold=0.3)
         logger.info("Refine fixer instantiated with dspy.Predict(fix_plotly)")
 
         def run_refine_fixer():
             logger.info("Calling Refine fixer...")
             with dspy.settings.context(lm=lm):
-                result = refine_fixer(plotly_code=error_context, error=request.error_message)
+                # Truncate error message to 500 characters
+                truncated_error = request.error_message[:500]
+                result = refine_fixer(plotly_code=error_context, error=truncated_error)
                 logger.info(f"Refine fixer result: {result}")
                 return result
 
@@ -1171,7 +1159,7 @@ async def fix_visualization_error(
             fix_code = fix_code.replace('```', '').strip()
 
         # Stitch the fix to the original code at the error location
-        original_lines = request.d3_code.splitlines()
+        original_lines = request.plotly_code.splitlines()
         error_lines = error_context.splitlines()
         
         # Find the error line in the context (marked by >>> Line X:)
@@ -1204,7 +1192,7 @@ async def fix_visualization_error(
     except Exception as e:
         logger.error(f"Error fixing Plotly visualization: {str(e)}")
         return {
-            "fixed_complete_code": request.d3_code,  # Return original code as fallback
+            "fixed_complete_code": request.plotly_code,  # Return original code as fallback
             "user_id": current_user.id,
             "fix_failed": True,
             "error_reason": str(e),

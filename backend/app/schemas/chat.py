@@ -11,7 +11,7 @@ class ChatResponse(BaseModel):
 
 
 class FixVisualizationRequest(BaseModel):
-    d3_code: str
+    plotly_code: str
     error_message: str
 
 
