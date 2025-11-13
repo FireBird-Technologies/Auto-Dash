@@ -476,21 +476,22 @@ COMMON_PLOTLY_DOCS = """
 REQUIRED FORMAT:
 - Pure Python code using Plotly
 - Start with imports: import plotly.graph_objects as go (or import plotly.express as px)
-- Data is ALREADY available as 'data' parameter (pandas DataFrame)
+- ALWAYS assume 'df' already exists (pandas DataFrame) - DO NOT create or load it
 - Create figure using Plotly
 - MUST end with: fig (the variable name that stores the figure object)
 
 FORBIDDEN - DO NOT INCLUDE:
 ❌ fig.show() or fig.write_html() calls
-❌ Data loading code (pd.read_csv, etc.)
+❌ Data loading code (pd.read_csv, pd.read_excel, pd.DataFrame(), data = ..., df = pd.read_..., etc.)
+❌ Data creation code (df = ..., data = ..., etc.) - df ALREADY EXISTS
 ❌ Markdown code blocks (```)
 ❌ HTML or JavaScript code
 ❌ File I/O operations
 
 ✅ REQUIRED:
-1. Use 'data' parameter (pandas DataFrame) - it's already loaded
-2. Process/aggregate data using pandas if needed
-3. Create Plotly figure with go.Figure() or px functions
+1. Use 'df' directly - it's already loaded and available (NEVER add df = ... or data = ...)
+2. Process/aggregate data using pandas if needed (e.g., df.groupby(), df.agg(), etc.)
+3. Create Plotly figure with go.Figure() or px functions using 'df'
 4. Configure layout with fig.update_layout()
 5. END with just: fig (on its own line, this returns the figure)
 
@@ -498,8 +499,8 @@ EXAMPLE STRUCTURE:
 import plotly.graph_objects as go
 import pandas as pd
 
-# Process data
-grouped = data.groupby('category')['value'].sum().reset_index()
+# Process data (df already exists, use it directly)
+grouped = df.groupby('category')['value'].sum().reset_index()
 
 # Create figure
 fig = go.Figure()
@@ -650,9 +651,13 @@ def clean_plotly_code(code: str) -> str:
     # Remove fig.write_html() calls
     cleaned = re.sub(r'fig\.write_html\([^)]*\)', '', cleaned)
     
-    # Remove data loading code
+    # Remove data loading code - df already exists, never create or load it
     cleaned = re.sub(r'(data|df)\s*=\s*pd\.read_csv\([^)]*\)', '# Data already loaded', cleaned)
     cleaned = re.sub(r'(data|df)\s*=\s*pd\.read_[a-z]+\([^)]*\)', '# Data already loaded', cleaned)
+    cleaned = re.sub(r'(data|df)\s*=\s*pd\.DataFrame\([^)]*\)', '# Data already loaded', cleaned)
+    cleaned = re.sub(r'(data|df)\s*=\s*data\[[^\]]+\]', '# Data already loaded', cleaned)
+    cleaned = re.sub(r'df\s*=\s*data\.copy\(\)', '# df already exists', cleaned)
+    cleaned = re.sub(r'df\s*=\s*data\s*$', '# df already exists', cleaned, flags=re.MULTILINE)
     
     # Ensure code ends with 'fig' on its own line
     lines = cleaned.strip().split('\n')
