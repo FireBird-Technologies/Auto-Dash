@@ -194,16 +194,35 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
       // Fetch full dataset before rendering chart (if not already fetched)
       await fetchFullDataset();
       
-      // Remove the thinking message and update chart specs
-      setChatHistory(prev => prev.slice(0, -1));
+      const routerMode = result.router_mode || 'chart';
+      const assistantMessage = result.message || (routerMode === 'data_query' ? 'Here is the data insight.' : 'Visualization updated.');
       
-      // Handle both array (new format) and single chart (old format)
-      if (result.charts && Array.isArray(result.charts)) {
-        // New format: array of charts
-        setChartSpecs(result.charts);
-      } else if (result.chart_spec) {
-        // Old format: single chart - wrap in array
-        setChartSpecs([{ chart_spec: result.chart_spec, chart_type: 'unknown', title: 'Visualization', chart_index: 0 }]);
+      setChatHistory(prev => {
+        const newHistory = prev.slice(0, -1);
+        if (assistantMessage) {
+          newHistory.push({ type: 'assistant', message: assistantMessage });
+        }
+        return newHistory;
+      });
+
+      if (routerMode === 'plotly_edit_query' || (!routerMode && (result.charts || result.chart_spec))) {
+        if (Array.isArray(result.charts) && result.charts.length > 0) {
+          setChartSpecs(result.charts);
+        } else if (result.chart_spec) {
+          const specObj = typeof result.chart_spec === 'string'
+            ? { chart_spec: result.chart_spec, chart_type: 'unknown', title: 'Visualization', chart_index: 0 }
+            : result.chart_spec;
+          setChartSpecs([specObj]);
+        }
+      } else if (endpoint === 'analyze' || chartSpecs.length === 0) {
+        if (Array.isArray(result.charts) && result.charts.length > 0) {
+          setChartSpecs(result.charts);
+        } else if (result.chart_spec) {
+          const specObj = typeof result.chart_spec === 'string'
+            ? { chart_spec: result.chart_spec, chart_type: 'unknown', title: 'Visualization', chart_index: 0 }
+            : result.chart_spec;
+          setChartSpecs([specObj]);
+        }
       }
       
     } catch (err) {

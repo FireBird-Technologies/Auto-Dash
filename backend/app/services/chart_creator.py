@@ -22,7 +22,50 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def execute_plotly_code(code: str, data: pd.DataFrame | Dict[str, pd.DataFrame]) -> Dict[str, Any]:
+class SheetAwareDataFrame(pd.DataFrame):
+    """
+    DataFrame subclass that gracefully handles sheet-style lookups like data['Sheet1']
+    by returning the full DataFrame when the key is not a column name. This prevents
+    KeyError when generated Plotly code treats single-sheet CSV uploads as Excel workbooks.
+    """
+    _metadata: List[str] = ["_fallback_enabled"]
+
+    def __init__(self, data=None, copy=False, fallback_enabled=True, **kwargs):
+        super().__init__(data=data, copy=copy, **kwargs)
+        self._fallback_enabled = fallback_enabled
+
+    @property
+    def _constructor(self):
+        def _c(*args, **kwargs):
+            return SheetAwareDataFrame(*args, **kwargs)
+        return _c
+
+    def __getitem__(self, key):
+        if self._fallback_enabled and isinstance(key, str) and key not in self.columns:
+            return self
+        return super().__getitem__(key)
+
+
+def _strip_markdown_fences(raw: str) -> str:
+    """Remove markdown code fences (```python ... ```) from generated code."""
+    if not isinstance(raw, str):
+        return raw
+    trimmed = raw.strip()
+    if trimmed.startswith("```"):
+        trimmed = trimmed[3:].lstrip()
+        if trimmed.lower().startswith("python"):
+            trimmed = trimmed[6:].lstrip()
+        end_idx = trimmed.rfind("```")
+        if end_idx != -1:
+            trimmed = trimmed[:end_idx]
+    return trimmed.strip()
+
+
+def execute_plotly_code(
+    code: str,
+    data: pd.DataFrame | Dict[str, pd.DataFrame],
+    enable_legacy_updates: bool = False
+) -> Dict[str, Any]:
     """
     Execute Plotly Python code and return the figure as JSON.
     
@@ -34,9 +77,11 @@ def execute_plotly_code(code: str, data: pd.DataFrame | Dict[str, pd.DataFrame])
         dict: Plotly figure as JSON
     """
     try:
-        # Create execution environment with necessary imports
-        # For multi-sheet Excel, code should use: df = data['SheetName']
-        # For CSV/single sheet, code can use: df = data or just data
+        prepared_data = data
+        df_alias = None
+        if isinstance(data, pd.DataFrame):
+            prepared_data = SheetAwareDataFrame(data.copy(deep=False))
+            df_alias = prepared_data
         exec_globals = {
             'pd': pd,
             'np': np,
@@ -46,18 +91,29 @@ def execute_plotly_code(code: str, data: pd.DataFrame | Dict[str, pd.DataFrame])
             'stats': stats,
             'signal': signal,
             'optimize': optimize,
-            'data': data,
-            'df': data if not isinstance(data, dict) else None  # Only set df for non-dict data
+            'data': prepared_data,
+            'df': df_alias if df_alias is not None else (data if not isinstance(data, dict) else None)
         }
         
-        # Try to import plotly.express if available
         try:
             import plotly.express as px
             exec_globals['px'] = px
-        except:
+        except Exception:
             pass
         
-        # Execute the code
+        def _strip_markdown_fences(raw: str) -> str:
+            raw = raw.strip()
+            if raw.startswith("```"):
+                raw = raw[3:]
+                raw = raw.lstrip()
+                if raw.lower().startswith("python"):
+                    raw = raw[6:].lstrip()
+                if "```" in raw:
+                    raw = raw[: raw.rfind("```")]
+            return raw.strip()
+
+        code = _strip_markdown_fences(code)
+        code = _strip_markdown_fences(code)
         exec(code, exec_globals)
         
         # Get the figure object (should be stored in 'fig' variable)
@@ -139,7 +195,7 @@ async def generate_chart_spec(
         # Execute each chart spec and add the figure JSON
         for chart_spec in result:
             code = chart_spec.get('chart_spec', '')
-            execution_result = execute_plotly_code(code, df)
+            execution_result = execute_plotly_code(code, df, enable_legacy_updates=True)
             
             chart_spec['figure'] = execution_result.get('figure')
             chart_spec['execution_success'] = execution_result.get('success')

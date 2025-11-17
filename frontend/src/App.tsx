@@ -13,9 +13,14 @@ function AuthHandler() {
     const urlParams = new URLSearchParams(location.search);
     const token = urlParams.get('token');
     
-    if (token && sessionStorage.getItem('auth_callback')) {
+    if (token) {
       localStorage.setItem('auth_token', token);
       sessionStorage.removeItem('auth_callback');
+      navigate('/visualize', { replace: true });
+
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, '', newUrl);
+      
       navigate('/visualize', { replace: true });
     }
   }, [navigate, location]);

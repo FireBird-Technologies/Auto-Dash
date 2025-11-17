@@ -3,7 +3,7 @@ Unified dataset service for in-memory storage and context generation.
 Handles dataset storage, retrieval, and asynchronous context generation using DSPy.
 """
 import asyncio
-from typing import Dict, Optional, List, Tuple
+from typing import Dict, Optional, List, Tuple, Any
 import pandas as pd
 import dspy
 from sqlalchemy.orm import Session
@@ -75,6 +75,12 @@ class DatasetService:
             "context": None,  # Will be populated after context generation
             "context_status": "pending",
             "refine_attempts": 0,
+            "chart_state": {
+                "plotly_code": None,
+                "figure_json": None,
+                "fig_data": None,
+                "updated_at": None,
+            },
         }
         
         return self.get_dataset_info(user_id, dataset_id)
@@ -106,6 +112,42 @@ class DatasetService:
 
         entry["refine_attempts"] = attempts + 1
         return True
+
+    def update_chart_state(
+        self,
+        user_id: int,
+        dataset_id: str,
+        *,
+        plotly_code: Optional[str] = None,
+        figure_json: Optional[Dict[str, Any]] = None,
+        fig_data: Optional[Any] = None
+    ) -> bool:
+        """Persist the latest Plotly chart code/figure for a dataset."""
+        if user_id not in self._store or dataset_id not in self._store[user_id]:
+            return False
+
+        entry = self._store[user_id][dataset_id]
+        state = entry.setdefault("chart_state", {})
+
+        if plotly_code is not None:
+            state["plotly_code"] = plotly_code
+        if figure_json is not None:
+            state["figure_json"] = figure_json
+            # Default fig_data to figure_json['data'] if not explicitly provided
+            if fig_data is None and isinstance(figure_json, dict):
+                fig_data = figure_json.get("data")
+        if fig_data is not None:
+            state["fig_data"] = fig_data
+
+        state["updated_at"] = datetime.utcnow()
+        return True
+
+    def get_chart_state(self, user_id: int, dataset_id: str) -> Optional[dict]:
+        """Retrieve the stored Plotly chart state for a dataset."""
+        if user_id not in self._store or dataset_id not in self._store[user_id]:
+            return None
+        entry = self._store[user_id][dataset_id]
+        return entry.get("chart_state")
     
     def get_dataset_info(self, user_id: int, dataset_id: str) -> Optional[dict]:
         """Get metadata about a dataset without returning the full DataFrame"""

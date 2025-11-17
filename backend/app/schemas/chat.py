@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic import BaseModel
 
 
@@ -12,6 +13,6 @@ class ChatResponse(BaseModel):
 
 class FixVisualizationRequest(BaseModel):
     d3_code: str
-    error_message: str
+    error_message: Optional[str] = None
 
 

@@ -10,7 +10,10 @@ import chardet
 import tempfile
 import os
 from dotenv import load_dotenv
-
+from contextlib import redirect_stdout
+import plotly.graph_objects as go
+import plotly.io as pio
+import statistics
 # Load .env file from the parent directory (above 'app')
 from pathlib import Path
 import os
@@ -30,6 +33,8 @@ from ..models import User, Dataset as DatasetModel
 from ..services.dataset_service import dataset_service
 from ..schemas.chat import FixVisualizationRequest
 from ..services.agents import fix_plotly
+from ..services.chart_creator import generate_chart_spec, execute_plotly_code
+from ..services.plotly_router import route_plotly_query
 import logging
 import re
 import dspy
@@ -183,6 +188,64 @@ def auto_convert_datatypes(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def get_sheet_dataframe(
+    data_obj: pd.DataFrame | Dict[str, pd.DataFrame],
+    sheet_name: Optional[str] = None
+) -> tuple[pd.DataFrame, Optional[str]]:
+    """
+    Normalize stored dataset into a concrete DataFrame.
+    
+    Args:
+        data_obj: Either a single DataFrame or a dict of sheet DataFrames.
+        sheet_name: Optional sheet to select when data_obj is a dict.
+    
+    Returns:
+        Tuple of (DataFrame, active_sheet_name)
+    """
+    if isinstance(data_obj, dict):
+        if not data_obj:
+            raise HTTPException(
+                status_code=400,
+                detail="Uploaded workbook does not contain any sheets with data"
+            )
+        if sheet_name:
+            sheet_df = data_obj.get(sheet_name)
+            if sheet_df is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Sheet '{sheet_name}' not found in this dataset"
+                )
+            return sheet_df, sheet_name
+        first_sheet_name = next(iter(data_obj.keys()))
+        return data_obj[first_sheet_name], first_sheet_name
+    return data_obj, None
+
+
+def clone_dataset(data_obj: pd.DataFrame | Dict[str, pd.DataFrame]):
+    """Return a copy of the stored dataset without mutating the original."""
+    if isinstance(data_obj, dict):
+        return {name: sheet.copy() for name, sheet in data_obj.items()}
+    return data_obj.copy()
+
+
+def persist_chart_state(user_id: int, dataset_id: str, chart_spec: Dict[str, Any]):
+    """Store the latest Plotly chart code and figure for subsequent refinements."""
+    if not chart_spec:
+        return
+    code = chart_spec.get("chart_spec")
+    figure_json = chart_spec.get("figure") if isinstance(chart_spec, dict) else None
+    fig_data = None
+    if isinstance(figure_json, dict):
+        fig_data = figure_json.get("data")
+    dataset_service.update_chart_state(
+        user_id=user_id,
+        dataset_id=dataset_id,
+        plotly_code=code,
+        figure_json=figure_json,
+        fig_data=fig_data,
+    )
+
+
 # Request/Response models
 class FirstQueryRequest(BaseModel):
     query: str
@@ -325,8 +388,8 @@ async def get_sample_data():
             "filename": "housing_sample.csv",
             "rows": len(df),
             "columns": df.columns.tolist(),
-            "data": df_clean.to_dict('records'),
-            "preview": df_clean.head(10).to_dict('records'),
+            "data": clean_df.to_dict('records'),
+            "preview": clean_df.head(10).to_dict('records'),
             "data_types": df.dtypes.astype(str).to_dict()
         }
     except Exception as e:
@@ -570,16 +633,18 @@ async def upload_data(
                     continue
             
             # Use dict of DataFrames for multi-sheet Excel
-            df = datasets_dict if len(datasets_dict) > 1 else list(datasets_dict.values())[0]
+            if not datasets_dict:
+                raise HTTPException(
+                    status_code=400,
+                    detail="No readable sheets found in the uploaded Excel file"
+                )
+            df = datasets_dict
             file_type = "excel"
             
             # Calculate total rows and columns
-            if isinstance(df, dict):
-                total_rows = sum(len(sheet_df) for sheet_df in df.values())
-                total_columns = len(list(df.values())[0].columns) if df else 0
-            else:
-                total_rows = len(df)
-                total_columns = len(df.columns)
+            total_rows = sum(len(sheet_df) for sheet_df in df.values())
+            first_sheet = next(iter(df.values()))
+            total_columns = len(first_sheet.columns)
         
         # Generate unique dataset ID
         dataset_id = f"upload_{uuid.uuid4().hex[:8]}"
@@ -621,7 +686,7 @@ async def upload_data(
                 "dataset_id": dataset_id,
                 "filename": file.filename,
                 "file_type": file_type,
-                "is_multisheet": True,
+                "is_multisheet": len(df) > 1,
                 "sheet_names": list(df.keys()),
                 "rows": total_rows,
                 "columns": total_columns,
@@ -745,24 +810,28 @@ async def get_dataset_info(
 async def get_dataset_preview(
     dataset_id: str,
     rows: int = 10,
+    sheet_name: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Get a preview of the dataset (first N rows).
     """
-    df = dataset_service.get_dataset(current_user.id, dataset_id)
+    df_data = dataset_service.get_dataset(current_user.id, dataset_id)
     
-    if df is None:
+    if df_data is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
     
+    active_df, active_sheet = get_sheet_dataframe(df_data, sheet_name)
+    
     # Replace NaN with None (which becomes null in JSON)
-    df_clean = df.replace({np.nan: None, np.inf: None, -np.inf: None})
+    df_clean = active_df.replace({np.nan: None, np.inf: None, -np.inf: None})
     
     return {
         "dataset_id": dataset_id,
+        "sheet_name": active_sheet,
         "preview": df_clean.head(rows).to_dict('records'),
-        "total_rows": len(df)
+        "total_rows": len(active_df)
     }
 
 
@@ -770,6 +839,7 @@ async def get_dataset_preview(
 async def get_full_dataset(
     dataset_id: str,
     limit: Optional[int] = 1000,
+    sheet_name: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -781,26 +851,29 @@ async def get_full_dataset(
         dataset_id: The dataset identifier
         limit: Optional limit on number of rows (default: 5000, use 0 for unlimited)
     """
-    df = dataset_service.get_dataset(current_user.id, dataset_id)
+    df_data = dataset_service.get_dataset(current_user.id, dataset_id)
     
-    if df is None:
+    if df_data is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
     
+    active_df, active_sheet = get_sheet_dataframe(df_data, sheet_name)
+    
     # Store original row count
-    total_rows = len(df)
+    total_rows = len(active_df)
 
 
     
     # Apply limit (default 5000 rows for performance)
     # Use limit=0 in query params to get unlimited rows
-    if total_rows > limit:
-        df = df.sample(n=limit) 
+    if limit and limit > 0 and total_rows > limit:
+        active_df = active_df.sample(n=limit)
     
     # Replace NaN with None (which becomes null in JSON)
-    df_clean = df.replace({np.nan: None, np.inf: None, -np.inf: None})
+    df_clean = active_df.replace({np.nan: None, np.inf: None, -np.inf: None})
     
     return {
         "dataset_id": dataset_id,
+        "sheet_name": active_sheet,
         "data": df_clean.to_dict('records'),
         "rows": len(df_clean),
         "columns": df_clean.columns.tolist(),
@@ -856,7 +929,11 @@ async def prepare_dataset_context(
     # Trigger context generation if pending or failed
     if status in ["pending", "failed", "not_found"]:
         asyncio.create_task(
-            dataset_service.generate_context_async(dataset_id, df.copy(), current_user.id)
+            dataset_service.generate_context_async(
+                dataset_id, 
+                clone_dataset(df),
+                current_user.id
+            )
         )
         return {
             "message": "Context generation started",
@@ -900,12 +977,20 @@ async def analyze_data(
     
     # If context not available yet, provide basic fallback info
     if not dataset_context:
-        columns = [str(col) for col in df.columns.tolist()]
-        dataset_context = f"Dataset with {len(df)} rows and {len(df.columns)} columns. Columns: {', '.join(columns)}"
+        if isinstance(df, dict):
+            sheet_names = list(df.keys())
+            active_sheet_name = sheet_names[0]
+            active_sheet = df[active_sheet_name]
+            columns = [str(col) for col in active_sheet.columns.tolist()]
+            dataset_context = (
+                f"Excel dataset with {len(sheet_names)} sheet(s): {', '.join(sheet_names)}. "
+                f"Using sheet '{active_sheet_name}' containing {len(active_sheet)} rows and "
+                f"{len(columns)} columns. Columns: {', '.join(columns)}"
+            )
+        else:
+            columns = [str(col) for col in df.columns.tolist()]
+            dataset_context = f"Dataset with {len(df)} rows and {len(df.columns)} columns. Columns: {', '.join(columns)}"
     
-    # Generate chart specification using DSPy agents with context
-    from ..services.chart_creator import generate_chart_spec
-
     query = request.query + "/n use these colors "+ str(request.color_theme)
     
     # try:
@@ -913,6 +998,8 @@ async def analyze_data(
     
     # Handle array of chart specs (new format) or single chart (old format)
     if isinstance(chart_specs, list):
+        if chart_specs:
+            persist_chart_state(current_user.id, dataset_id, chart_specs[0])
         return {
             "message": f"{len(chart_specs)} chart(s) generated successfully",
             "query": request.query,
@@ -920,6 +1007,7 @@ async def analyze_data(
             "charts": chart_specs  # Array of chart specs
         }
     else:
+        persist_chart_state(current_user.id, dataset_id, chart_specs)
         # Backward compatibility for single chart
         return {
             "message": "Chart generated successfully",
@@ -965,25 +1053,109 @@ async def chat_with_data(
     
     # If context not available yet, provide basic fallback info
     if not dataset_context:
-        columns = [str(col) for col in df.columns.tolist()]
-        dataset_context = f"Dataset with {len(df)} rows and {len(df.columns)} columns. Columns: {', '.join(columns)}"
+        if isinstance(df, dict):
+            sheet_names = list(df.keys())
+            active_sheet_name = sheet_names[0]
+            active_sheet = df[active_sheet_name]
+            columns = [str(col) for col in active_sheet.columns.tolist()]
+            dataset_context = (
+                f"Excel dataset with {len(sheet_names)} sheet(s): {', '.join(sheet_names)}. "
+                f"Using sheet '{active_sheet_name}' containing {len(active_sheet)} rows and "
+                f"{len(columns)} columns. Columns: {', '.join(columns)}"
+            )
+        else:
+            columns = [str(col) for col in df.columns.tolist()]
+            dataset_context = f"Dataset with {len(df)} rows and {len(df.columns)} columns. Columns: {', '.join(columns)}"
     
-    # Generate chart specification using DSPy agents with context
-    from ..services.chart_creator import generate_chart_spec
+    chart_state = dataset_service.get_chart_state(current_user.id, dataset_id)
+    router_result = None
+    if chart_state and (chart_state.get("plotly_code") or chart_state.get("figure_json")):
+        try:
+            fig_data_serialized = json.dumps(chart_state.get("fig_data")) if chart_state.get("fig_data") is not None else ""
+            router_result = route_plotly_query(
+                user_query=request.query,
+                plotly_code=chart_state.get("plotly_code"),
+                fig_data=fig_data_serialized,
+                dataset_context=dataset_context,
+            )
+        except Exception as exc:
+            logger.warning(f"Plotly router failed, falling back to generation: {exc}")
+            router_result = None
+    
+    if router_result:
+        query_type = router_result.get("query_type", "general_query")
+        payload = router_result.get("payload", {})
+        
+        if "plotly_edit_query" in query_type:
+            edited_code = payload.get("edited_code")
+            if not edited_code:
+                raise HTTPException(status_code=500, detail="Router did not return edited Plotly code")
+            
+            exec_result = execute_plotly_code(edited_code, df)
+            if not exec_result.get("success"):
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Edited Plotly code failed: {exec_result.get('error')}"
+                )
+            
+            chart_spec = {
+                "chart_spec": edited_code,
+                "chart_type": "router_edit",
+                "title": "Router Edit",
+                "chart_index": 0,
+                "figure": exec_result.get("figure"),
+                "execution_success": exec_result.get("success"),
+                "execution_error": exec_result.get("error"),
+            }
+            persist_chart_state(current_user.id, dataset_id, chart_spec)
+            
+            return {
+                "message": "Visualization updated via Plotly edit",
+                "query": request.query,
+                "dataset_id": dataset_id,
+                "chart_spec": chart_spec,
+                "router_mode": "plotly_edit_query"
+            }
+        
+        if "data_query" in query_type:
+            analysis_code = payload.get("code")
+            active_df, _ = get_sheet_dataframe(df, None)
+            fig_obj = rebuild_figure_from_state(chart_state, df, current_user.id, dataset_id)
+            if fig_obj is None:
+                raise HTTPException(status_code=400, detail="No existing figure available for analysis.")
+            
+            analysis_result = execute_analysis_code(analysis_code, fig_obj, active_df)
+            status = "successful" if analysis_result["success"] else "failed"
+            return {
+                "message": analysis_result["output"],
+                "query": request.query,
+                "dataset_id": dataset_id,
+                "router_mode": "data_query",
+                "analysis_status": status
+            }
+        
+        answer = payload.get("answer") or "No answer produced."
+        return {
+            "message": answer,
+            "query": request.query,
+            "dataset_id": dataset_id,
+            "router_mode": "general_query"
+        }
     
     try:
         chart_specs = await generate_chart_spec(df, request.query, dataset_context)
         
-        # Handle array of chart specs (new format) or single chart (old format)
         if isinstance(chart_specs, list):
+            if chart_specs:
+                persist_chart_state(current_user.id, dataset_id, chart_specs[0])
             return {
                 "message": f"Visualization updated - {len(chart_specs)} chart(s) generated",
                 "query": request.query,
                 "dataset_id": dataset_id,
-                "charts": chart_specs  # Array of chart specs
+                "charts": chart_specs
             }
         else:
-            # Backward compatibility for single chart
+            persist_chart_state(current_user.id, dataset_id, chart_specs)
             return {
                 "message": "Visualization updated",
                 "query": request.query,
@@ -995,6 +1167,144 @@ async def chat_with_data(
             status_code=500,
             detail=f"Error updating visualization: {str(e)}"
         )
+
+
+def get_chart_dataframe(df: pd.DataFrame | Dict[str, pd.DataFrame]) -> pd.DataFrame:
+    """Return a representative DataFrame for code execution."""
+    if isinstance(df, dict):
+        first_sheet_name = next(iter(df.keys()))
+        return df[first_sheet_name]
+    return df
+
+
+def rebuild_figure_from_state(state: dict, df: pd.DataFrame | Dict[str, pd.DataFrame], user_id: int, dataset_id: str):
+    """Attempt to reconstruct a Plotly figure object from stored state."""
+    figure_json = state.get("figure_json")
+    if figure_json:
+        try:
+            return pio.from_json(json.dumps(figure_json))
+        except Exception as exc:
+            logger.warning(f"Failed to rebuild figure from stored JSON: {exc}")
+    plotly_code = state.get("plotly_code")
+    if plotly_code:
+        exec_result = execute_plotly_code(plotly_code, df)
+        if exec_result.get("success"):
+            temp_spec = {
+                "chart_spec": plotly_code,
+                "figure": exec_result.get("figure"),
+            }
+            persist_chart_state(user_id, dataset_id, temp_spec)
+            figure_json = exec_result.get("figure")
+            if figure_json:
+                try:
+                    return pio.from_json(json.dumps(figure_json))
+                except Exception as exc:
+                    logger.warning(f"Failed to rebuild figure after re-execution: {exc}")
+    return None
+
+
+def _ensure_sequence(value):
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    try:
+        if hasattr(value, "tolist"):
+            converted = value.tolist()
+            if isinstance(converted, list):
+                return converted
+            return [converted]
+    except Exception:
+        pass
+    if np.isscalar(value):
+        return [value]
+    try:
+        return list(value)
+    except Exception:
+        return [value]
+
+
+def normalize_plotly_figure(fig_obj):
+    """Ensure trace arrays are list-like to avoid indexing errors."""
+    if fig_obj is None or not hasattr(fig_obj, "data"):
+        return
+    for trace in fig_obj.data:
+        if hasattr(trace, "x"):
+            trace.x = _ensure_sequence(trace.x)
+        if hasattr(trace, "y"):
+            trace.y = _ensure_sequence(trace.y)
+        if hasattr(trace, "text"):
+            trace.text = _ensure_sequence(trace.text)
+
+
+def sanitize_generated_code(code: str) -> str:
+    """Remove Markdown fences or language tags from generated code blocks."""
+    if not code:
+        return ""
+    trimmed = code.strip()
+    if trimmed.startswith("```"):
+        trimmed = trimmed[3:]
+        # Remove optional language hint (e.g., python)
+        trimmed = trimmed.lstrip()
+        if trimmed.lower().startswith("python"):
+            trimmed = trimmed[6:].lstrip()
+        end_idx = trimmed.rfind("```")
+        if end_idx != -1:
+            trimmed = trimmed[:end_idx]
+    return trimmed.strip()
+
+
+def execute_analysis_code(code: str, fig_obj, df_context: pd.DataFrame):
+    """Execute generated data-analysis code against the current figure."""
+    if not code:
+        return {"success": False, "output": "No analysis code generated"}
+    code = sanitize_generated_code(code)
+    buffer = io.StringIO()
+    code = sanitize_generated_code(code)
+
+    def ensure_numeric(series):
+        return pd.to_numeric(series, errors="coerce")
+
+    exec_globals = {
+        "__builtins__": __builtins__,
+        "pd": pd,
+        "np": np,
+        "go": go,
+        "fig": fig_obj,
+        "df": df_context,
+        "data": df_context,
+        "ensure_numeric": ensure_numeric,
+        "statistics": statistics,
+    }
+    try:
+        import plotly.express as px  # type: ignore
+        exec_globals["px"] = px
+    except Exception:
+        pass
+    try:
+        normalize_plotly_figure(fig_obj)
+        with redirect_stdout(buffer):
+            exec(code, exec_globals)
+        output = buffer.getvalue().strip()
+        if not output:
+            fallback_names = [
+                "analysis_result",
+                "analysis_summary",
+                "result",
+                "summary",
+                "answer",
+                "output",
+            ]
+            fallback_value = None
+            for name in fallback_names:
+                if name in exec_globals and exec_globals[name] is not None:
+                    fallback_value = exec_globals[name]
+                    break
+            if fallback_value is not None:
+                output = str(fallback_value)
+        return {"success": True, "output": output or "Analysis complete."}
+    except Exception as exc:
+        return {"success": False, "output": f"Error executing analysis code: {exc}"}
 def plotly_fix_metric(example, pred, trace=None) -> float:
     """
     Metric for DSPy Refine to evaluate Plotly code error fixes.
@@ -1144,6 +1454,22 @@ async def fix_visualization_error(
         error_context = extract_error_context(request.d3_code, request.error_message)
         logger.info(f"Extracted error context:\n{error_context}")
 
+        guardrail_instructions = (
+            "# IMPORTANT FIX INSTRUCTIONS:\n"
+            "# - The variable `data` already contains the real dataset (a DataFrame or a dict of sheets).\n"
+            "# - Never create synthetic/demo/fallback data with numpy.random, hard-coded lists, or placeholder DataFrames when `data` exists.\n"
+            "# - If `data` is a dict (Excel upload), access the correct sheet via df = data['SheetName'] and build aggregations from that df.\n"
+            "# - Keep the original `data` object untouched; derive new DataFrames using pandas groupby/agg operations on the actual columns.\n"
+            "# - Remove any try/except logic that swallows errors and replaces real data with dummy values.\n"
+            "# - If required columns are missing, raise a descriptive error; do NOT fabricate values.\n"
+            "# - Remove any code that overwrites `data` or ignores the real dataset (e.g., lines like `data = {...}` or `df = pd.DataFrame(...)`).\n"
+            "# - If you need a DataFrame reference, simply use `df = data` (or `df = data['SheetName']`). Do not construct new literal data.\n"
+            "# - Absolutely DO NOT include lines like `data = {...}`, `df = pd.DataFrame(...)`, or any literal dataset construction.\n"
+            "# - If you need a DataFrame reference, use `df = data` (or `df = data['Sheet']`).\n"
+            "# - Reject any solution that redefines `data` or `df` with fake values.\n"
+        )
+        context_for_fix = f"{guardrail_instructions}\n{error_context}"
+
         # Use Claude for code fixing
         lm = dspy.LM("anthropic/claude-3-7-sonnet-latest", api_key=os.getenv("ANTHROPIC_API_KEY"), max_tokens=8000)
 
@@ -1157,7 +1483,7 @@ async def fix_visualization_error(
         def run_refine_fixer():
             logger.info("Calling Refine fixer...")
             with dspy.settings.context(lm=lm):
-                result = refine_fixer(plotly_code=error_context, error=request.error_message)
+                result = refine_fixer(plotly_code=context_for_fix, error=request.error_message)
                 logger.info(f"Refine fixer result: {result}")
                 return result
 

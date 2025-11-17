@@ -14,3 +14,14 @@ backend/*.ipynb
 backend/app/.env
 backend/*.db 
 backend/venv/
+
+# Python bytecode and cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg

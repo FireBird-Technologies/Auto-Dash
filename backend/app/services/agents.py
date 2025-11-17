@@ -477,6 +477,8 @@ REQUIRED FORMAT:
 - Pure Python code using Plotly
 - Start with imports: import plotly.graph_objects as go (or import plotly.express as px)
 - Data is ALREADY available as 'data' parameter (pandas DataFrame)
+- If working with Excel/multi-sheet data, access it with df = data['SheetName'] without mutating or overwriting the original 'data'.
+- NEVER fabricate or simulate data with numpy.random, hard-coded dictionaries, or fallback/dummy frames when the dataset is already provided. Always operate on the actual columns from 'data' (or the selected sheet) and create derived DataFrames via pandas groupby/agg as needed. If the needed columns are missing, raise a descriptive error instead of creating placeholder values.
 - Create figure using Plotly
 - MUST end with: fig (the variable name that stores the figure object)
 
@@ -490,9 +492,11 @@ FORBIDDEN - DO NOT INCLUDE:
 ✅ REQUIRED:
 1. Use 'data' parameter (pandas DataFrame) - it's already loaded
 2. Process/aggregate data using pandas if needed
-3. Create Plotly figure with go.Figure() or px functions
-4. Configure layout with fig.update_layout()
-5. END with just: fig (on its own line, this returns the figure)
+3. Keep the original 'data' object intact; use new variables (e.g., df, grouped_df) derived from it
+4. Do not wrap real-data processing in try/except blocks that fall back to dummy data—surface errors instead.
+5. Create Plotly figure with go.Figure() or px functions
+6. Configure layout with fig.update_layout()
+7. END with just: fig (on its own line, this returns the figure)
 
 EXAMPLE STRUCTURE:
 import plotly.graph_objects as go

@@ -19,6 +19,7 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
   const [renderError, setRenderError] = useState<string | null>(null);
   const [isFixing, setIsFixing] = useState(false);
   const [figureData, setFigureData] = useState<any>(null);
+  const [chartHeight, setChartHeight] = useState(600);
 
   useEffect(() => {
     if (!chartSpec) return;
@@ -52,6 +53,19 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
   const showFixingMessage = () => {
     setIsFixing(true);
   };
+
+  useEffect(() => {
+    const updateHeight = () => {
+      if (typeof window === 'undefined') return;
+      const viewportHeight = window.innerHeight || 800;
+      const calculatedHeight = Math.max(380, Math.min(720, viewportHeight * 0.65));
+      setChartHeight(calculatedHeight);
+    };
+
+    updateHeight();
+    window.addEventListener('resize', updateHeight);
+    return () => window.removeEventListener('resize', updateHeight);
+  }, []);
 
   const attemptFix = async (errorMessage: string, chartSpec: any) => {
     try {
@@ -147,8 +161,8 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
       className="plotly-chart-container"
       style={{
         width: '100%',
-        height: '100%',
-        minHeight: '600px',
+        height: `${chartHeight}px`,
+        maxHeight: '80vh',
         position: 'relative'
       }}
     >
@@ -157,6 +171,7 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
         layout={{
           ...figureData.layout,
           autosize: true,
+          height: chartHeight,
           margin: figureData.layout?.margin || { l: 60, r: 30, t: 80, b: 60 }
         }}
         config={{
@@ -165,7 +180,7 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
           displaylogo: false,
           modeBarButtonsToRemove: ['sendDataToCloud']
         }}
-        style={{ width: '100%', height: '100%' }}
+        style={{ width: '100%', height: `${chartHeight}px` }}
         useResizeHandler={true}
       />
     </div>

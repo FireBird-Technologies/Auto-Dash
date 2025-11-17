@@ -5,3 +5,14 @@ app/.env
 *.db 
 
 .venv
+
+# Python bytecode and cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
