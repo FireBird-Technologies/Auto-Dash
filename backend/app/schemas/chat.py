@@ -3,7 +3,9 @@ from pydantic import BaseModel
 
 
 class ChatRequest(BaseModel):
-    message: str
+    message: str | None = None
+    query: str | None = None
+    dataset_id: Optional[str] = None
 
 
 class ChatResponse(BaseModel):

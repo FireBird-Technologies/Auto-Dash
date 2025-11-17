@@ -6,65 +6,47 @@ This module integrates with the DSPy-based visualization generation system
 to create Plotly chart specifications from natural language queries.
 """
 
+import json
+import logging
+from typing import Dict, Any, List
+
 import pandas as pd
 import numpy as np
-import os
-import re
-import json
-import plotly
 import plotly.graph_objects as go
-import scipy
-from scipy import stats, signal, optimize
-from typing import Dict, Any, List
+
 from .agents import PlotlyVisualizationModule
-import logging
 
 logger = logging.getLogger(__name__)
 
 
 class SheetAwareDataFrame(pd.DataFrame):
-    """
-    DataFrame subclass that gracefully handles sheet-style lookups like data['Sheet1']
-    by returning the full DataFrame when the key is not a column name. This prevents
-    KeyError when generated Plotly code treats single-sheet CSV uploads as Excel workbooks.
-    """
-    _metadata: List[str] = ["_fallback_enabled"]
-
-    def __init__(self, data=None, copy=False, fallback_enabled=True, **kwargs):
-        super().__init__(data=data, copy=copy, **kwargs)
-        self._fallback_enabled = fallback_enabled
-
-    @property
-    def _constructor(self):
-        def _c(*args, **kwargs):
-            return SheetAwareDataFrame(*args, **kwargs)
-        return _c
+    """DataFrame that handles sheet-style lookups by returning self when key is not a column."""
 
     def __getitem__(self, key):
-        if self._fallback_enabled and isinstance(key, str) and key not in self.columns:
+        if isinstance(key, str) and key not in self.columns:
             return self
         return super().__getitem__(key)
 
 
-def _strip_markdown_fences(raw: str) -> str:
+def _strip_markdown_fences(code: str) -> str:
     """Remove markdown code fences (```python ... ```) from generated code."""
-    if not isinstance(raw, str):
-        return raw
-    trimmed = raw.strip()
-    if trimmed.startswith("```"):
-        trimmed = trimmed[3:].lstrip()
-        if trimmed.lower().startswith("python"):
-            trimmed = trimmed[6:].lstrip()
-        end_idx = trimmed.rfind("```")
-        if end_idx != -1:
-            trimmed = trimmed[:end_idx]
-    return trimmed.strip()
+    if not isinstance(code, str):
+        return code
+    
+    code = code.strip()
+    if code.startswith("```"):
+        code = code[3:].lstrip()
+        if code.lower().startswith("python"):
+            code = code[6:].lstrip()
+        if "```" in code:
+            code = code[:code.rfind("```")]
+    
+    return code.strip()
 
 
 def execute_plotly_code(
     code: str,
     data: pd.DataFrame | Dict[str, pd.DataFrame],
-    enable_legacy_updates: bool = False
 ) -> Dict[str, Any]:
     """
     Execute Plotly Python code and return the figure as JSON.
@@ -74,66 +56,50 @@ def execute_plotly_code(
         data: pandas DataFrame (for CSV) or dict of DataFrames (for multi-sheet Excel)
         
     Returns:
-        dict: Plotly figure as JSON
+        dict with 'success', 'figure', and 'error' keys
     """
     try:
-        prepared_data = data
-        df_alias = None
+        # Prepare data - wrap DataFrame for sheet-style lookups
         if isinstance(data, pd.DataFrame):
             prepared_data = SheetAwareDataFrame(data.copy(deep=False))
             df_alias = prepared_data
+        else:
+            prepared_data = data
+            df_alias = None
+
+        # Setup execution environment
         exec_globals = {
             'pd': pd,
             'np': np,
             'go': go,
-            'plotly': plotly,
-            'scipy': scipy,
-            'stats': stats,
-            'signal': signal,
-            'optimize': optimize,
             'data': prepared_data,
-            'df': df_alias if df_alias is not None else (data if not isinstance(data, dict) else None)
+            'df': df_alias if df_alias is not None else (data if not isinstance(data, dict) else None),
         }
         
+        # Add plotly.express if available
         try:
             import plotly.express as px
             exec_globals['px'] = px
         except Exception:
             pass
-        
-        def _strip_markdown_fences(raw: str) -> str:
-            raw = raw.strip()
-            if raw.startswith("```"):
-                raw = raw[3:]
-                raw = raw.lstrip()
-                if raw.lower().startswith("python"):
-                    raw = raw[6:].lstrip()
-                if "```" in raw:
-                    raw = raw[: raw.rfind("```")]
-            return raw.strip()
 
-        code = _strip_markdown_fences(code)
+        # Clean and execute code
         code = _strip_markdown_fences(code)
         exec(code, exec_globals)
-        
-        # Get the figure object (should be stored in 'fig' variable)
+
+        # Get the figure object
         fig = exec_globals.get('fig')
-        
         if fig is None:
             raise ValueError("Code did not produce a 'fig' variable")
-        
         if not isinstance(fig, go.Figure):
             raise ValueError(f"'fig' is not a Plotly Figure object, got {type(fig)}")
-        
-        # Convert figure to JSON
-        fig_json = json.loads(fig.to_json())
-        
+
         return {
             'success': True,
-            'figure': fig_json,
+            'figure': json.loads(fig.to_json()),
             'error': None
         }
-        
+
     except Exception as e:
         logger.error(f"Error executing Plotly code: {e}")
         logger.error(f"Code was:\n{code}")
@@ -145,9 +111,21 @@ def execute_plotly_code(
         }
 
 
+def _build_fallback_context(df: pd.DataFrame | Dict[str, pd.DataFrame]) -> str:
+    """Build basic dataset context string."""
+    if isinstance(df, dict):
+        sheet_names = list(df.keys())
+        first_sheet = df[sheet_names[0]]
+        columns = [str(col) for col in first_sheet.columns.tolist()]
+        return f"Multi-sheet Excel with {len(df)} sheets: {', '.join(sheet_names)}. First sheet has {len(first_sheet)} rows and columns: {', '.join(columns)}"
+    
+    columns = [str(col) for col in df.columns.tolist()]
+    return f"Dataset with {len(df)} rows and {len(df.columns)} columns: {', '.join(columns)}"
+
+
 async def generate_chart_spec(
-    df: pd.DataFrame | Dict[str, pd.DataFrame], 
-    query: str, 
+    df: pd.DataFrame | Dict[str, pd.DataFrame],
+    query: str,
     dataset_context: str = None
 ) -> List[Dict[str, Any]]:
     """
@@ -159,98 +137,42 @@ async def generate_chart_spec(
         dataset_context: Rich textual description of the dataset
         
     Returns:
-        list: Array of chart specifications, each containing:
-            - chart_spec: Python code for generating the chart
-            - chart_type: Type of chart (bar_chart, line_chart, etc.)
-            - title: Chart title
-            - chart_index: Index in the array
-            - figure: Executed Plotly figure as JSON (if successful)
-            - error: Error message (if execution failed)
+        list: Array of chart specifications
     """
-    # try:
-        # Get or initialize the visualization module
     viz_module = PlotlyVisualizationModule()
     
-    # Use dataset context or provide fallback
+    # Use provided context or build fallback
     if not dataset_context:
-        if isinstance(df, dict):
-            # Multi-sheet Excel
-            sheet_names = list(df.keys())
-            first_sheet = df[sheet_names[0]]
-            columns = [str(col) for col in first_sheet.columns.tolist()]
-            dataset_context = f"Multi-sheet Excel with {len(df)} sheets: {', '.join(sheet_names)}. First sheet has {len(first_sheet)} rows and columns: {', '.join(columns)}"
-        else:
-            # Single DataFrame
-            columns = [str(col) for col in df.columns.tolist()]
-            dataset_context = f"Dataset with {len(df)} rows and {len(df.columns)} columns: {', '.join(columns)}"
+        dataset_context = _build_fallback_context(df)
     
-    # Generate the visualization with dataset context
-    result = await viz_module.aforward(
-        query=query,
-        dataset_context=dataset_context
-    )
+    # Generate visualization
+    result = await viz_module.aforward(query=query, dataset_context=dataset_context)
     
     # Handle array of chart specs
     if isinstance(result, list):
-        # Execute each chart spec and add the figure JSON
         for chart_spec in result:
             code = chart_spec.get('chart_spec', '')
-            execution_result = execute_plotly_code(code, df, enable_legacy_updates=True)
+            exec_result = execute_plotly_code(code, df)
             
-            chart_spec['figure'] = execution_result.get('figure')
-            chart_spec['execution_success'] = execution_result.get('success')
-            if not execution_result.get('success'):
-                chart_spec['execution_error'] = execution_result.get('error')
-                logger.warning(f"Chart execution failed: {execution_result.get('error')}")
+            chart_spec['figure'] = exec_result.get('figure')
+            chart_spec['execution_success'] = exec_result.get('success')
+            if not exec_result.get('success'):
+                chart_spec['execution_error'] = exec_result.get('error')
+                logger.warning(f"Chart execution failed: {exec_result.get('error')}")
         
         return result
     
     # Handle fail message (string)
     if isinstance(result, str):
-        execution_result = execute_plotly_code(result, df)
-
-        figure = execution_result.get('figure') if isinstance(execution_result, dict) else None
-        success = execution_result.get('success') if isinstance(execution_result, dict) else False
-        error = execution_result.get('error') if isinstance(execution_result, dict) else str(execution_result)
-
+        exec_result = execute_plotly_code(result, df)
         return [{
             'chart_spec': result,
             'chart_type': 'error',
             'title': 'Error',
             'chart_index': 0,
-            'figure': figure,
-            'execution_success': success,
-            'execution_error': error
+            'figure': exec_result.get('figure'),
+            'execution_success': exec_result.get('success'),
+            'execution_error': exec_result.get('error')
         }]
     
     return result
-        
-#     except Exception as e:
-#         logger.error(f"Failed to generate visualization: {e}")
-#         # Return error response with a simple error figure
-#         error_code = f"""
-# import plotly.graph_objects as go
-
-# fig = go.Figure()
-# fig.add_annotation(
-#     text="Error: {str(e)}",
-#     xref="paper", yref="paper",
-#     x=0.5, y=0.5, showarrow=False,
-#     font=dict(size=14, color="red")
-# )
-# fig.update_layout(title="Visualization Error")
-# fig
-# """
-#         execution_result = execute_plotly_code(error_code, df)
-
-#         figure = execution_result.get('figure') if isinstance(execution_result, dict) else None
-
-#         return [{
-#             "chart_type": "error",
-#             "title": "Error",
-#             "chart_index": 0,
-#             "chart_spec": error_code,
-#             "figure": figure,
-#             "execution_success": False,
-#             "execution_error": f"Failed to generate visualization: {str(e)}"
-#         }]

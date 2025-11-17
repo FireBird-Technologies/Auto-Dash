@@ -1029,143 +1029,23 @@ async def chat_with_data(
     db: Session = Depends(get_db)
 ):
     """
-    Conversational refinement endpoint - used after initial visualization.
-    Allows users to refine, modify, or ask questions about existing visualizations.
+    Backward compatibility endpoint - delegates to chat service.
+    Frontend calls /api/data/chat for subsequent queries after initial chart.
     """
-    # Get the dataset
-    if request.dataset_id:
-        df = dataset_service.get_dataset(current_user.id, request.dataset_id)
-        if df is None:
-            raise HTTPException(status_code=404, detail="Dataset not found")
-        dataset_id = request.dataset_id
-    else:
-        # Use the most recent dataset
-        result = dataset_service.get_latest_dataset(current_user.id)
-        if result is None:
-            raise HTTPException(
-                status_code=400,
-                detail="No dataset available. Please upload a file first."
-            )
-        dataset_id, df = result
-    
-    # Get the dataset context from memory
-    dataset_context = dataset_service.get_context(current_user.id, dataset_id)
-    
-    # If context not available yet, provide basic fallback info
-    if not dataset_context:
-        if isinstance(df, dict):
-            sheet_names = list(df.keys())
-            active_sheet_name = sheet_names[0]
-            active_sheet = df[active_sheet_name]
-            columns = [str(col) for col in active_sheet.columns.tolist()]
-            dataset_context = (
-                f"Excel dataset with {len(sheet_names)} sheet(s): {', '.join(sheet_names)}. "
-                f"Using sheet '{active_sheet_name}' containing {len(active_sheet)} rows and "
-                f"{len(columns)} columns. Columns: {', '.join(columns)}"
-            )
-        else:
-            columns = [str(col) for col in df.columns.tolist()]
-            dataset_context = f"Dataset with {len(df)} rows and {len(df.columns)} columns. Columns: {', '.join(columns)}"
-    
-    chart_state = dataset_service.get_chart_state(current_user.id, dataset_id)
-    router_result = None
-    if chart_state and (chart_state.get("plotly_code") or chart_state.get("figure_json")):
-        try:
-            fig_data_serialized = json.dumps(chart_state.get("fig_data")) if chart_state.get("fig_data") is not None else ""
-            router_result = route_plotly_query(
-                user_query=request.query,
-                plotly_code=chart_state.get("plotly_code"),
-                fig_data=fig_data_serialized,
-                dataset_context=dataset_context,
-            )
-        except Exception as exc:
-            logger.warning(f"Plotly router failed, falling back to generation: {exc}")
-            router_result = None
-    
-    if router_result:
-        query_type = router_result.get("query_type", "general_query")
-        payload = router_result.get("payload", {})
-        
-        if "plotly_edit_query" in query_type:
-            edited_code = payload.get("edited_code")
-            if not edited_code:
-                raise HTTPException(status_code=500, detail="Router did not return edited Plotly code")
-            
-            exec_result = execute_plotly_code(edited_code, df)
-            if not exec_result.get("success"):
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Edited Plotly code failed: {exec_result.get('error')}"
-                )
-            
-            chart_spec = {
-                "chart_spec": edited_code,
-                "chart_type": "router_edit",
-                "title": "Router Edit",
-                "chart_index": 0,
-                "figure": exec_result.get("figure"),
-                "execution_success": exec_result.get("success"),
-                "execution_error": exec_result.get("error"),
-            }
-            persist_chart_state(current_user.id, dataset_id, chart_spec)
-            
-            return {
-                "message": "Visualization updated via Plotly edit",
-                "query": request.query,
-                "dataset_id": dataset_id,
-                "chart_spec": chart_spec,
-                "router_mode": "plotly_edit_query"
-            }
-        
-        if "data_query" in query_type:
-            analysis_code = payload.get("code")
-            active_df, _ = get_sheet_dataframe(df, None)
-            fig_obj = rebuild_figure_from_state(chart_state, df, current_user.id, dataset_id)
-            if fig_obj is None:
-                raise HTTPException(status_code=400, detail="No existing figure available for analysis.")
-            
-            analysis_result = execute_analysis_code(analysis_code, fig_obj, active_df)
-            status = "successful" if analysis_result["success"] else "failed"
-            return {
-                "message": analysis_result["output"],
-                "query": request.query,
-                "dataset_id": dataset_id,
-                "router_mode": "data_query",
-                "analysis_status": status
-            }
-        
-        answer = payload.get("answer") or "No answer produced."
-        return {
-            "message": answer,
-            "query": request.query,
-            "dataset_id": dataset_id,
-            "router_mode": "general_query"
-        }
+    from ..services.chat_service import handle_chat_query
     
     try:
-        chart_specs = await generate_chart_spec(df, request.query, dataset_context)
-        
-        if isinstance(chart_specs, list):
-            if chart_specs:
-                persist_chart_state(current_user.id, dataset_id, chart_specs[0])
-            return {
-                "message": f"Visualization updated - {len(chart_specs)} chart(s) generated",
-                "query": request.query,
-                "dataset_id": dataset_id,
-                "charts": chart_specs
-            }
-        else:
-            persist_chart_state(current_user.id, dataset_id, chart_specs)
-            return {
-                "message": "Visualization updated",
-                "query": request.query,
-                "dataset_id": dataset_id,
-                "chart_spec": chart_specs
-            }
-    except Exception as e:
+        return await handle_chat_query(
+            user_id=current_user.id,
+            query=request.query,
+            dataset_id=request.dataset_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as exc:
+        logger.exception("Error in chat endpoint")
         raise HTTPException(
-            status_code=500,
-            detail=f"Error updating visualization: {str(e)}"
+            status_code=500, detail=f"Error processing chat query: {str(exc)}"
         )
 
 
@@ -1263,6 +1143,19 @@ def execute_analysis_code(code: str, fig_obj, df_context: pd.DataFrame):
     code = sanitize_generated_code(code)
 
     def ensure_numeric(series):
+        """Convert series to numeric, handling booleans and strings."""
+        # Handle boolean columns - convert to int first
+        if pd.api.types.is_bool_dtype(series):
+            return series.astype(int).astype(float)
+        # Handle object/string columns that might contain booleans as strings
+        if series.dtype == 'object':
+            # Try converting string booleans first
+            str_lower = series.astype(str).str.lower()
+            bool_values = ['true', 'false', '1', '0', 'yes', 'no']
+            if str_lower.isin(bool_values + ['nan', 'none']).all():
+                # Map boolean strings to numeric
+                mapping = {'true': 1, 'false': 0, '1': 1, '0': 0, 'yes': 1, 'no': 0}
+                return str_lower.map(mapping).astype(float)
         return pd.to_numeric(series, errors="coerce")
 
     exec_globals = {
