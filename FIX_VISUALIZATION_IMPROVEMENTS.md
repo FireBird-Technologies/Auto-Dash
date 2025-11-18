@@ -44,26 +44,33 @@ The fix-visualization endpoint was being called repeatedly in an infinite loop w
 
 ### 1. Changed Fix Tracking Logic
 
-**Before:**
-```typescript
-const fixAttemptedRef = useRef<string | null>(null);
-
-// Only prevented fixing the same error message
-if (fixAttemptedRef.current === errorMessage) {
-  return;
-}
-fixAttemptedRef.current = errorMessage;
-```
-
-**After:**
+**Before (Iteration 1 - Still had issues):**
 ```typescript
 const fixAttemptedRef = useRef<boolean>(false);
 
-// Prevents ANY fix attempt after the first one
-if (fixAttemptedRef.current) {
-  return;
-}
-fixAttemptedRef.current = true;
+useEffect(() => {
+  // ❌ PROBLEM: Reset on EVERY render/chartSpec change!
+  fixAttemptedRef.current = false;
+  
+  // ... rest of code
+}, [chartSpec, data, chartIndex]);
+```
+
+**After (Iteration 2 - Fixed):**
+```typescript
+const fixAttemptedRef = useRef<boolean>(false);
+const lastChartIndexRef = useRef<number>(chartIndex);
+
+useEffect(() => {
+  // ✅ SOLUTION: Only reset when moving to different chart
+  if (lastChartIndexRef.current !== chartIndex) {
+    fixAttemptedRef.current = false;
+    lastChartIndexRef.current = chartIndex;
+  }
+  // Don't reset on every render!
+  
+  // ... rest of code
+}, [chartSpec, data, chartIndex]);
 ```
 
 ### 2. Key Changes in PlotlyChartRenderer

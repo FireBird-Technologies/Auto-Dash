@@ -14,3 +14,20 @@ backend/*.ipynb
 backend/app/.env
 backend/*.db 
 backend/venv/
+
+# Python cache (for entire project)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
