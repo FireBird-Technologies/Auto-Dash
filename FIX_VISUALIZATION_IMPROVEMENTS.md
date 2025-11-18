@@ -1,5 +1,16 @@
 # Fix Visualization - Infinite Loop Prevention
 
+## ⚠️ Critical Fix Applied (Second Iteration)
+
+**Issue Found:** The first fix still had an infinite loop because the `fixAttemptedRef` flag was being reset on EVERY `chartSpec` change, not just when moving to a different chart.
+
+**Root Cause:** Line 29 in the original fix was resetting the flag unconditionally:
+```typescript
+fixAttemptedRef.current = false;  // ❌ Reset on every useEffect run!
+```
+
+**Solution:** Only reset when `chartIndex` changes (different chart), not on `chartSpec` updates.
+
 ## Problem Summary
 
 The fix-visualization endpoint was being called repeatedly in an infinite loop when:
@@ -9,12 +20,20 @@ The fix-visualization endpoint was being called repeatedly in an infinite loop w
 4. The component re-rendered and tried to fix again
 5. Loop continued indefinitely
 
+**Additional issue discovered:** Even after the first fix, the flag was being reset on every `chartSpec` change, causing the loop to continue.
+
 ## Root Cause
 
-### PlotlyChartRenderer Issue
-- Used `fixAttemptedRef` to track **specific error messages**
-- If fixed code produced a **different** error, it would attempt to fix again
-- No limit on total number of fix attempts per chart
+### PlotlyChartRenderer Issue (Multiple Problems)
+1. **First problem (fixed in iteration 1):**
+   - Used `fixAttemptedRef` to track **specific error messages**
+   - If fixed code produced a **different** error, it would attempt to fix again
+   - No limit on total number of fix attempts per chart
+
+2. **Second problem (fixed in iteration 2):**
+   - Flag was being reset on **EVERY** `chartSpec` change
+   - This included re-renders after fix attempts
+   - Caused infinite loop even with boolean flag
 
 ### D3ChartRenderer Issue (Now Removed)
 - Had **no tracking at all** for fix attempts
@@ -86,13 +105,21 @@ if (!fixAttemptedRef.current) {
 }
 ```
 
-#### Change 4: Reset on Chart Change
+#### Change 4: Reset ONLY When Chart Index Changes (Critical Fix)
 ```typescript
+const lastChartIndexRef = useRef<number>(chartIndex);
+
 useEffect(() => {
   if (!chartSpec) return;
 
-  // Reset flag when we get a NEW chart
-  fixAttemptedRef.current = false;
+  // ONLY reset fix flag if we moved to a DIFFERENT chart
+  if (lastChartIndexRef.current !== chartIndex) {
+    fixAttemptedRef.current = false;
+    lastChartIndexRef.current = chartIndex;
+    console.log(`Chart ${chartIndex}: New chart detected, resetting fix flag`);
+  }
+
+  // Don't reset fix flag on every render - this was causing the loop!
   setRenderError(null);
   setIsFixing(false);
   
@@ -100,12 +127,25 @@ useEffect(() => {
 }, [chartSpec, data, chartIndex]);
 ```
 
+**Why this is critical:**
+- ❌ Previously: Flag was reset on EVERY `chartSpec` change (including re-renders)
+- ✅ Now: Flag only resets when `chartIndex` changes (different chart)
+- This prevents the infinite loop where:
+  1. Chart fails → attempts fix
+  2. Fix updates chartSpec → `useEffect` runs
+  3. Flag gets reset → attempts fix again
+  4. Loop continues infinitely
+
 #### Change 5: Added Debug Logging
 ```typescript
+console.log(`Chart ${chartIndex}: New chart detected, resetting fix flag`);
+console.log(`Chart ${chartIndex} - Fix attempted:`, fixAttemptedRef.current);
+console.log(`Chart ${chartIndex}: First error, attempting fix`);
 console.log(`Chart ${chartIndex}: Attempting fix (this will only happen once)`);
 console.log(`Chart ${chartIndex}: Fix failed, will not retry`);
 console.log(`Chart ${chartIndex}: Fix succeeded`);
 console.log(`Chart ${chartIndex}: Fix already attempted, skipping`);
+console.log(`Chart ${chartIndex}: Fix already attempted, showing error`);
 ```
 
 ### 3. Removed D3ChartRenderer
