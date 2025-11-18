@@ -27,6 +27,65 @@ if not logger.handlers:
     logger.addHandler(ch)
 
 
+class plotly_editor(dspy.Signature):
+    """ You are an AI that edits plotly code"""
+    user_query = dspy.InputField(desc="edits the user needs to make")
+    plotly_code = dspy.InputField(desc="The initial plotly code")
+    dataset_context = dspy.InputField(desc="Context of the dataset ")
+    edited_code = dspy.OutputField(desc="Edited code")
+    reasoning = dspy.OutputField(desc="Why did you make these edits explain")
+
+class fig_editor(dspy.Signature):
+    """ 
+    You are an AI that generates Python code to analyze Plotly figure data.
+    
+    IMPORTANT: The code you generate must:
+    1. Extract ALL data from fig.data (not just samples)
+    2. Iterate through ALL traces in fig.data
+    3. Extract ALL y-values (prices) from each trace
+    4. Perform the requested calculation on the complete dataset
+    
+    The fig.data is a list of trace objects. Each trace has:
+    - trace.y: array of y-values (prices in this case)
+    - trace.x: array of x-values (area in this case)
+    - trace.name: name of the trace (if available)
+    
+    Generate code that loops through ALL traces and extracts ALL values.
+     Return pure Python code that can be executed directly with exec().
+    """
+    user_query = dspy.InputField(desc="edits the user needs to make")
+    fig_data = dspy.InputField(desc="The initial fig.data")
+    code = dspy.OutputField(desc="Edited code")
+    reasoning = dspy.OutputField(desc="Why did you make these edits explain")
+
+class chat_function(dspy.Module):
+    def __init__(self):
+        self.plotly_editor_mod = dspy.Predict(plotly_editor)
+        self.fig_editor_mod = dspy.Predict(fig_editor)
+        self.general_qa = dspy.Predict("user_query->answer")
+  
+        self.router = dspy.Predict("user_query->query_type:Literal['data_query','general_query','plotly_edit_query'],reasoning")
+
+        
+        
+    async def aforward(self, user_query, fig_data, data_context,plotly_code):
+        route = self.router(user_query=user_query)
+        
+        if 'data_query' in route.query_type:
+            response = await self.fig_editor_mod(user_query=user_query, fig_data=fig_data)
+        elif 'plotly_edit_query' in route.query_type:
+            response = await self.plotly_editor_mod(user_query=user_query,dataset_context=data_context, plotly_code=plotly_code)
+        else:
+            response = await self.general_qa(user_query=user_query)
+            
+            
+        return_dict = {'route':route,'response':response}
+            
+            
+        
+        
+        return return_dict
+
 # ============================================================================
 # STYLING INSTRUCTIONS
 # ============================================================================

@@ -1201,18 +1201,14 @@ async def fix_visualization_error(
             "original_error_message": request.error_message
         }
     
+    # Old error handling code (kept for reference)
     # except Exception as e:
-    #     logger.error(f"Error fixing D3 visualization: {str(e)}")
-        
-    #     # Check for specific DSPy errors
-    #     error_msg = str(e)
-        
-    #     # Fallback to original code if fixing fails
+    #     logger.error(f"Error fixing Plotly visualization: {str(e)}")
     #     return {
-    #         "fixed_complete_code": request.d3_code,  # Return original code as fallback
+    #         "fixed_complete_code": request.plotly_code,  # Return original code as fallback
     #         "user_id": current_user.id,
     #         "fix_failed": True,
-    #         "error_reason": error_msg,
+    #         "error_reason": str(e),
     #         "original_error_message": request.error_message
     #     }
 

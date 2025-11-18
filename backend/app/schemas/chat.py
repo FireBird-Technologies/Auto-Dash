@@ -1,8 +1,12 @@
 from pydantic import BaseModel
+from typing import Optional, Dict, Any
 
 
 class ChatRequest(BaseModel):
     message: str
+    dataset_id: Optional[str] = None
+    fig_data: Optional[Dict[str, Any]] = None
+    plotly_code: Optional[str] = None
 
 
 class ChatResponse(BaseModel):

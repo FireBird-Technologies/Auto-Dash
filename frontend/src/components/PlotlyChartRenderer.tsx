@@ -19,13 +19,14 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
   const [renderError, setRenderError] = useState<string | null>(null);
   const [isFixing, setIsFixing] = useState(false);
   const [figureData, setFigureData] = useState<any>(null);
-  const fixAttemptedRef = useRef<string | null>(null);
+  // Track if ANY fix was attempted (not just specific error messages)
+  const fixAttemptedRef = useRef<boolean>(false);
 
   useEffect(() => {
     if (!chartSpec) return;
 
     // Reset fix attempt tracking when chart spec changes
-    fixAttemptedRef.current = null;
+    fixAttemptedRef.current = false;
     setRenderError(null);
     setIsFixing(false);
 
@@ -46,9 +47,13 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
       console.error(`Chart ${chartIndex} - Error rendering:`, error);
       setRenderError(errorMessage);
       
-      // Show fixing message and attempt to fix
-      showFixingMessage();
-      attemptFix(errorMessage, chartSpec);
+      // Show fixing message and attempt to fix (only if not already attempted)
+      if (!fixAttemptedRef.current) {
+        showFixingMessage();
+        attemptFix(errorMessage, chartSpec);
+      } else {
+        console.log(`Chart ${chartIndex}: Fix already attempted, showing error`);
+      }
     }
   }, [chartSpec, data, chartIndex]);
 
@@ -57,13 +62,14 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
   };
 
   const attemptFix = async (errorMessage: string, chartSpec: any) => {
-    // Don't attempt fix if we've already tried for this error
-    if (fixAttemptedRef.current === errorMessage) {
+    // Mark that we've attempted a fix (only allow one fix attempt per chart)
+    if (fixAttemptedRef.current) {
+      console.log(`Chart ${chartIndex}: Fix already attempted, skipping`);
       return;
     }
     
-    // Mark this error as attempted
-    fixAttemptedRef.current = errorMessage;
+    fixAttemptedRef.current = true;
+    console.log(`Chart ${chartIndex}: Attempting fix (this will only happen once)`);
     
     try {
       // Extract Plotly code from chartSpec
@@ -97,8 +103,10 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
       setIsFixing(false);
 
       if (result.fix_failed) {
+        console.log(`Chart ${chartIndex}: Fix failed, will not retry`);
         setRenderError(errorMessage);
       } else if (result.fixed_complete_code) {
+        console.log(`Chart ${chartIndex}: Fix succeeded`);
         // Notify parent that chart was fixed
         if (onChartFixed) {
           onChartFixed(chartIndex, result.fixed_complete_code);
@@ -109,7 +117,7 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
         setRenderError('Chart fixed - please refresh to see the updated visualization');
       }
     } catch (err) {
-      console.error('Failed to fix visualization:', err);
+      console.error(`Chart ${chartIndex}: Failed to fix visualization:`, err);
       setIsFixing(false);
       setRenderError(errorMessage);
     }
