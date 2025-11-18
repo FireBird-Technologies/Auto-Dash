@@ -169,41 +169,78 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
 
     try {
       // Use /analyze for first chart, /chat for subsequent queries
-      const endpoint = chartSpecs.length > 0 ? 'chat' : 'analyze';
+      const isFirstChart = chartSpecs.length === 0;
       
-      const response = await fetch(`${config.backendUrl}/api/data/${endpoint}`, {
-        method: 'POST',
-        headers: getAuthHeaders({
-          'Content-Type': 'application/json',
-        }),
-        credentials: 'include',
-        body: JSON.stringify({
-          query: userQuery,
-          dataset_id: datasetId,
-          color_theme: context.colorTheme
-        })
-      });
+      if (isFirstChart) {
+        // First chart: Use analyze endpoint
+        const response = await fetch(`${config.backendUrl}/api/data/analyze`, {
+          method: 'POST',
+          headers: getAuthHeaders({
+            'Content-Type': 'application/json',
+          }),
+          credentials: 'include',
+          body: JSON.stringify({
+            query: userQuery,
+            dataset_id: datasetId,
+            color_theme: context.colorTheme
+          })
+        });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to generate chart');
-      }
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || 'Failed to generate chart');
+        }
 
-      const result = await response.json();
-      
-      // Fetch full dataset before rendering chart (if not already fetched)
-      await fetchFullDataset();
-      
-      // Remove the thinking message and update chart specs
-      setChatHistory(prev => prev.slice(0, -1));
-      
-      // Handle both array (new format) and single chart (old format)
-      if (result.charts && Array.isArray(result.charts)) {
-        // New format: array of charts
-        setChartSpecs(result.charts);
-      } else if (result.chart_spec) {
-        // Old format: single chart - wrap in array
-        setChartSpecs([{ chart_spec: result.chart_spec, chart_type: 'unknown', title: 'Visualization', chart_index: 0 }]);
+        const result = await response.json();
+        
+        // Fetch full dataset before rendering chart (if not already fetched)
+        await fetchFullDataset();
+        
+        // Remove the thinking message and update chart specs
+        setChatHistory(prev => prev.slice(0, -1));
+        
+        // Handle both array (new format) and single chart (old format)
+        if (result.charts && Array.isArray(result.charts)) {
+          // New format: array of charts
+          setChartSpecs(result.charts);
+        } else if (result.chart_spec) {
+          // Old format: single chart - wrap in array
+          setChartSpecs([{ chart_spec: result.chart_spec, chart_type: 'unknown', title: 'Visualization', chart_index: 0 }]);
+        }
+      } else {
+        // Subsequent queries: Use chat endpoint with chart context
+        const response = await fetch(`${config.backendUrl}/api/chat`, {
+          method: 'POST',
+          headers: getAuthHeaders({
+            'Content-Type': 'application/json',
+          }),
+          credentials: 'include',
+          body: JSON.stringify({
+            message: userQuery,
+            dataset_id: datasetId,
+            plotly_code: chartSpecs[0]?.chart_spec || '',  // Pass current chart code
+            fig_data: chartSpecs[0]?.figure || null  // Pass current figure data
+          })
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || 'Failed to process chat request');
+        }
+
+        const result = await response.json();
+        
+        // Remove the thinking message and add AI response
+        setChatHistory(prev => {
+          const newHistory = prev.slice(0, -1);
+          return [...newHistory, { 
+            type: 'assistant', 
+            message: result.reply 
+          }];
+        });
+        
+        // Note: Chat endpoint returns text response, not new charts
+        // If the response contains code, you might want to handle that separately
       }
       
     } catch (err) {
