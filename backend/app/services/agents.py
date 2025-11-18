@@ -110,7 +110,7 @@ STYLING_INSTRUCTIONS = [
                 "percentage_decimals": 2,
                 "percentage_sign": True
             },
-            "default_size": {"height": 800, "width": 600},
+            "default_size": {"height": 1200, "width": 1000},
             "layout": {
                 "showlegend": True,
                 "hovermode": "x unified"
@@ -553,17 +553,6 @@ FORBIDDEN - DO NOT INCLUDE:
 3. Create Plotly figure with go.Figure() or px functions using 'df'
 4. Configure layout with fig.update_layout()
 5. END with just: fig (on its own line, this returns the figure)
-6. CORRECT FONT STYLING - Use these exact patterns:
-   - Title font: fig.update_layout(title={'text': 'Title', 'font': {'size': 20, 'color': 'black'}})
-   - Axis font: fig.update_xaxes(title_font={'size': 14, 'color': 'gray'})
-   - DO NOT use: font_weight, font_family, bold (use family, size, color only)
-   - For bold: Use HTML in title: title="<b>Bold Title</b>"
-
-7. COLOR SPECIFICATION:
-   - Use standard color names: 'red', 'blue', 'green', 'yellow', 'orange', 'purple'
-   - Or hex codes: '#FF0000', '#00FF00'
-   - For bar/line colors: use 'marker_color' or 'line_color' parameters
-   - Example: go.Bar(x=x, y=y, marker_color='yellow')
 
 EXAMPLE STRUCTURE:
 import plotly.graph_objects as go
@@ -772,31 +761,12 @@ class PlotlyVisualizationModule(dspy.Module):
 
         logger.info("GenerateVisualizationPlan result: %s", plan_output)
         
-        # Extract target_chart_index if present (for chart updates)
-        target_chart_index = plan_output.get('target_chart_index', None)
-        if target_chart_index is not None:
-            logger.info(f"🎯 Target chart index for update: {target_chart_index}")
-        
         tasks = []
         
         if 'False' in str(plan.relevant_query):
             # Query is relevant for visualization
             # Extract data_source info from plan
-            #data_source = plan_output.get('data_source', {'file_type': 'csv'})
-            # Extract data_source info from plan and validate
-            data_source = plan_output.get('data_source', {})
-            # Force CSV for simple DataFrames (not dict)
-            if not isinstance(data_source, dict):
-                data_source = {'file_type': 'csv'}
-            # If no file_type specified or if sheet_name incorrectly set for CSV, default to CSV
-            if 'file_type' not in data_source:
-                data_source['file_type'] = 'csv'
-            # Remove sheet_name if file_type is csv
-            if data_source.get('file_type') == 'csv':
-                data_source.pop('sheet_name', None)
-            
-            logger.info(f"✅ Data source validated: {data_source}")
-            logger.info(f"📊 Dataset context: {dataset_context[:200]}...")  # First 200 chars
+            data_source = plan_output.get('data_source', {'file_type': 'csv'})
             
             for chart_key in self.chart_sigs.keys():
                 if chart_key in plan_output:
@@ -834,19 +804,7 @@ class PlotlyVisualizationModule(dspy.Module):
             
             # Process results into chart specifications
             chart_specs = []
-            #cleaned = clean_plotly_code(raw_code)
-
-            # ADDITIONAL CLEANING: Remove any sheet references for CSV files
-            #if data_source.get('file_type') == 'csv':
-                # Remove any data['SheetX'] or data["SheetX"] references
-            #    import re
-            #    sheet_pattern = r"data\[['\"]Sheet\d*['\"]\]"
-            #    if re.search(sheet_pattern, cleaned):
-            #        logger.warning(f"⚠️ Found sheet reference in CSV code, replacing with 'data'")
-            #        cleaned = re.sub(sheet_pattern, "data", cleaned)
-
-            # Prepend data selection code based on file type
-            #file_type = data_source.get('file_type', 'csv')
+            
             for i, r in enumerate(results):
                 raw_code = getattr(r, 'plotly_code', str(r))
                 cleaned = clean_plotly_code(raw_code)
@@ -877,19 +835,12 @@ class PlotlyVisualizationModule(dspy.Module):
                 except:
                     pass
                 
-                chart_spec_dict = {
+                chart_specs.append({
                     'chart_spec': cleaned,
                     'chart_type': chart_type,
                     'title': title,
                     'chart_index': i
-                }
-                
-                # Add target_chart_index if this is an update
-                if target_chart_index is not None and i == 0:  # Only first chart gets the target index
-                    chart_spec_dict['target_chart_index'] = target_chart_index
-                    logger.info(f"✅ Chart {i+1} marked for update with target_chart_index: {target_chart_index}")
-                
-                chart_specs.append(chart_spec_dict)
+                })
                 
                 logger.info(f"Chart {i+1} ({chart_type}): {title} - cleaned successfully")
             

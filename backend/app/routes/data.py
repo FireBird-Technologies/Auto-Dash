@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 from pydantic import BaseModel
 import pandas as pd
 import numpy as np
@@ -12,7 +12,6 @@ import os
 from dotenv import load_dotenv
 import plotly.graph_objects as go
 import plotly
-import uuid
 
 # Load .env file from the parent directory (above 'app')
 from pathlib import Path
@@ -195,7 +194,7 @@ class FirstQueryRequest(BaseModel):
 class ChatQueryRequest(BaseModel):
     query:str
     dataset_id:Optional[str] = None
-    existing_charts: Optional[List[Dict[str, Any]]] = None  # Add this line
+
 
 class ChartResponse(BaseModel):
     chart_type: str
@@ -907,7 +906,7 @@ async def analyze_data(
     if not dataset_context:
         columns = [str(col) for col in df.columns.tolist()]
         dataset_context = f"Dataset with {len(df)} rows and {len(df.columns)} columns. Columns: {', '.join(columns)}"
-        #dataset_context = f"CSV file with {len(df)} rows and {len(df.columns)} columns. File type: CSV (not Excel, no sheets). Columns: {', '.join(columns)}"
+    
     # Generate chart specification using DSPy agents with context
     from ..services.chart_creator import generate_chart_spec
 
@@ -918,12 +917,11 @@ async def analyze_data(
     
     # Handle array of chart specs (new format) or single chart (old format)
     if isinstance(chart_specs, list):
-        # chart_index is already set by agents.py (0, 1, 2, etc.)
         return {
             "message": f"{len(chart_specs)} chart(s) generated successfully",
             "query": request.query,
             "dataset_id": dataset_id,
-            "charts": chart_specs
+            "charts": chart_specs  # Array of chart specs
         }
     else:
         # Backward compatibility for single chart
@@ -976,48 +974,17 @@ async def chat_with_data(
     
     # Generate chart specification using DSPy agents with context
     from ..services.chart_creator import generate_chart_spec
-
-    # Get existing chart context from frontend
-    existing_charts = request.existing_charts or []
-
-    # Build query with chart context if charts exist
-    query = request.query
-    if existing_charts:
-        chart_descriptions = []
-        for c in existing_charts:
-            chart_descriptions.append(
-                f"Chart {c['chart_index'] + 1}: {c['chart_type']} titled '{c['title']}'"
-            )
-        
-        charts_list = "\n".join(chart_descriptions)
-        query = f"""CURRENT DASHBOARD has {len(existing_charts)} charts:
-{charts_list}
-
-USER REQUEST: {request.query}
-
-🚨 CRITICAL INSTRUCTIONS FOR CHART UPDATES:
-1. Analyze if user wants to UPDATE an existing chart or CREATE a new one
-2. If UPDATING:
-   - Identify which chart by number (e.g., "chart 2" = index 1), type, or title keywords
-   - In your JSON response, ADD THIS EXACT FIELD at the TOP LEVEL:
-     "target_chart_index": <the index number (0-based)>
-   - Example: If updating Chart 2, use: "target_chart_index": 1
-   - Keep the SAME chart_type as the original chart
-3. If CREATING new chart: Do NOT include target_chart_index
-4. This is CSV data: use df = data (NOT data['Sheet1'])"""
-
+    
     try:
-        chart_specs = await generate_chart_spec(df, query, dataset_context)
+        chart_specs = await generate_chart_spec(df, request.query, dataset_context)
         
         # Handle array of chart specs (new format) or single chart (old format)
         if isinstance(chart_specs, list):
-            # chart_index is already set by agents.py
             return {
                 "message": f"Visualization updated - {len(chart_specs)} chart(s) generated",
                 "query": request.query,
                 "dataset_id": dataset_id,
-                "charts": chart_specs,
-                "is_update": bool(existing_charts)
+                "charts": chart_specs  # Array of chart specs
             }
         else:
             # Backward compatibility for single chart

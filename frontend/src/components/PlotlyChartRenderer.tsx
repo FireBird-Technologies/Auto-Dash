@@ -176,7 +176,7 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
       style={{
         width: '100%',
         height: '100%',
-        minHeight: '400px',
+        minHeight: '600px',
         position: 'relative'
       }}
     >
@@ -184,8 +184,6 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
         data={figureData.data || []}
         layout={{
           ...figureData.layout,
-          width: undefined,
-          height: undefined,
           autosize: true,
           margin: figureData.layout?.margin || { l: 60, r: 30, t: 80, b: 60 }
         }}
@@ -197,8 +195,6 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
         }}
         style={{ width: '100%', height: '100%' }}
         useResizeHandler={true}
-        // Prevent any click events from bubbling
-        onClick={(e: any) => e && e.stopPropagation && e.stopPropagation()}
       />
     </div>
   );
