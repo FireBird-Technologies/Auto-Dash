@@ -60,7 +60,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     }
 
     try {
-      console.log(`Loading full dataset for visualization (currently have ${data.length} rows)...`);
+      // console.log(`Loading full dataset for visualization (currently have ${data.length} rows)...`);
       const response = await fetch(`${config.backendUrl}/api/data/datasets/${datasetId}/full?limit=1000`, {
         method: 'GET',
         headers: getAuthHeaders(),
@@ -69,11 +69,11 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
 
       if (response.ok) {
         const result = await response.json();
-        console.log(`✅ Full dataset loaded: ${result.rows} rows (Total: ${result.total_rows_in_dataset} rows)`);
+        // console.log(`✅ Full dataset loaded: ${result.rows} rows (Total: ${result.total_rows_in_dataset} rows)`);
         
         // Show warning if data was limited
         if (result.limited) {
-          console.warn(`⚠️ Dataset limited to ${result.rows} rows for performance (Total dataset: ${result.total_rows_in_dataset} rows)`);
+          // console.warn(`⚠️ Dataset limited to ${result.rows} rows for performance (Total dataset: ${result.total_rows_in_dataset} rows)`);
         }
         
         // Update local data with full dataset
@@ -83,7 +83,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
         }
       }
     } catch (err) {
-      console.error('Failed to load full dataset:', err);
+      // console.error('Failed to load full dataset:', err);
       // Not critical - we can still work with preview data
     }
   };
@@ -105,10 +105,10 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
         setPreviewData(result);
         setShowDatasetPreview(true);
       } else {
-        console.error('Failed to fetch dataset preview');
+        // console.error('Failed to fetch dataset preview');
       }
     } catch (err) {
-      console.error('Error fetching dataset preview:', err);
+      // console.error('Error fetching dataset preview:', err);
     } finally {
       setLoadingPreview(false);
     }
@@ -135,13 +135,13 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
       });
       setContextPrepared(true);
     } catch (err) {
-      console.error('Failed to prepare context:', err);
+      // console.error('Failed to prepare context:', err);
     }
   };
 
   // Callback to handle when a specific chart is fixed
   const handleChartFixed = (chartIndex: number, fixedCode: string) => {
-    console.log(`Updating chart ${chartIndex} with fixed code`);
+    // console.log(`Updating chart ${chartIndex} with fixed code`);
     setChartSpecs(prevSpecs => {
       const newSpecs = [...prevSpecs];
       if (newSpecs[chartIndex]) {
@@ -180,7 +180,15 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
         body: JSON.stringify({
           query: userQuery,
           dataset_id: datasetId,
-          color_theme: context.colorTheme
+          color_theme: context.colorTheme,
+          // Send existing charts info when using chat endpoint
+          ...(endpoint === 'chat' && chartSpecs.length > 0 ? {
+            existing_charts: chartSpecs.map((spec, idx) => ({
+              chart_index: spec.chart_index !== undefined ? spec.chart_index : idx,
+              title: spec.title || 'Chart',
+              chart_type: spec.chart_type || 'unknown'
+            }))
+          } : {})
         })
       });
 
@@ -198,16 +206,54 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
       setChatHistory(prev => prev.slice(0, -1));
       
       // Handle both array (new format) and single chart (old format)
-      if (result.charts && Array.isArray(result.charts)) {
-        // New format: array of charts
-        setChartSpecs(result.charts);
+      if(result.charts && Array.isArray(result.charts)) {
+        // console.log('📊 Received charts from backend:', result.charts.length);
+        // result.charts.forEach((c, i) => console.log(`  Chart ${i}: target_chart_index=${c.target_chart_index}, type=${c.chart_type}, title=${c.title}`));
+        
+        setChartSpecs(prev => {
+          // console.log('📋 Current charts before update:', prev.length);
+          // prev.forEach((c, i) => console.log(`  Chart ${i}: index=${c.chart_index}, title=${c.title}`));
+          
+          let updated = [...prev];
+          
+          result.charts.forEach((newChart: any) => {
+            if (newChart.target_chart_index !== undefined && newChart.target_chart_index !== null) {
+              // Update existing chart by index
+              const idx = newChart.target_chart_index;
+              // console.log(`🔍 Updating chart at index: ${idx}`);
+              if (idx >= 0 && idx < updated.length) {
+                // console.log(`✅ Updating Chart ${idx + 1}: ${updated[idx].title} -> ${newChart.title}`);
+                // Preserve chart_index
+                newChart.chart_index = idx;
+                updated[idx] = newChart;
+              } else {
+                // console.warn(`⚠️ target_chart_index ${idx} out of bounds, appending as new`);
+                newChart.chart_index = updated.length;
+                updated.push(newChart);
+              }
+            } else {
+              // New chart
+              // console.log(`➕ No target_chart_index, adding as new chart`);
+              newChart.chart_index = updated.length;
+              updated.push(newChart);
+              // console.log(`✅ Added new Chart ${updated.length}`);
+            }
+          });
+          
+          return updated;
+        });
       } else if (result.chart_spec) {
         // Old format: single chart - wrap in array
-        setChartSpecs([{ chart_spec: result.chart_spec, chart_type: 'unknown', title: 'Visualization', chart_index: 0 }]);
+        setChartSpecs(prev => [...prev, {
+          chart_spec: result.chart_spec,
+          chart_type: 'unknown',
+          title: 'Visualization',
+          chart_index: prev.length
+        }]);
       }
       
     } catch (err) {
-      console.error('Error generating chart:', err);
+      // console.error('Error generating chart:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to generate chart';
       setError(errorMessage);
       
@@ -674,13 +720,23 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                     <div className="chart-display">
                       {chartSpecs.length > 0 ? (
                         chartSpecs.map((spec, index) => (
-                          <PlotlyChartRenderer 
-                            key={`chart-${index}`}
-                            chartSpec={spec} 
-                            data={localData}
-                            chartIndex={index}
-                            onChartFixed={handleChartFixed}
-                          />
+                          <div key={index} style={{ marginBottom: '2rem' }}>
+                            <div style={{ 
+                              marginBottom: '0.5rem', 
+                              paddingLeft: '1rem', 
+                              fontSize: '0.9rem', 
+                              color: '#666', 
+                              fontWeight: 500 
+                            }}>
+                              Chart {(spec.chart_index !== undefined ? spec.chart_index : index) + 1}
+                            </div>
+                            <PlotlyChartRenderer 
+                              chartSpec={spec} 
+                              data={localData}
+                              chartIndex={index}
+                              onChartFixed={handleChartFixed}
+                            />
+                          </div>
                         ))
                       ) : (
                         <div className="empty-state">
