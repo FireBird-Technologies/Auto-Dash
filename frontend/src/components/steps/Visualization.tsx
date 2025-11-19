@@ -73,11 +73,11 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
 
       if (response.ok) {
         const result = await response.json();
-        console.log(`✅ Full dataset loaded: ${result.rows} rows (Total: ${result.total_rows_in_dataset} rows)`);
+        console.log(`[SUCCESS] Full dataset loaded: ${result.rows} rows (Total: ${result.total_rows_in_dataset} rows)`);
         
         // Show warning if data was limited
         if (result.limited) {
-          console.warn(`⚠️ Dataset limited to ${result.rows} rows for performance (Total dataset: ${result.total_rows_in_dataset} rows)`);
+          console.warn(`[WARNING] Dataset limited to ${result.rows} rows for performance (Total dataset: ${result.total_rows_in_dataset} rows)`);
         }
         
         // Update local data with full dataset
@@ -268,7 +268,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
         const newHistory = prev.slice(0, -1);
         return [...newHistory, { 
           type: 'assistant', 
-          message: `❌ ${errorMessage}` 
+          message: `Error: ${errorMessage}` 
         }];
       });
     } finally {
@@ -302,92 +302,90 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     setIsFullscreen(!isFullscreen);
   };
 
-  const downloadChart = (format: 'png' | 'pdf' | 'svg') => {
-    if (!visualizationRef.current) return;
-
-    // Check if there's any content to download
-    if (visualizationRef.current.children.length === 0) {
-      alert('No chart to download');
+  const downloadChart = async (format: 'png-zip' | 'pdf') => {
+    if (chartSpecs.length === 0) {
+      alert('No charts to download');
       return;
     }
 
-    const timestamp = new Date().getTime();
-
-    if (format === 'svg') {
-      // For SVG, we'll use html2canvas to convert the entire container to SVG
-      // This ensures we capture all content including multiple charts
-      import('html2canvas').then((html2canvas) => {
-        html2canvas.default(visualizationRef.current!, {
-          scale: 2,
-          backgroundColor: '#ffffff',
-          useCORS: true,
-          allowTaint: true
-        }).then(canvas => {
-          // Convert canvas to SVG
-          const svgData = `<svg width="${canvas.width}" height="${canvas.height}" xmlns="http://www.w3.org/2000/svg">
-            <image href="${canvas.toDataURL()}" width="${canvas.width}" height="${canvas.height}"/>
-          </svg>`;
-          
-          const blob = new Blob([svgData], { type: 'image/svg+xml' });
-          const url = URL.createObjectURL(blob);
-          
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = `dashboard-${timestamp}.svg`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url);
-        });
-      });
-    } else if (format === 'png') {
-      // Download as PNG - capture entire visualization area
-      // Use html2canvas to capture the entire container
-      import('html2canvas').then((html2canvas) => {
-        html2canvas.default(visualizationRef.current!, {
-          scale: 2,
-          backgroundColor: '#ffffff',
-          useCORS: true,
-          allowTaint: true
-        }).then(canvas => {
-          canvas.toBlob((blob) => {
-            if (blob) {
-              const url = URL.createObjectURL(blob);
-              const link = document.createElement('a');
-              link.href = url;
-              link.download = `dashboard-${timestamp}.png`;
-              document.body.appendChild(link);
-              link.click();
-              document.body.removeChild(link);
-              URL.revokeObjectURL(url);
-            }
-          });
-        });
-      });
-    } else if (format === 'pdf') {
-      // Download as PDF - capture entire visualization area
-      const containerRect = visualizationRef.current.getBoundingClientRect();
+    try {
+      console.log('Starting chart export...');
       
-      import('html2canvas').then((html2canvas) => {
-        import('jspdf').then(({ jsPDF }) => {
-          html2canvas.default(visualizationRef.current!, {
-            scale: 2,
-            backgroundColor: '#ffffff',
-            useCORS: true,
-            allowTaint: true
-          }).then(canvas => {
-            const imgData = canvas.toDataURL('image/png');
-            const pdf = new jsPDF({
-              orientation: containerRect.width > containerRect.height ? 'landscape' : 'portrait',
-              unit: 'px',
-              format: [containerRect.width, containerRect.height]
+      // Export all charts as base64 images using Plotly's toImage API
+      const chartImages: Array<{title: string, imageData: string}> = [];
+      
+      // Get all Plotly chart elements
+      const plotlyDivs = document.querySelectorAll('.js-plotly-plot');
+      console.log(`Found ${plotlyDivs.length} Plotly charts`);
+      
+      for (let idx = 0; idx < chartSpecs.length; idx++) {
+        const spec = chartSpecs[idx];
+        const title = spec.title || `Chart ${idx + 1}`;
+        const plotlyDiv = plotlyDivs[idx] as any;
+        
+        if (plotlyDiv && plotlyDiv.data) {
+          try {
+            console.log(`Exporting chart ${idx + 1}: ${title}`);
+            
+            // Use Plotly's toImage - this works without kaleido!
+            const imageData = await (window as any).Plotly.toImage(plotlyDiv, {
+              format: 'png',
+              width: 1000,
+              height: 800,
+              scale: 2
             });
             
-            pdf.addImage(imgData, 'PNG', 0, 0, containerRect.width, containerRect.height);
-            pdf.save(`dashboard-${timestamp}.pdf`);
-          });
-        });
+            chartImages.push({ title, imageData });
+            console.log(`[SUCCESS] Chart ${idx + 1} exported successfully`);
+          } catch (err) {
+            console.error(`Failed to export chart ${idx + 1}:`, err);
+          }
+        } else {
+          console.warn(`Chart ${idx + 1} not found in DOM`);
+        }
+      }
+
+      if (chartImages.length === 0) {
+        throw new Error('No charts could be exported. Please wait for charts to fully render.');
+      }
+
+      console.log(`Sending ${chartImages.length} charts to backend...`);
+
+      // Send to backend for packaging
+      const endpoint = format === 'png-zip' 
+        ? '/api/export/charts-zip-from-images'
+        : '/api/export/dashboard-pdf-from-images';
+      
+      const response = await fetch(`${config.backendUrl}${endpoint}`, {
+        method: 'POST',
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+        credentials: 'include',
+        body: JSON.stringify({ charts: chartImages })
       });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Backend error: ${errorText}`);
+      }
+
+      // Download file
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = format === 'png-zip' 
+        ? `autodash_charts_${Date.now()}.zip`
+        : `autodash_report_${Date.now()}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      console.log('[SUCCESS] Download complete!');
+
+    } catch (error) {
+      console.error('Error downloading:', error);
+      alert(`Failed to download: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 
     setShowDownloadMenu(false);
@@ -658,7 +656,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
               <div className="chat-message error-message">
                 <div className="chat-avatar assistant-avatar">AI</div>
                 <div className="chat-bubble error-bubble">
-                  ❌ {error}
+                  Error: {error}
                 </div>
               </div>
             )}
@@ -740,20 +738,25 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                 </button>
                 {showDownloadMenu && (
                   <div className="download-menu">
-                    <button onClick={() => downloadChart('png')} className="download-menu-item">
+                    <div className="download-menu-header" style={{ 
+                      padding: '8px 12px', 
+                      borderBottom: '1px solid #e5e7eb',
+                      marginBottom: '4px'
+                    }}>
+                      <small style={{ color: '#666', fontSize: '12px' }}>
+                        Tip: Use camera icon on each chart for individual PNG
+                      </small>
+                    </div>
+                    <button onClick={() => downloadChart('png-zip')} className="download-menu-item">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                        <circle cx="8.5" cy="8.5" r="1.5" />
-                        <polyline points="21 15 16 10 5 21" />
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
                       </svg>
-                      PNG Image
-                    </button>
-                    <button onClick={() => downloadChart('svg')} className="download-menu-item">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <polyline points="16 18 22 12 16 6" />
-                        <polyline points="8 6 2 12 8 18" />
-                      </svg>
-                      SVG Vector
+                      All Charts (ZIP)
+                      <small style={{ marginLeft: 'auto', color: '#999', fontSize: '11px' }}>
+                        {chartSpecs.length} PNG{chartSpecs.length > 1 ? 's' : ''}
+                      </small>
                     </button>
                     <button onClick={() => downloadChart('pdf')} className="download-menu-item">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -761,9 +764,11 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                         <polyline points="14 2 14 8 20 8" />
                         <line x1="16" y1="13" x2="8" y2="13" />
                         <line x1="16" y1="17" x2="8" y2="17" />
-                        <polyline points="10 9 9 9 8 9" />
                       </svg>
-                      PDF Document
+                      PDF Report
+                      <small style={{ marginLeft: 'auto', color: '#999', fontSize: '11px' }}>
+                        {chartSpecs.length} page{chartSpecs.length > 1 ? 's' : ''}
+                      </small>
                     </button>
                   </div>
                 )}
@@ -834,7 +839,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                           </p>
                           {localData.length > 0 && (
                             <p className="empty-state-info" style={{ marginTop: '1rem', fontSize: '0.9rem', color: '#666' }}>
-                              📊 Ready to visualize {localData.length.toLocaleString()} rows
+                              Ready to visualize {localData.length.toLocaleString()} rows
                             </p>
                           )}
                         </div>
