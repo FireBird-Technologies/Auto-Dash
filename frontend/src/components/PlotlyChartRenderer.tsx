@@ -59,7 +59,6 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
   onZoom
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [renderError, setRenderError] = useState<string | null>(null);
   const [figureData, setFigureData] = useState<any>(null);
   // Track if ANY fix was attempted (not just specific error messages)
   const fixAttemptedRef = useRef<boolean>(false);
@@ -77,8 +76,6 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
     }
 
     // Don't reset fix flag on every render - this was causing the loop!
-    setRenderError(null);
-
     console.log(`Chart ${chartIndex} - Data length:`, data.length);
     console.log(`Chart ${chartIndex} - Fix attempted:`, fixAttemptedRef.current);
 
@@ -100,7 +97,6 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
       originalErrorRef.current = rawErrorMessage;
       
       console.error(`Chart ${chartIndex} - Error rendering:`, error);
-      setRenderError(errorMessage);
       
       // Show fixing message and attempt to fix (only if not already attempted)
             if (!fixAttemptedRef.current) {
@@ -160,12 +156,10 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
 
       if (result.fix_failed) {
         console.log(`Chart ${chartIndex}: Fix failed, will not retry`);
-        setRenderError(errorMessage);
       } else if (result.figure) {
         // Display the fixed figure immediately
         console.log(`Chart ${chartIndex}: Fix succeeded, displaying new figure`);
         setFigureData(result.figure);
-        setRenderError(null);
         
         // Notify parent with the fixed code AND figure data to update dashboard
         if (onChartFixed && result.fixed_complete_code) {
@@ -177,14 +171,12 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
         if (onChartFixed) {
           onChartFixed(chartIndex, result.fixed_complete_code);
         }
-        setRenderError('Chart fixed - please refresh to see the updated visualization');
       }
     } catch (err) {
       console.error(`Chart ${chartIndex}: Failed to fix visualization:`, err);
       if (onFixingStatusChange) {
         onFixingStatusChange(false);
       }
-      setRenderError(errorMessage);
     }
   };
 
