@@ -34,6 +34,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   const visualizationRef = useRef<HTMLDivElement>(null);
   const downloadMenuRef = useRef<HTMLDivElement>(null);
   const [showFixNotification, setShowFixNotification] = useState(false);
+  const [zoomedChartIndex, setZoomedChartIndex] = useState<number | null>(null);
 
   // Update local data when prop changes
   useEffect(() => {
@@ -142,7 +143,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   };
 
   // Callback to handle when a specific chart is fixed
-  const handleChartFixed = (chartIndex: number, fixedCode: string) => {
+  const handleChartFixed = (chartIndex: number, fixedCode: string, figureData?: any) => {
     console.log(`Updating chart ${chartIndex} with fixed code`);
     // Dismiss the notification when fix is complete
     setShowFixNotification(false);
@@ -152,11 +153,19 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
       if (newSpecs[chartIndex]) {
         newSpecs[chartIndex] = {
           ...newSpecs[chartIndex],
-          chart_spec: fixedCode
+          chart_spec: fixedCode,
+          figure: figureData || newSpecs[chartIndex].figure, // Update figure if provided
+          execution_success: figureData ? true : newSpecs[chartIndex].execution_success,
+          execution_error: figureData ? undefined : newSpecs[chartIndex].execution_error
         };
       }
       return newSpecs;
     });
+  };
+
+  // Handler for chart zoom
+  const handleChartZoom = (chartIndex: number) => {
+    setZoomedChartIndex(chartIndex);
   };
 
   const generateChart = async (userQuery: string) => {
@@ -478,6 +487,77 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
         </div>
       )}
 
+      {/* Chart Zoom Modal */}
+      {zoomedChartIndex !== null && chartSpecs[zoomedChartIndex] && (
+        <div 
+          className="fullscreen-modal" 
+          onClick={() => setZoomedChartIndex(null)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            zIndex: 10000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '40px'
+          }}
+        >
+          <div 
+            className="fullscreen-content" 
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '90%',
+              height: '90%',
+              backgroundColor: '#ffffff',
+              borderRadius: '12px',
+              padding: '20px',
+              position: 'relative',
+              maxWidth: '1400px',
+              maxHeight: '900px'
+            }}
+          >
+            <button 
+              className="fullscreen-close" 
+              onClick={() => setZoomedChartIndex(null)}
+              style={{
+                position: 'absolute',
+                top: '20px',
+                right: '20px',
+                background: 'rgba(0, 0, 0, 0.1)',
+                border: 'none',
+                borderRadius: '50%',
+                width: '40px',
+                height: '40px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 10001
+              }}
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+            <div style={{ width: '100%', height: '100%' }}>
+              <PlotlyChartRenderer 
+                chartSpec={chartSpecs[zoomedChartIndex]} 
+                data={localData}
+                chartIndex={zoomedChartIndex}
+                datasetId={datasetId}
+                onChartFixed={handleChartFixed}
+                onFixingStatusChange={(isFixing) => setShowFixNotification(isFixing)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Dataset Preview Modal */}
       {showDatasetPreview && previewData && (
         <div className="fullscreen-modal" onClick={() => setShowDatasetPreview(false)}>
@@ -722,17 +802,26 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
             {(!isLoading || chartSpecs.length > 0) && (
                     <div className="chart-display">
                       {chartSpecs.length > 0 ? (
-                        chartSpecs.map((spec, index) => (
-                          <PlotlyChartRenderer 
-                            key={`chart-${index}`}
-                            chartSpec={spec} 
-                            data={localData}
-                            chartIndex={index}
-                            datasetId={datasetId}
-                            onChartFixed={handleChartFixed}
-                            onFixingStatusChange={(isFixing) => setShowFixNotification(isFixing)}
-                          />
-                        ))
+                        <div style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fill, minmax(1000px, 1fr))',
+                          gap: '24px',
+                          padding: '20px',
+                          alignItems: 'start'
+                        }}>
+                          {chartSpecs.map((spec, index) => (
+                            <PlotlyChartRenderer 
+                              key={`chart-${index}`}
+                              chartSpec={spec} 
+                              data={localData}
+                              chartIndex={index}
+                              datasetId={datasetId}
+                              onChartFixed={handleChartFixed}
+                              onFixingStatusChange={(isFixing) => setShowFixNotification(isFixing)}
+                              onZoom={handleChartZoom}
+                            />
+                          ))}
+                        </div>
                       ) : (
                         <div className="empty-state">
                           <p>Ask a question about your data to generate a visualization</p>

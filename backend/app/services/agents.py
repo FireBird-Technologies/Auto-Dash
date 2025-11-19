@@ -704,11 +704,17 @@ def clean_plotly_code(code: str) -> str:
     # Remove any remaining markdown artifacts
     cleaned = cleaned.replace('```', '')
     
-    # Remove fig.show() calls
-    cleaned = re.sub(r'fig\.show\(\s*\)', '', cleaned)
+    # Remove fig.show() calls - enhanced regex to catch all variations
+    cleaned = re.sub(r'fig\.show\s*\(\s*\)', '', cleaned)  # fig.show()
+    cleaned = re.sub(r'fig\.show\s*\([^)]*\)', '', cleaned)  # fig.show(renderer='browser')
+    cleaned = re.sub(r'\.show\s*\(\s*\)', '', cleaned)  # .show() on any variable
     
     # Remove fig.write_html() calls
     cleaned = re.sub(r'fig\.write_html\([^)]*\)', '', cleaned)
+    
+    # Remove any plotly.io.show() calls
+    cleaned = re.sub(r'plotly\.io\.show\([^)]*\)', '', cleaned)
+    cleaned = re.sub(r'pio\.show\([^)]*\)', '', cleaned)
     
     # Remove data loading code - df already exists, never create or load it
     cleaned = re.sub(r'(data|df)\s*=\s*pd\.read_csv\([^)]*\)', '# Data already loaded', cleaned)

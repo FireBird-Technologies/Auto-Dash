@@ -7,9 +7,47 @@ interface PlotlyChartRendererProps {
   data: any[];
   chartIndex?: number;
   datasetId?: string;
-  onChartFixed?: (chartIndex: number, fixedCode: string) => void;
+  onChartFixed?: (chartIndex: number, fixedCode: string, figureData?: any) => void;
   onFixingStatusChange?: (isFixing: boolean) => void;
+  onZoom?: (chartIndex: number) => void;
 }
+
+// Helper function to sanitize verbose Plotly error messages
+const sanitizeErrorMessage = (error: string): string => {
+  // Extract the main error message, removing verbose Plotly details
+  if (error.includes('Invalid property specified')) {
+    const match = error.match(/Invalid property specified[^:]+:\s*['"]([^'"]+)['"]/);
+    if (match) {
+      return `Invalid property "${match[1]}" used in chart configuration.`;
+    }
+    return 'Invalid property used in chart configuration.';
+  }
+  
+  // Handle "Did you mean" suggestions
+  if (error.includes('Did you mean')) {
+    const suggestionMatch = error.match(/Did you mean\s+["']([^"']+)["']/);
+    if (suggestionMatch) {
+      return `Chart configuration error. Did you mean "${suggestionMatch[1]}"?`;
+    }
+  }
+  
+  // Handle "Bad property path" errors
+  if (error.includes('Bad property path')) {
+    const pathMatch = error.match(/Bad property path:\s*([^\n]+)/);
+    if (pathMatch) {
+      return `Invalid chart property: ${pathMatch[1].trim()}`;
+    }
+    return 'Invalid chart property configuration.';
+  }
+  
+  // For other errors, show first line or truncate
+  const firstLine = error.split('\n')[0];
+  if (firstLine.length > 150) {
+    return firstLine.substring(0, 150) + '...';
+  }
+  
+  return firstLine;
+};
 
 export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({ 
   chartSpec, 
@@ -17,7 +55,8 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
   chartIndex = 0,
   datasetId,
   onChartFixed,
-  onFixingStatusChange
+  onFixingStatusChange,
+  onZoom
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
@@ -25,6 +64,7 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
   // Track if ANY fix was attempted (not just specific error messages)
   const fixAttemptedRef = useRef<boolean>(false);
   const lastChartIndexRef = useRef<number>(chartIndex);
+  const originalErrorRef = useRef<string | null>(null); // Store original error for fixing
 
   useEffect(() => {
     if (!chartSpec) return;
@@ -38,7 +78,6 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
 
     // Don't reset fix flag on every render - this was causing the loop!
     setRenderError(null);
-    setIsFixing(false);
 
     console.log(`Chart ${chartIndex} - Data length:`, data.length);
     console.log(`Chart ${chartIndex} - Fix attempted:`, fixAttemptedRef.current);
@@ -54,14 +93,20 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
         throw new Error('No figure data available');
       }
     } catch (error: any) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown rendering error';
+      const rawErrorMessage = error instanceof Error ? error.message : 'Unknown rendering error';
+      const errorMessage = sanitizeErrorMessage(rawErrorMessage);
+      
+      // Store original error for fixing (backend needs full details)
+      originalErrorRef.current = rawErrorMessage;
+      
       console.error(`Chart ${chartIndex} - Error rendering:`, error);
       setRenderError(errorMessage);
       
       // Show fixing message and attempt to fix (only if not already attempted)
             if (!fixAttemptedRef.current) {
               console.log(`Chart ${chartIndex}: First error, attempting fix`);
-              attemptFix(errorMessage, chartSpec);
+              // Pass original error to fix endpoint for better debugging
+              attemptFix(originalErrorRef.current || errorMessage, chartSpec);
             } else {
               console.log(`Chart ${chartIndex}: Fix already attempted, showing error`);
             }
@@ -122,9 +167,9 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
         setFigureData(result.figure);
         setRenderError(null);
         
-        // Optionally notify parent with the fixed code
+        // Notify parent with the fixed code AND figure data to update dashboard
         if (onChartFixed && result.fixed_complete_code) {
-          onChartFixed(chartIndex, result.fixed_complete_code);
+          onChartFixed(chartIndex, result.fixed_complete_code, result.figure);
         }
       } else if (result.fixed_complete_code) {
         // Fallback if no figure returned
@@ -143,37 +188,42 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
     }
   };
 
+  const handleChartClick = () => {
+    if (onZoom && figureData) {
+      onZoom(chartIndex);
+    }
+  };
+
   return (
     <div 
       ref={containerRef}
       className="plotly-chart-container"
+      onClick={handleChartClick}
       style={{
         width: '100%',
-        height: '100%',
-        minHeight: '600px',
-        position: 'relative'
+        maxWidth: '1000px',
+        height: '800px',
+        minHeight: '800px',
+        position: 'relative',
+        border: '1px solid rgba(0, 0, 0, 0.1)',
+        borderRadius: '8px',
+        padding: '12px',
+        backgroundColor: '#ffffff',
+        cursor: 'pointer',
+        transition: 'all 0.2s ease',
+        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)'
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.2)';
+        e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.1)';
+        e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.05)';
       }}
     >
-      {/* Render error or chart */}
-      {renderError ? (
-        <div style={{ 
-          padding: '40px', 
-          textAlign: 'center', 
-          color: '#d32f2f', 
-          background: 'linear-gradient(135deg, #fff5f7, #ffe4e6)', 
-          borderRadius: '16px', 
-          margin: '20px',
-          border: '1px solid rgba(255, 107, 107, 0.15)'
-        }}>
-          <h3 style={{ margin: '0 0 10px 0', fontSize: '18px', fontWeight: '600' }}>⚠️ Visualization Error</h3>
-          <p style={{ margin: '0', fontSize: '14px', color: '#666' }}>{renderError}</p>
-          <p style={{ margin: '10px 0 0 0', fontSize: '12px', color: '#999' }}>Try rephrasing your query or asking for a different type of visualization.</p>
-        </div>
-      ) : !figureData ? (
-        <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
-          <p>Loading chart...</p>
-        </div>
-      ) : (
+      {/* Render chart */}
+      {figureData && (
         <Plot
           data={figureData.data || []}
           layout={{

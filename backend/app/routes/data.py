@@ -1080,7 +1080,7 @@ async def fix_visualization_error(
         start_time = datetime.now()
         logger.info(f"Code fixing started at: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-        refine_fixer = dspy.Refine(module=dspy.Predict(fix_plotly), reward_fn=plotly_fix_metric, N=3, threshold=0.3)
+        refine_fixer = dspy.Refine(module=dspy.Predict(fix_plotly), reward_fn=plotly_fix_metric, N=5, threshold=0.3)
         logger.info("Refine fixer instantiated with dspy.Predict(fix_plotly)")
 
         def run_refine_fixer():
@@ -1122,6 +1122,9 @@ async def fix_visualization_error(
             # If cannot localize, return the fix as whole
             stitched_code = fix_code
         
+        # Clean the stitched code again to ensure no fig.show() calls remain
+        stitched_code = clean_plotly_code(stitched_code)
+        
         # Execute the fixed code to get figure data
         figure_data = None
         execution_success = False
@@ -1140,7 +1143,7 @@ async def fix_visualization_error(
                         execution_success = True
                         logger.info(f"Successfully executed fixed code for chart")
                     else:
-                        logger.warning(f"Fixed code execution failed: {execution_result.get('error')}")
+                        logger.warning(f"Fixed code execution failed: {execution_result.get('error')[:200]}")
                 else:
                     logger.warning(f"Dataset not found for user {current_user.id}, dataset_id: {request.dataset_id}")
             except Exception as exec_error:
