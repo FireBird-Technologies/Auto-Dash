@@ -32,7 +32,7 @@ class plotly_editor(dspy.Signature):
     user_query = dspy.InputField(desc="edits the user needs to make")
     plotly_code = dspy.InputField(desc="The initial plotly code")
     dataset_context = dspy.InputField(desc="Context of the dataset ")
-    edited_code = dspy.OutputField(desc="Edited code")
+    edited_code = dspy.OutputField(desc="Edited code", prefix="```python")
     reasoning = dspy.OutputField(desc="Why did you make these edits explain")
 
 class fig_editor(dspy.Signature):

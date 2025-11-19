@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@types/d3": "^7.4.3",
+    "@types/react-syntax-highlighter": "^15.5.13",
     "d3": "^7.8.5",
     "html2canvas": "^1.4.1",
     "jspdf": "^3.0.3",
@@ -21,6 +22,7 @@
     "react-markdown": "^9.1.0",
     "react-plotly.js": "^2.6.0",
     "react-router-dom": "^6.20.0",
+    "react-syntax-highlighter": "^16.1.0",
     "remark-gfm": "^4.0.1",
     "xlsx": "^0.18.5"
   },

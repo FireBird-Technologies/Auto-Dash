@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 interface CodeBlockProps {
   language?: string;
@@ -8,22 +10,50 @@ interface CodeBlockProps {
 }
 
 const CodeBlock: React.FC<CodeBlockProps> = ({ language, children }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false); // Collapsed by default for multi-line
   const [copied, setCopied] = useState(false);
+  
+  // Check if code is multi-line
+  const codeString = String(children);
+  const isMultiLine = codeString.includes('\n') && codeString.trim().split('\n').length > 1;
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(children);
+    await navigator.clipboard.writeText(codeString);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
+  // For single-line code blocks, render without toggle header (subtle styling)
+  if (!isMultiLine) {
+    return (
+      <div style={{ margin: '4px 0' }}>
+        <SyntaxHighlighter
+          language={language || 'text'}
+          style={vscDarkPlus}
+          customStyle={{
+            margin: 0,
+            padding: '6px 10px',
+            borderRadius: '4px',
+            fontSize: '13px',
+            lineHeight: '1.4',
+            backgroundColor: '#1e1e1e'
+          }}
+          PreTag="div"
+        >
+          {codeString}
+        </SyntaxHighlighter>
+      </div>
+    );
+  }
+
+  // For multi-line code blocks, render with toggle header
   return (
     <div style={{
       margin: '12px 0',
-      border: '1px solid rgba(0, 0, 0, 0.1)',
+      border: '1px solid rgba(255, 255, 255, 0.1)',
       borderRadius: '8px',
       overflow: 'hidden',
-      backgroundColor: '#f8f9fa'
+      backgroundColor: '#1e1e1e'
     }}>
       {/* Header with language and controls */}
       <div style={{
@@ -31,8 +61,8 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, children }) => {
         justifyContent: 'space-between',
         alignItems: 'center',
         padding: '8px 12px',
-        backgroundColor: '#e9ecef',
-        borderBottom: '1px solid rgba(0, 0, 0, 0.1)',
+        backgroundColor: '#252526',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
         cursor: 'pointer',
         userSelect: 'none'
       }}
@@ -42,12 +72,12 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, children }) => {
           <span style={{ 
             fontSize: '12px', 
             fontWeight: '600', 
-            color: '#495057',
+            color: '#cccccc',
             textTransform: 'uppercase'
           }}>
             {language || 'code'}
           </span>
-          <span style={{ fontSize: '11px', color: '#6c757d' }}>
+          <span style={{ fontSize: '11px', color: '#858585' }}>
             {isExpanded ? '▼' : '▶'}
           </span>
         </div>
@@ -62,11 +92,11 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, children }) => {
             cursor: 'pointer',
             padding: '4px 8px',
             fontSize: '12px',
-            color: '#495057',
+            color: '#cccccc',
             borderRadius: '4px',
             transition: 'background 0.2s'
           }}
-          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0, 0, 0, 0.1)'}
+          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
           onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
         >
           {copied ? '✓ Copied' : 'Copy'}
@@ -75,17 +105,20 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, children }) => {
       
       {/* Code content */}
       {isExpanded && (
-        <pre style={{
-          margin: 0,
-          padding: '12px',
-          overflow: 'auto',
-          backgroundColor: '#ffffff',
-          fontSize: '13px',
-          lineHeight: '1.5',
-          fontFamily: 'Monaco, "Courier New", monospace'
-        }}>
-          <code>{children}</code>
-        </pre>
+        <SyntaxHighlighter
+          language={language || 'text'}
+          style={vscDarkPlus}
+          customStyle={{
+            margin: 0,
+            padding: '12px',
+            fontSize: '13px',
+            lineHeight: '1.5',
+            backgroundColor: '#1e1e1e'
+          }}
+          PreTag="div"
+        >
+          {codeString}
+        </SyntaxHighlighter>
       )}
     </div>
   );
@@ -100,7 +133,9 @@ export const MarkdownMessage: React.FC<MarkdownMessageProps> = ({ content }) => 
     <div style={{
       lineHeight: '1.6',
       fontSize: '14px',
-      color: '#212529'
+      color: '#212529',
+      width: '100%',
+      maxWidth: '100%'
     }}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
@@ -109,14 +144,16 @@ export const MarkdownMessage: React.FC<MarkdownMessageProps> = ({ content }) => 
             const match = /language-(\w+)/.exec(className || '');
             const language = match ? match[1] : '';
             
-            if (!inline && language) {
+            // Render as CodeBlock for any non-inline code (with or without language)
+            if (!inline) {
               return (
-                <CodeBlock language={language}>
+                <CodeBlock language={language || undefined}>
                   {String(children).replace(/\n$/, '')}
                 </CodeBlock>
               );
             }
             
+            // Inline code
             return (
               <code className={className} {...props} style={{
                 backgroundColor: '#f1f3f5',

@@ -60,6 +60,7 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [figureData, setFigureData] = useState<any>(null);
+  const [isFixing, setIsFixing] = useState<boolean>(false);
   // Track if ANY fix was attempted (not just specific error messages)
   const fixAttemptedRef = useRef<boolean>(false);
   const lastChartIndexRef = useRef<number>(chartIndex);
@@ -127,6 +128,9 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
         plotlyCode = chartSpec.chart_spec || chartSpec.plotly_code || JSON.stringify(chartSpec);
       }
 
+      // Set loading state
+      setIsFixing(true);
+      
       // Notify parent that we're fixing
       if (onFixingStatusChange) {
         onFixingStatusChange(true);
@@ -148,6 +152,9 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
       }
 
       const result = await response.json();
+      
+      // Clear loading state
+      setIsFixing(false);
       
       // Notify parent that fixing is done
       if (onFixingStatusChange) {
@@ -174,6 +181,7 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
       }
     } catch (err) {
       console.error(`Chart ${chartIndex}: Failed to fix visualization:`, err);
+      setIsFixing(false);
       if (onFixingStatusChange) {
         onFixingStatusChange(false);
       }
@@ -214,6 +222,42 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
         e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.05)';
       }}
     >
+      {/* Loading overlay when fixing */}
+      {isFixing && (
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(255, 255, 255, 0.9)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          borderRadius: '8px',
+          backdropFilter: 'blur(2px)'
+        }}>
+          <div style={{
+            width: '40px',
+            height: '40px',
+            border: '4px solid #f3f3f3',
+            borderTop: '4px solid #3498db',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite'
+          }} />
+          <p style={{
+            marginTop: '16px',
+            fontSize: '14px',
+            color: '#666',
+            fontWeight: '500'
+          }}>
+            Fixing chart...
+          </p>
+        </div>
+      )}
+      
       {/* Render chart */}
       {figureData && (
         <Plot
