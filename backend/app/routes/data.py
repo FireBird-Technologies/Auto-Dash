@@ -1261,6 +1261,64 @@ async def get_dashboard_count(
     }
 
 
+@router.post("/execute-code")
+async def execute_code(
+    request: Dict[str, Any],
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Execute code from chat endpoint - either plotly edit or analysis code.
+    """
+    code = request.get("code")
+    dataset_id = request.get("dataset_id")
+    code_type = request.get("code_type")
+    
+    if not code or not code_type or not dataset_id:
+        raise HTTPException(status_code=400, detail="Missing required parameters")
+    
+    df = dataset_service.get_dataset(current_user.id, dataset_id)
+    if df is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    
+    if code_type == "plotly_edit":
+        # Use the same function as /analyze
+        from ..services.chart_creator import execute_plotly_code
+        
+        try:
+            fig_json = execute_plotly_code(code, df)
+            return {
+                "success": True,
+                "code_type": "plotly_edit",
+                "figure": fig_json
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "code_type": "plotly_edit",
+                "error": str(e)
+            }
+    
+    elif code_type == "analysis":
+        # Simple exec for analysis code
+        try:
+            exec_globals = {'pd': pd, 'np': np, 'json': json, 'data': df, 'df': df if not isinstance(df, dict) else None}
+            exec(code, exec_globals)
+            result = exec_globals.get("result", "Code executed successfully")
+            return {
+                "success": True,
+                "code_type": "analysis",
+                "result": str(result)
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "code_type": "analysis",
+                "error": str(e)
+            }
+    
+    raise HTTPException(status_code=400, detail=f"Invalid code_type: {code_type}")
+
+
 @router.get("/datasets/{dataset_id}/charts/{chart_index}")
 async def get_chart_info(
     dataset_id: str,

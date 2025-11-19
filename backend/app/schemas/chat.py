@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Literal
 
 
 class ChatRequest(BaseModel):
@@ -13,6 +13,8 @@ class ChatResponse(BaseModel):
     reply: str
     user: str | None = None
     matched_chart: Optional[Dict[str, Any]] = None
+    code_type: Optional[Literal['plotly_edit', 'analysis']] = None
+    executable_code: Optional[str] = None
 
 
 class FixVisualizationRequest(BaseModel):
