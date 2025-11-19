@@ -96,7 +96,7 @@ async def chat(
         if hasattr(response_obj, 'answer'):
             reply = str(response_obj.answer)
         elif hasattr(response_obj, 'edited_code'):
-            reply = f"Edited code:\n{str(response_obj.edited_code)}"
+            reply = f"```python:\n{str(response_obj.edited_code)}"+"```"
             if hasattr(response_obj, 'reasoning'):
                 reply = f"{str(response_obj.reasoning)}\n\n{reply}"
         elif hasattr(response_obj, 'analysis_code'):

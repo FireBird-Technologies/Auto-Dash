@@ -2250,6 +2250,14 @@ body {
   flex-direction: row-reverse;
 }
 
+.assistant-message {
+  width: 100%;
+}
+
+.assistant-message .chat-bubble {
+  flex: 1;
+}
+
 /* Chat Avatars */
 .chat-avatar {
   width: 36px;
@@ -2302,6 +2310,8 @@ body {
   border: 1px solid #e5e7eb;
   color: var(--aa-text);
   border-bottom-left-radius: 4px;
+  max-width: 100%;
+  width: 100%;
 }
 
 .error-bubble {

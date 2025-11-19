@@ -26,3 +26,4 @@ dmypy.json
 app/schemas/__pycache__/
 app/services/__pycache__/
 **/__pycache__/
+
