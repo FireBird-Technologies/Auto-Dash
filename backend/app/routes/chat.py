@@ -131,14 +131,23 @@ async def chat(
         
         # Format the reply based on response type
         reply = ""
+        code_type = None
+        executable_code = None
+        
         if hasattr(response_obj, 'answer'):
             reply = str(response_obj.answer)
         elif hasattr(response_obj, 'edited_code'):
-            reply = f"```python:\n{str(response_obj.edited_code)}"
+            # Plotly edit code
+            code_type = 'plotly_edit'
+            executable_code = str(response_obj.edited_code)
+            reply = f"```python\n{executable_code}\n```"
             if hasattr(response_obj, 'reasoning'):
                 reply = f"{str(response_obj.reasoning)}\n\n{reply}"
         elif hasattr(response_obj, 'analysis_code'):
-            reply = f"Analysis:\n{str(response_obj.analysis_code)}"
+            # Analysis code
+            code_type = 'analysis'
+            executable_code = str(response_obj.analysis_code)
+            reply = f"```python\n{executable_code}\n```"
         else:
             # Fallback: convert response to string
             reply = str(response_obj)
@@ -146,7 +155,9 @@ async def chat(
         return ChatResponse(
             reply=reply,
             user=str(current_user.id),
-            matched_chart=matched_chart_info
+            matched_chart=matched_chart_info,
+            code_type=code_type,
+            executable_code=executable_code
         )
         
     except Exception as e:

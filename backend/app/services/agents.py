@@ -70,7 +70,7 @@ class chat_function(dspy.Module):
 
         
         
-    async def aforward(self, user_query, data_context,plotly_code):
+    async def aforward(self, user_query, fig_data, data_context,plotly_code):
         route = self.router(user_query=user_query)
         
         if 'data_query' in route.query_type:

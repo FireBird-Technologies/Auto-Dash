@@ -20,7 +20,13 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   const [isLoading, setIsLoading] = useState(false);
   const [chartSpecs, setChartSpecs] = useState<any[]>([]);  // Changed to array
   const [error, setError] = useState<string | null>(null);
-  const [chatHistory, setChatHistory] = useState<Array<{type: 'user' | 'assistant', message: string, matchedChart?: {index: number, type: string, title: string}}>>([]);
+  const [chatHistory, setChatHistory] = useState<Array<{
+    type: 'user' | 'assistant', 
+    message: string, 
+    matchedChart?: {index: number, type: string, title: string},
+    codeType?: 'plotly_edit' | 'analysis',
+    executableCode?: string
+  }>>([]);
   const [contextPrepared, setContextPrepared] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(320);
@@ -36,6 +42,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   const downloadMenuRef = useRef<HTMLDivElement>(null);
   const [showFixNotification, setShowFixNotification] = useState(false);
   const [zoomedChartIndex, setZoomedChartIndex] = useState<number | null>(null);
+  const [chartPreview, setChartPreview] = useState<{chartIndex: number, figure: any, code: string} | null>(null);
+  const [isExecutingCode, setIsExecutingCode] = useState(false);
 
   // Update local data when prop changes
   useEffect(() => {
@@ -169,6 +177,135 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     setZoomedChartIndex(chartIndex);
   };
 
+  // Execute analysis code
+  const executeAnalysisCode = async (code: string) => {
+    setIsExecutingCode(true);
+    try {
+      const response = await fetch(`${config.backendUrl}/api/data/execute-code`, {
+        method: 'POST',
+        headers: getAuthHeaders({
+          'Content-Type': 'application/json',
+        }),
+        credentials: 'include',
+        body: JSON.stringify({
+          code: code,
+          dataset_id: datasetId,
+          code_type: 'analysis'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to execute analysis code');
+      }
+
+      const result = await response.json();
+      
+      // Add result to chat
+      if (result.success) {
+        setChatHistory(prev => [...prev, {
+          type: 'assistant',
+          message: `**Analysis Result:**\n\n${result.result}`
+        }]);
+      } else {
+        setChatHistory(prev => [...prev, {
+          type: 'assistant',
+          message: `**Error:**\n\n${result.error}`
+        }]);
+      }
+    } catch (error) {
+      console.error('Error executing analysis:', error);
+      setChatHistory(prev => [...prev, {
+        type: 'assistant',
+        message: `**Error:** ${error instanceof Error ? error.message : 'Failed to execute analysis'}`
+      }]);
+    } finally {
+      setIsExecutingCode(false);
+    }
+  };
+
+  // Execute Plotly edit code
+  const executePlotlyEdit = async (code: string, chartIndex: number) => {
+    setIsExecutingCode(true);
+    try {
+      const response = await fetch(`${config.backendUrl}/api/data/execute-code`, {
+        method: 'POST',
+        headers: getAuthHeaders({
+          'Content-Type': 'application/json',
+        }),
+        credentials: 'include',
+        body: JSON.stringify({
+          code: code,
+          dataset_id: datasetId,
+          code_type: 'plotly_edit'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to execute plotly code');
+      }
+
+      const result = await response.json();
+      
+      if (result.success) {
+        // Set preview
+        setChartPreview({
+          chartIndex: chartIndex,
+          figure: result.figure,
+          code: code
+        });
+      } else {
+        setChatHistory(prev => [...prev, {
+          type: 'assistant',
+          message: `**Error:** Failed to execute code`
+        }]);
+      }
+    } catch (error) {
+      console.error('Error executing plotly edit:', error);
+      setChatHistory(prev => [...prev, {
+        type: 'assistant',
+        message: `**Error:** ${error instanceof Error ? error.message : 'Failed to execute code'}`
+      }]);
+    } finally {
+      setIsExecutingCode(false);
+    }
+  };
+
+  // Apply chart preview
+  const applyChartPreview = () => {
+    if (!chartPreview) return;
+    
+    // Update chart specs with new figure
+    setChartSpecs(prev => {
+      const newSpecs = [...prev];
+      if (newSpecs[chartPreview.chartIndex]) {
+        newSpecs[chartPreview.chartIndex] = {
+          ...newSpecs[chartPreview.chartIndex],
+          figure: chartPreview.figure,
+          chart_spec: chartPreview.code
+        };
+      }
+      return newSpecs;
+    });
+    
+    // Clear preview
+    setChartPreview(null);
+    
+    // Add success message
+    setChatHistory(prev => [...prev, {
+      type: 'assistant',
+      message: '✓ Chart updated successfully!'
+    }]);
+  };
+
+  // Discard chart preview
+  const discardChartPreview = () => {
+    setChartPreview(null);
+    setChatHistory(prev => [...prev, {
+      type: 'assistant',
+      message: 'Chart preview discarded.'
+    }]);
+  };
+
   const generateChart = async (userQuery: string) => {
     if (!userQuery.trim()) return;
     
@@ -251,7 +388,9 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
           return [...newHistory, { 
             type: 'assistant', 
             message: result.reply,
-            matchedChart: result.matched_chart
+            matchedChart: result.matched_chart,
+            codeType: result.code_type,
+            executableCode: result.executable_code
           }];
         });
         
@@ -663,7 +802,60 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                       </div>
                     )}
                     {msg.type === 'assistant' ? (
-                      <MarkdownMessage content={msg.message} />
+                      <>
+                        <MarkdownMessage content={msg.message} />
+                        {msg.codeType && msg.executableCode && (
+                          <div style={{ marginTop: '12px' }}>
+                            <button
+                              onClick={() => {
+                                if (msg.codeType === 'plotly_edit' && msg.matchedChart) {
+                                  executePlotlyEdit(msg.executableCode!, msg.matchedChart.index);
+                                } else if (msg.codeType === 'analysis') {
+                                  executeAnalysisCode(msg.executableCode!);
+                                }
+                              }}
+                              disabled={isExecutingCode}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                padding: '8px 16px',
+                                backgroundColor: isExecutingCode ? '#6b7280' : '#6366f1',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '8px',
+                                fontSize: '14px',
+                                fontWeight: '500',
+                                cursor: isExecutingCode ? 'not-allowed' : 'pointer',
+                                transition: 'all 0.2s',
+                                opacity: isExecutingCode ? 0.6 : 1
+                              }}
+                              onMouseEnter={(e) => {
+                                if (!isExecutingCode) {
+                                  e.currentTarget.style.backgroundColor = '#4f46e5';
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                if (!isExecutingCode) {
+                                  e.currentTarget.style.backgroundColor = '#6366f1';
+                                }
+                              }}
+                            >
+                              {isExecutingCode ? (
+                                <>
+                                  <span>⏳</span>
+                                  <span>Running...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <span>▶</span>
+                                  <span>{msg.codeType === 'plotly_edit' ? 'Run Code' : 'Run Analysis'}</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        )}
+                      </>
                     ) : (
                       msg.message
                     )}
@@ -869,6 +1061,164 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
         </main>
       </div>
       </div>
+
+      {/* Chart Preview Modal */}
+      {chartPreview && (
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10000,
+            padding: '20px'
+          }}
+          onClick={discardChartPreview}
+        >
+          <div 
+            style={{
+              backgroundColor: 'white',
+              borderRadius: '16px',
+              maxWidth: '1600px',
+              width: '100%',
+              maxHeight: '90vh',
+              overflow: 'auto',
+              padding: '32px',
+              position: 'relative'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ marginBottom: '24px' }}>
+              <h2 style={{ margin: '0 0 8px 0', fontSize: '24px', fontWeight: 600 }}>
+                Chart Preview
+              </h2>
+              <p style={{ margin: 0, color: '#666', fontSize: '14px' }}>
+                Preview the updated chart before applying changes
+              </p>
+            </div>
+
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(500px, 1fr))',
+              gap: '24px',
+              marginBottom: '24px'
+            }}>
+              {/* Original Chart */}
+              <div style={{
+                border: '2px solid #e5e7eb',
+                borderRadius: '12px',
+                padding: '16px',
+                backgroundColor: '#f9fafb'
+              }}>
+                <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: 600, color: '#6b7280' }}>
+                  Original Chart
+                </h3>
+                <div style={{ minHeight: '400px' }}>
+                  {chartSpecs[chartPreview.chartIndex] && (
+                    <PlotlyChartRenderer 
+                      chartSpec={chartSpecs[chartPreview.chartIndex]} 
+                      data={localData}
+                      chartIndex={chartPreview.chartIndex}
+                      datasetId={datasetId}
+                      onChartFixed={handleChartFixed}
+                      onFixingStatusChange={() => {}}
+                      onZoom={() => {}}
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* Preview Chart */}
+              <div style={{
+                border: '2px solid #6366f1',
+                borderRadius: '12px',
+                padding: '16px',
+                backgroundColor: '#eef2ff'
+              }}>
+                <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: 600, color: '#6366f1' }}>
+                  Preview (New)
+                </h3>
+                <div style={{ minHeight: '400px' }}>
+                  <PlotlyChartRenderer 
+                    chartSpec={{
+                      ...chartSpecs[chartPreview.chartIndex],
+                      figure: chartPreview.figure,
+                      chart_spec: chartPreview.code
+                    }} 
+                    data={localData}
+                    chartIndex={chartPreview.chartIndex}
+                    datasetId={datasetId}
+                    onChartFixed={handleChartFixed}
+                    onFixingStatusChange={() => {}}
+                    onZoom={() => {}}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{
+              display: 'flex',
+              gap: '12px',
+              justifyContent: 'flex-end',
+              paddingTop: '16px',
+              borderTop: '1px solid #e5e7eb'
+            }}>
+              <button
+                onClick={discardChartPreview}
+                style={{
+                  padding: '12px 24px',
+                  backgroundColor: 'white',
+                  color: '#374151',
+                  border: '2px solid #e5e7eb',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#f3f4f6';
+                  e.currentTarget.style.borderColor = '#d1d5db';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'white';
+                  e.currentTarget.style.borderColor = '#e5e7eb';
+                }}
+              >
+                ✗ Discard
+              </button>
+              <button
+                onClick={applyChartPreview}
+                style={{
+                  padding: '12px 24px',
+                  backgroundColor: '#6366f1',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#4f46e5';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#6366f1';
+                }}
+              >
+                ✓ Apply Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

@@ -22,6 +22,8 @@ export interface ChatResponse {
     type: string;
     title: string;
   };
+  code_type?: 'plotly_edit' | 'analysis';
+  executable_code?: string;
 }
 
 /**
