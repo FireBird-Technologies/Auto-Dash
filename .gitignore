@@ -33,3 +33,5 @@ htmlcov/
 dmypy.json
 
 frontend/dist/assets/
+
+frontend/dist/assets
