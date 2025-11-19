@@ -31,7 +31,8 @@ from ..core.security import get_current_user
 from ..models import User, Dataset as DatasetModel
 from ..services.dataset_service import dataset_service
 from ..schemas.chat import FixVisualizationRequest
-from ..services.agents import fix_plotly
+from ..services.agents import fix_plotly, clean_plotly_code
+from ..services.chart_creator import execute_plotly_code
 import logging
 import re
 import dspy
@@ -1057,14 +1058,15 @@ async def fix_visualization_error(
 ):
     """
     Fix a failed visualization by analyzing the error and regenerating corrected Plotly code.
+    Executes the fixed code and returns the figure data for immediate display.
     
     Args:
-        request: Contains the original Plotly code and error message
+        request: Contains the original Plotly code, error message, and dataset_id
         current_user: Authenticated user
         db: Database session
     
     Returns:
-        Fixed Plotly code or error information
+        Fixed Plotly code AND executed figure data for immediate display
     """
     try:
         # Extract error context (5 lines above/below error)
@@ -1093,11 +1095,8 @@ async def fix_visualization_error(
         response = await asyncio.to_thread(run_refine_fixer)
         fix_code = response.fix
         
-        # Strip markdown formatting if present
-        if fix_code.startswith('```python'):
-            fix_code = fix_code.replace('```python', '').replace('```', '').strip()
-        elif fix_code.startswith('```'):
-            fix_code = fix_code.replace('```', '').strip()
+        # Clean the fixed code using the utility function
+        fix_code = clean_plotly_code(fix_code)
 
         # Stitch the fix to the original code at the error location
         original_lines = request.plotly_code.splitlines()
@@ -1123,10 +1122,36 @@ async def fix_visualization_error(
             # If cannot localize, return the fix as whole
             stitched_code = fix_code
         
+        # Execute the fixed code to get figure data
+        figure_data = None
+        execution_success = False
+        
+        if request.dataset_id:
+            try:
+                # Get the dataset
+                df = dataset_service.get_dataset(current_user.id, request.dataset_id)
+                
+                if df is not None:
+                    # Execute the fixed code
+                    execution_result = execute_plotly_code(stitched_code, df)
+                    
+                    if execution_result.get('success'):
+                        figure_data = execution_result.get('figure')
+                        execution_success = True
+                        logger.info(f"Successfully executed fixed code for chart")
+                    else:
+                        logger.warning(f"Fixed code execution failed: {execution_result.get('error')}")
+                else:
+                    logger.warning(f"Dataset not found for user {current_user.id}, dataset_id: {request.dataset_id}")
+            except Exception as exec_error:
+                logger.error(f"Error executing fixed code: {str(exec_error)}")
+        
         logger.info("Extracted error context for Plotly code fix")
         
         return {
-            "fixed_complete_code": stitched_code,  
+            "fixed_complete_code": stitched_code,
+            "figure": figure_data,
+            "execution_success": execution_success,
             "user_id": current_user.id,
             "fix_failed": False
         }

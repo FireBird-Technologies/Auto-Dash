@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { PlotlyChartRenderer } from '../PlotlyChartRenderer';
+import { FixNotification } from '../FixNotification';
 import { config, getAuthHeaders } from '../../config';
 
 type Row = Record<string, number | string>;
@@ -32,6 +33,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   const hasGeneratedInitialChart = useRef(false);
   const visualizationRef = useRef<HTMLDivElement>(null);
   const downloadMenuRef = useRef<HTMLDivElement>(null);
+  const [showFixNotification, setShowFixNotification] = useState(false);
 
   // Update local data when prop changes
   useEffect(() => {
@@ -142,6 +144,9 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   // Callback to handle when a specific chart is fixed
   const handleChartFixed = (chartIndex: number, fixedCode: string) => {
     console.log(`Updating chart ${chartIndex} with fixed code`);
+    // Dismiss the notification when fix is complete
+    setShowFixNotification(false);
+    
     setChartSpecs(prevSpecs => {
       const newSpecs = [...prevSpecs];
       if (newSpecs[chartIndex]) {
@@ -441,6 +446,11 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
 
   return (
     <>
+      <FixNotification 
+        show={showFixNotification} 
+        onDismiss={() => setShowFixNotification(false)} 
+      />
+      
       {/* Fullscreen Modal */}
       {isFullscreen && (
         <div className="fullscreen-modal" onClick={() => setIsFullscreen(false)}>
@@ -458,7 +468,9 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                           chartSpec={spec} 
                           data={localData}
                           chartIndex={index}
+                          datasetId={datasetId}
                           onChartFixed={handleChartFixed}
+                          onFixingStatusChange={(isFixing) => setShowFixNotification(isFixing)}
                         />
                       ))}
                     </div>
@@ -716,7 +728,9 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                             chartSpec={spec} 
                             data={localData}
                             chartIndex={index}
+                            datasetId={datasetId}
                             onChartFixed={handleChartFixed}
+                            onFixingStatusChange={(isFixing) => setShowFixNotification(isFixing)}
                           />
                         ))
                       ) : (

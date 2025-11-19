@@ -2164,6 +2164,27 @@ body {
   50% { opacity: 0.6; }
 }
 
+/* Fix notification animations */
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(400px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
 /* Chat Messages Container */
 .chat-messages {
   flex: 1;

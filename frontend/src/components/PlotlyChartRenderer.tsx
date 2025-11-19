@@ -6,18 +6,21 @@ interface PlotlyChartRendererProps {
   chartSpec: any;
   data: any[];
   chartIndex?: number;
+  datasetId?: string;
   onChartFixed?: (chartIndex: number, fixedCode: string) => void;
+  onFixingStatusChange?: (isFixing: boolean) => void;
 }
 
 export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({ 
   chartSpec, 
   data, 
   chartIndex = 0,
-  onChartFixed
+  datasetId,
+  onChartFixed,
+  onFixingStatusChange
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
-  const [isFixing, setIsFixing] = useState(false);
   const [figureData, setFigureData] = useState<any>(null);
   // Track if ANY fix was attempted (not just specific error messages)
   const fixAttemptedRef = useRef<boolean>(false);
@@ -56,22 +59,17 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
       setRenderError(errorMessage);
       
       // Show fixing message and attempt to fix (only if not already attempted)
-      if (!fixAttemptedRef.current) {
-        console.log(`Chart ${chartIndex}: First error, attempting fix`);
-        showFixingMessage();
-        attemptFix(errorMessage, chartSpec);
-      } else {
-        console.log(`Chart ${chartIndex}: Fix already attempted, showing error`);
-      }
+            if (!fixAttemptedRef.current) {
+              console.log(`Chart ${chartIndex}: First error, attempting fix`);
+              attemptFix(errorMessage, chartSpec);
+            } else {
+              console.log(`Chart ${chartIndex}: Fix already attempted, showing error`);
+            }
     }
   }, [chartSpec, data, chartIndex]);
 
-  const showFixingMessage = () => {
-    setIsFixing(true);
-  };
 
   const attemptFix = async (errorMessage: string, chartSpec: any) => {
-    // Double-check the flag (race condition protection)
     if (fixAttemptedRef.current) {
       console.log(`Chart ${chartIndex}: Fix already attempted, skipping`);
       return;
@@ -81,7 +79,6 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
     console.log(`Chart ${chartIndex}: Attempting fix (this will only happen once)`);
     
     try {
-      // Extract Plotly code from chartSpec
       let plotlyCode = '';
       if (typeof chartSpec === 'string') {
         plotlyCode = chartSpec;
@@ -89,18 +86,19 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
         plotlyCode = chartSpec.chart_spec || chartSpec.plotly_code || JSON.stringify(chartSpec);
       }
 
-      showFixingMessage();
+      // Notify parent that we're fixing
+      if (onFixingStatusChange) {
+        onFixingStatusChange(true);
+      }
       
-      // Call fix-visualization endpoint
       const response = await fetch(`${config.backendUrl}/api/data/fix-visualization`, {
         method: 'POST',
-        headers: getAuthHeaders({
-          'Content-Type': 'application/json',
-        }),
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         credentials: 'include',
         body: JSON.stringify({
           plotly_code: plotlyCode,
-          error_message: errorMessage
+          error_message: errorMessage,
+          dataset_id: datasetId
         })
       });
 
@@ -109,65 +107,41 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
       }
 
       const result = await response.json();
-      setIsFixing(false);
+      
+      // Notify parent that fixing is done
+      if (onFixingStatusChange) {
+        onFixingStatusChange(false);
+      }
 
       if (result.fix_failed) {
         console.log(`Chart ${chartIndex}: Fix failed, will not retry`);
         setRenderError(errorMessage);
+      } else if (result.figure) {
+        // Display the fixed figure immediately
+        console.log(`Chart ${chartIndex}: Fix succeeded, displaying new figure`);
+        setFigureData(result.figure);
+        setRenderError(null);
+        
+        // Optionally notify parent with the fixed code
+        if (onChartFixed && result.fixed_complete_code) {
+          onChartFixed(chartIndex, result.fixed_complete_code);
+        }
       } else if (result.fixed_complete_code) {
-        console.log(`Chart ${chartIndex}: Fix succeeded`);
-        // Notify parent that chart was fixed
+        // Fallback if no figure returned
+        console.log(`Chart ${chartIndex}: Fix succeeded but no figure data`);
         if (onChartFixed) {
           onChartFixed(chartIndex, result.fixed_complete_code);
         }
-        
-        // Note: The fixed code needs to be re-executed on the backend
-        // For now, just show a message
         setRenderError('Chart fixed - please refresh to see the updated visualization');
       }
     } catch (err) {
       console.error(`Chart ${chartIndex}: Failed to fix visualization:`, err);
-      setIsFixing(false);
+      if (onFixingStatusChange) {
+        onFixingStatusChange(false);
+      }
       setRenderError(errorMessage);
     }
   };
-
-  if (isFixing) {
-    return (
-      <div style={{ padding: '40px', textAlign: 'center', color: '#1976d2', background: '#e3f2fd', borderRadius: '8px', margin: '20px' }}>
-        <div style={{ display: 'inline-block', marginBottom: '15px' }}>
-          <div style={{ width: '24px', height: '24px', border: '3px solid #1976d2', borderTop: '3px solid transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
-        </div>
-        <h3 style={{ margin: '0 0 10px 0', fontSize: '18px', color: '#1976d2' }}>🔧 Fixing visualization...</h3>
-        <p style={{ margin: '0', fontSize: '14px', color: '#666', fontWeight: '500' }}>Sorry for the wait, taking longer than expected</p>
-        <p style={{ margin: '10px 0 0 0', fontSize: '12px', color: '#999' }}>Our AI is analyzing the error and generating a fix.</p>
-        <style>{`
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-        `}</style>
-      </div>
-    );
-  }
-
-  if (renderError) {
-    return (
-      <div style={{ padding: '40px', textAlign: 'center', color: '#d32f2f', background: '#ffebee', borderRadius: '8px', margin: '20px' }}>
-        <h3 style={{ margin: '0 0 10px 0', fontSize: '18px' }}>⚠️ Visualization Error</h3>
-        <p style={{ margin: '0', fontSize: '14px', color: '#666' }}>{renderError}</p>
-        <p style={{ margin: '10px 0 0 0', fontSize: '12px', color: '#999' }}>Try rephrasing your query or asking for a different type of visualization.</p>
-      </div>
-    );
-  }
-
-  if (!figureData) {
-    return (
-      <div style={{ padding: '40px', textAlign: 'center' }}>
-        <p>Loading chart...</p>
-      </div>
-    );
-  }
 
   return (
     <div 
@@ -180,22 +154,43 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
         position: 'relative'
       }}
     >
-      <Plot
-        data={figureData.data || []}
-        layout={{
-          ...figureData.layout,
-          autosize: true,
-          margin: figureData.layout?.margin || { l: 60, r: 30, t: 80, b: 60 }
-        }}
-        config={{
-          responsive: true,
-          displayModeBar: true,
-          displaylogo: false,
-          modeBarButtonsToRemove: ['sendDataToCloud']
-        }}
-        style={{ width: '100%', height: '100%' }}
-        useResizeHandler={true}
-      />
+      {/* Render error or chart */}
+      {renderError ? (
+        <div style={{ 
+          padding: '40px', 
+          textAlign: 'center', 
+          color: '#d32f2f', 
+          background: 'linear-gradient(135deg, #fff5f7, #ffe4e6)', 
+          borderRadius: '16px', 
+          margin: '20px',
+          border: '1px solid rgba(255, 107, 107, 0.15)'
+        }}>
+          <h3 style={{ margin: '0 0 10px 0', fontSize: '18px', fontWeight: '600' }}>⚠️ Visualization Error</h3>
+          <p style={{ margin: '0', fontSize: '14px', color: '#666' }}>{renderError}</p>
+          <p style={{ margin: '10px 0 0 0', fontSize: '12px', color: '#999' }}>Try rephrasing your query or asking for a different type of visualization.</p>
+        </div>
+      ) : !figureData ? (
+        <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
+          <p>Loading chart...</p>
+        </div>
+      ) : (
+        <Plot
+          data={figureData.data || []}
+          layout={{
+            ...figureData.layout,
+            autosize: true,
+            margin: figureData.layout?.margin || { l: 60, r: 30, t: 80, b: 60 }
+          }}
+          config={{
+            responsive: true,
+            displayModeBar: true,
+            displaylogo: false,
+            modeBarButtonsToRemove: ['sendDataToCloud']
+          }}
+          style={{ width: '100%', height: '100%' }}
+          useResizeHandler={true}
+        />
+      )}
     </div>
   );
 };
