@@ -34,6 +34,12 @@ def execute_plotly_code(code: str, data: pd.DataFrame | Dict[str, pd.DataFrame])
         dict: Plotly figure as JSON
     """
     try:
+        # Import clean_plotly_code to ensure fig.show() is always removed
+        from .agents import clean_plotly_code
+        
+        # Clean the code first to remove fig.show() and other issues
+        code = clean_plotly_code(code)
+        
         # Create execution environment with necessary imports
         # For multi-sheet Excel, code should use: df = data['SheetName']
         # For CSV/single sheet, code can use: df = data or just data
@@ -57,6 +63,18 @@ def execute_plotly_code(code: str, data: pd.DataFrame | Dict[str, pd.DataFrame])
         except:
             pass
         
+        # Create no-op functions to prevent accidental show() calls
+        def noop_show(*args, **kwargs):
+            """No-op function to prevent show() from opening browser tabs"""
+            pass
+        
+        def noop_display(*args, **kwargs):
+            """No-op function to prevent display() calls"""
+            pass
+        
+        exec_globals['show'] = noop_show  # Prevent any show() calls
+        exec_globals['display'] = noop_display  # Prevent Jupyter display() calls
+        
         # Execute the code
         exec(code, exec_globals)
         
@@ -68,6 +86,16 @@ def execute_plotly_code(code: str, data: pd.DataFrame | Dict[str, pd.DataFrame])
         
         if not isinstance(fig, go.Figure):
             raise ValueError(f"'fig' is not a Plotly Figure object, got {type(fig)}")
+        
+        # Enforce max width (1000px) and height (800px) constraints
+        current_width = getattr(fig.layout, 'width', None) if fig.layout else None
+        current_height = getattr(fig.layout, 'height', None) if fig.layout else None
+        
+        # Set dimensions, ensuring they don't exceed max values
+        width = min(current_width, 1000) if current_width else 1000
+        height = min(current_height, 800) if current_height else 800
+        
+        fig.update_layout(width=width, height=height)
         
         # Convert figure to JSON
         fig_json = json.loads(fig.to_json())

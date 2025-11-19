@@ -6,22 +6,64 @@ interface PlotlyChartRendererProps {
   chartSpec: any;
   data: any[];
   chartIndex?: number;
-  onChartFixed?: (chartIndex: number, fixedCode: string) => void;
+  datasetId?: string;
+  onChartFixed?: (chartIndex: number, fixedCode: string, figureData?: any) => void;
+  onFixingStatusChange?: (isFixing: boolean) => void;
+  onZoom?: (chartIndex: number) => void;
 }
+
+// Helper function to sanitize verbose Plotly error messages
+const sanitizeErrorMessage = (error: string): string => {
+  // Extract the main error message, removing verbose Plotly details
+  if (error.includes('Invalid property specified')) {
+    const match = error.match(/Invalid property specified[^:]+:\s*['"]([^'"]+)['"]/);
+    if (match) {
+      return `Invalid property "${match[1]}" used in chart configuration.`;
+    }
+    return 'Invalid property used in chart configuration.';
+  }
+  
+  // Handle "Did you mean" suggestions
+  if (error.includes('Did you mean')) {
+    const suggestionMatch = error.match(/Did you mean\s+["']([^"']+)["']/);
+    if (suggestionMatch) {
+      return `Chart configuration error. Did you mean "${suggestionMatch[1]}"?`;
+    }
+  }
+  
+  // Handle "Bad property path" errors
+  if (error.includes('Bad property path')) {
+    const pathMatch = error.match(/Bad property path:\s*([^\n]+)/);
+    if (pathMatch) {
+      return `Invalid chart property: ${pathMatch[1].trim()}`;
+    }
+    return 'Invalid chart property configuration.';
+  }
+  
+  // For other errors, show first line or truncate
+  const firstLine = error.split('\n')[0];
+  if (firstLine.length > 150) {
+    return firstLine.substring(0, 150) + '...';
+  }
+  
+  return firstLine;
+};
 
 export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({ 
   chartSpec, 
   data, 
   chartIndex = 0,
-  onChartFixed
+  datasetId,
+  onChartFixed,
+  onFixingStatusChange,
+  onZoom
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [renderError, setRenderError] = useState<string | null>(null);
-  const [isFixing, setIsFixing] = useState(false);
   const [figureData, setFigureData] = useState<any>(null);
   // Track if ANY fix was attempted (not just specific error messages)
   const fixAttemptedRef = useRef<boolean>(false);
   const lastChartIndexRef = useRef<number>(chartIndex);
+  const originalErrorRef = useRef<string | null>(null); // Store original error for fixing
 
   useEffect(() => {
     if (!chartSpec) return;
@@ -34,9 +76,6 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
     }
 
     // Don't reset fix flag on every render - this was causing the loop!
-    setRenderError(null);
-    setIsFixing(false);
-
     console.log(`Chart ${chartIndex} - Data length:`, data.length);
     console.log(`Chart ${chartIndex} - Fix attempted:`, fixAttemptedRef.current);
 
@@ -51,27 +90,27 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
         throw new Error('No figure data available');
       }
     } catch (error: any) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown rendering error';
+      const rawErrorMessage = error instanceof Error ? error.message : 'Unknown rendering error';
+      const errorMessage = sanitizeErrorMessage(rawErrorMessage);
+      
+      // Store original error for fixing (backend needs full details)
+      originalErrorRef.current = rawErrorMessage;
+      
       console.error(`Chart ${chartIndex} - Error rendering:`, error);
-      setRenderError(errorMessage);
       
       // Show fixing message and attempt to fix (only if not already attempted)
-      if (!fixAttemptedRef.current) {
-        console.log(`Chart ${chartIndex}: First error, attempting fix`);
-        showFixingMessage();
-        attemptFix(errorMessage, chartSpec);
-      } else {
-        console.log(`Chart ${chartIndex}: Fix already attempted, showing error`);
-      }
+            if (!fixAttemptedRef.current) {
+              console.log(`Chart ${chartIndex}: First error, attempting fix`);
+              // Pass original error to fix endpoint for better debugging
+              attemptFix(originalErrorRef.current || errorMessage, chartSpec);
+            } else {
+              console.log(`Chart ${chartIndex}: Fix already attempted, showing error`);
+            }
     }
   }, [chartSpec, data, chartIndex]);
 
-  const showFixingMessage = () => {
-    setIsFixing(true);
-  };
 
   const attemptFix = async (errorMessage: string, chartSpec: any) => {
-    // Double-check the flag (race condition protection)
     if (fixAttemptedRef.current) {
       console.log(`Chart ${chartIndex}: Fix already attempted, skipping`);
       return;
@@ -81,7 +120,6 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
     console.log(`Chart ${chartIndex}: Attempting fix (this will only happen once)`);
     
     try {
-      // Extract Plotly code from chartSpec
       let plotlyCode = '';
       if (typeof chartSpec === 'string') {
         plotlyCode = chartSpec;
@@ -89,18 +127,19 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
         plotlyCode = chartSpec.chart_spec || chartSpec.plotly_code || JSON.stringify(chartSpec);
       }
 
-      showFixingMessage();
+      // Notify parent that we're fixing
+      if (onFixingStatusChange) {
+        onFixingStatusChange(true);
+      }
       
-      // Call fix-visualization endpoint
       const response = await fetch(`${config.backendUrl}/api/data/fix-visualization`, {
         method: 'POST',
-        headers: getAuthHeaders({
-          'Content-Type': 'application/json',
-        }),
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         credentials: 'include',
         body: JSON.stringify({
           plotly_code: plotlyCode,
-          error_message: errorMessage
+          error_message: errorMessage,
+          dataset_id: datasetId
         })
       });
 
@@ -109,93 +148,91 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
       }
 
       const result = await response.json();
-      setIsFixing(false);
+      
+      // Notify parent that fixing is done
+      if (onFixingStatusChange) {
+        onFixingStatusChange(false);
+      }
 
       if (result.fix_failed) {
         console.log(`Chart ${chartIndex}: Fix failed, will not retry`);
-        setRenderError(errorMessage);
+      } else if (result.figure) {
+        // Display the fixed figure immediately
+        console.log(`Chart ${chartIndex}: Fix succeeded, displaying new figure`);
+        setFigureData(result.figure);
+        
+        // Notify parent with the fixed code AND figure data to update dashboard
+        if (onChartFixed && result.fixed_complete_code) {
+          onChartFixed(chartIndex, result.fixed_complete_code, result.figure);
+        }
       } else if (result.fixed_complete_code) {
-        console.log(`Chart ${chartIndex}: Fix succeeded`);
-        // Notify parent that chart was fixed
+        // Fallback if no figure returned
+        console.log(`Chart ${chartIndex}: Fix succeeded but no figure data`);
         if (onChartFixed) {
           onChartFixed(chartIndex, result.fixed_complete_code);
         }
-        
-        // Note: The fixed code needs to be re-executed on the backend
-        // For now, just show a message
-        setRenderError('Chart fixed - please refresh to see the updated visualization');
       }
     } catch (err) {
       console.error(`Chart ${chartIndex}: Failed to fix visualization:`, err);
-      setIsFixing(false);
-      setRenderError(errorMessage);
+      if (onFixingStatusChange) {
+        onFixingStatusChange(false);
+      }
     }
   };
 
-  if (isFixing) {
-    return (
-      <div style={{ padding: '40px', textAlign: 'center', color: '#1976d2', background: '#e3f2fd', borderRadius: '8px', margin: '20px' }}>
-        <div style={{ display: 'inline-block', marginBottom: '15px' }}>
-          <div style={{ width: '24px', height: '24px', border: '3px solid #1976d2', borderTop: '3px solid transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
-        </div>
-        <h3 style={{ margin: '0 0 10px 0', fontSize: '18px', color: '#1976d2' }}>🔧 Fixing visualization...</h3>
-        <p style={{ margin: '0', fontSize: '14px', color: '#666', fontWeight: '500' }}>Sorry for the wait, taking longer than expected</p>
-        <p style={{ margin: '10px 0 0 0', fontSize: '12px', color: '#999' }}>Our AI is analyzing the error and generating a fix.</p>
-        <style>{`
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-        `}</style>
-      </div>
-    );
-  }
-
-  if (renderError) {
-    return (
-      <div style={{ padding: '40px', textAlign: 'center', color: '#d32f2f', background: '#ffebee', borderRadius: '8px', margin: '20px' }}>
-        <h3 style={{ margin: '0 0 10px 0', fontSize: '18px' }}>⚠️ Visualization Error</h3>
-        <p style={{ margin: '0', fontSize: '14px', color: '#666' }}>{renderError}</p>
-        <p style={{ margin: '10px 0 0 0', fontSize: '12px', color: '#999' }}>Try rephrasing your query or asking for a different type of visualization.</p>
-      </div>
-    );
-  }
-
-  if (!figureData) {
-    return (
-      <div style={{ padding: '40px', textAlign: 'center' }}>
-        <p>Loading chart...</p>
-      </div>
-    );
-  }
+  const handleChartClick = () => {
+    if (onZoom && figureData) {
+      onZoom(chartIndex);
+    }
+  };
 
   return (
     <div 
       ref={containerRef}
       className="plotly-chart-container"
+      onClick={handleChartClick}
       style={{
         width: '100%',
-        height: '100%',
-        minHeight: '600px',
-        position: 'relative'
+        maxWidth: '1000px',
+        height: '800px',
+        minHeight: '800px',
+        position: 'relative',
+        border: '1px solid rgba(0, 0, 0, 0.1)',
+        borderRadius: '8px',
+        padding: '12px',
+        backgroundColor: '#ffffff',
+        cursor: 'pointer',
+        transition: 'all 0.2s ease',
+        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)'
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.2)';
+        e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.1)';
+        e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.05)';
       }}
     >
-      <Plot
-        data={figureData.data || []}
-        layout={{
-          ...figureData.layout,
-          autosize: true,
-          margin: figureData.layout?.margin || { l: 60, r: 30, t: 80, b: 60 }
-        }}
-        config={{
-          responsive: true,
-          displayModeBar: true,
-          displaylogo: false,
-          modeBarButtonsToRemove: ['sendDataToCloud']
-        }}
-        style={{ width: '100%', height: '100%' }}
-        useResizeHandler={true}
-      />
+      {/* Render chart */}
+      {figureData && (
+        <Plot
+          data={figureData.data || []}
+          layout={{
+            ...figureData.layout,
+            autosize: true,
+            margin: figureData.layout?.margin || { l: 60, r: 30, t: 80, b: 60 }
+          }}
+          config={{
+            responsive: true,
+            displayModeBar: true,
+            displaylogo: false,
+            modeBarButtonsToRemove: ['sendDataToCloud']
+          }}
+          style={{ width: '100%', height: '100%' }}
+          useResizeHandler={true}
+        />
+      )}
     </div>
   );
 };

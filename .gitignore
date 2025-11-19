@@ -31,3 +31,7 @@ htmlcov/
 .mypy_cache/
 .dmypy.json
 dmypy.json
+
+frontend/dist/assets/
+
+frontend/dist/assets

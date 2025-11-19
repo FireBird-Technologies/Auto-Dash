@@ -31,7 +31,8 @@ from ..core.security import get_current_user
 from ..models import User, Dataset as DatasetModel
 from ..services.dataset_service import dataset_service
 from ..schemas.chat import FixVisualizationRequest
-from ..services.agents import fix_plotly
+from ..services.agents import fix_plotly, clean_plotly_code
+from ..services.chart_creator import execute_plotly_code
 import logging
 import re
 import dspy
@@ -938,82 +939,60 @@ async def analyze_data(
     #     )
 
 
-@router.post("/chat")
-async def chat_with_data(
-    request: ChatQueryRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """
-    Conversational refinement endpoint - used after initial visualization.
-    Allows users to refine, modify, or ask questions about existing visualizations.
-    """
-    # Get the dataset
-    if request.dataset_id:
-        df = dataset_service.get_dataset(current_user.id, request.dataset_id)
-        if df is None:
-            raise HTTPException(status_code=404, detail="Dataset not found")
-        dataset_id = request.dataset_id
-    else:
-        # Use the most recent dataset
-        result = dataset_service.get_latest_dataset(current_user.id)
-        if result is None:
-            raise HTTPException(
-                status_code=400,
-                detail="No dataset available. Please upload a file first."
-            )
-        dataset_id, df = result
-    
-    # Get the dataset context from memory
-    dataset_context = dataset_service.get_context(current_user.id, dataset_id)
-    
-    # If context not available yet, provide basic fallback info
-    if not dataset_context:
-        columns = [str(col) for col in df.columns.tolist()]
-        dataset_context = f"Dataset with {len(df)} rows and {len(df.columns)} columns. Columns: {', '.join(columns)}"
-    
-    # Generate chart specification using DSPy agents with context
-    from ..services.chart_creator import generate_chart_spec
-    
-    try:
-        chart_specs = await generate_chart_spec(df, request.query, dataset_context)
-        
-        # Handle array of chart specs (new format) or single chart (old format)
-        if isinstance(chart_specs, list):
-            return {
-                "message": f"Visualization updated - {len(chart_specs)} chart(s) generated",
-                "query": request.query,
-                "dataset_id": dataset_id,
-                "charts": chart_specs  # Array of chart specs
-            }
-        else:
-            # Backward compatibility for single chart
-            return {
-                "message": "Visualization updated",
-                "query": request.query,
-                "dataset_id": dataset_id,
-                "chart_spec": chart_specs
-            }
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error updating visualization: {str(e)}"
-        )
 def plotly_fix_metric(example, pred, trace=None) -> float:
     """
     Simple code scorer that checks if Plotly code runs successfully.
+    Penalizes code that tries to modify data or includes fig.show().
     
     Returns:
         float: Score (0.0=error, 1.0=success)
     """
     try:
+        # Import clean_plotly_code and re for pattern matching
+        from ..services.agents import clean_plotly_code
+        import re
+        
         # Handle both dict and object inputs
         original_code = example.get('plotly_code') if isinstance(example, dict) else example.plotly_code
         fixed_code = pred.get('fix') if isinstance(pred, dict) else (pred.fix if hasattr(pred, 'fix') else str(pred))
         
+        # Clean the fixed code to remove fig.show() calls
+        fixed_code = clean_plotly_code(fixed_code)
+        
+        # Comment out any remaining fig.show() calls before executing
+        # This ensures they're visible but don't execute
+        fixed_code = re.sub(r'(fig\.show\s*\([^)]*\))', r'# \1  # Commented out to prevent opening browser tab', fixed_code)
+        fixed_code = re.sub(r'(\.show\s*\(\s*\))', r'# \1  # Commented out to prevent opening browser tab', fixed_code)
+        fixed_code = re.sub(r'(plotly\.io\.show\([^)]*\))', r'# \1  # Commented out to prevent opening browser tab', fixed_code)
+        fixed_code = re.sub(r'(pio\.show\([^)]*\))', r'# \1  # Commented out to prevent opening browser tab', fixed_code)
+        
         # If code wasn't modified, return 0
         if fixed_code.strip() == original_code.strip():
             return 0.0
+        
+        # Check if code tries to modify/load data (should use existing df/data)
+        data_modification_patterns = [
+            r'pd\.read_csv\s*\(',
+            r'pd\.read_excel\s*\(',
+            r'pd\.read_',
+            r'pd\.DataFrame\s*\(',
+            r'data\s*=\s*pd\.',
+            r'df\s*=\s*pd\.',
+            r'data\s*=\s*data\[',  # Reassigning data
+            r'df\s*=\s*data\s*$',  # Reassigning df from data
+        ]
+        
+        for pattern in data_modification_patterns:
+            if re.search(pattern, fixed_code, re.MULTILINE | re.IGNORECASE):
+                # Penalize heavily - this will trigger retry
+                return 0.0
+        
+        # Create no-op functions to prevent show() calls
+        def noop_show(*args, **kwargs):
+            pass
+        
+        def noop_display(*args, **kwargs):
+            pass
         
         # Try to execute the fixed code
         exec_globals = {
@@ -1021,6 +1000,8 @@ def plotly_fix_metric(example, pred, trace=None) -> float:
             'np': np,
             'go': go,
             'plotly': plotly,
+            'show': noop_show,
+            'display': noop_display,
         }
         
         # Try to import plotly.express
@@ -1118,14 +1099,15 @@ async def fix_visualization_error(
 ):
     """
     Fix a failed visualization by analyzing the error and regenerating corrected Plotly code.
+    Executes the fixed code and returns the figure data for immediate display.
     
     Args:
-        request: Contains the original Plotly code and error message
+        request: Contains the original Plotly code, error message, and dataset_id
         current_user: Authenticated user
         db: Database session
     
     Returns:
-        Fixed Plotly code or error information
+        Fixed Plotly code AND executed figure data for immediate display
     """
     try:
         # Extract error context (5 lines above/below error)
@@ -1139,7 +1121,7 @@ async def fix_visualization_error(
         start_time = datetime.now()
         logger.info(f"Code fixing started at: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-        refine_fixer = dspy.Refine(module=dspy.Predict(fix_plotly), reward_fn=plotly_fix_metric, N=3, threshold=0.3)
+        refine_fixer = dspy.Refine(module=dspy.Predict(fix_plotly), reward_fn=plotly_fix_metric, N=5, threshold=0.3)
         logger.info("Refine fixer instantiated with dspy.Predict(fix_plotly)")
 
         def run_refine_fixer():
@@ -1154,11 +1136,8 @@ async def fix_visualization_error(
         response = await asyncio.to_thread(run_refine_fixer)
         fix_code = response.fix
         
-        # Strip markdown formatting if present
-        if fix_code.startswith('```python'):
-            fix_code = fix_code.replace('```python', '').replace('```', '').strip()
-        elif fix_code.startswith('```'):
-            fix_code = fix_code.replace('```', '').strip()
+        # Clean the fixed code using the utility function
+        fix_code = clean_plotly_code(fix_code)
 
         # Stitch the fix to the original code at the error location
         original_lines = request.plotly_code.splitlines()
@@ -1184,10 +1163,39 @@ async def fix_visualization_error(
             # If cannot localize, return the fix as whole
             stitched_code = fix_code
         
+        # Clean the stitched code again to ensure no fig.show() calls remain
+        stitched_code = clean_plotly_code(stitched_code)
+        
+        # Execute the fixed code to get figure data
+        figure_data = None
+        execution_success = False
+        
+        if request.dataset_id:
+            try:
+                # Get the dataset
+                df = dataset_service.get_dataset(current_user.id, request.dataset_id)
+                
+                if df is not None:
+                    # Execute the fixed code
+                    execution_result = execute_plotly_code(stitched_code, df)
+                    
+                    if execution_result.get('success'):
+                        figure_data = execution_result.get('figure')
+                        execution_success = True
+                        logger.info(f"Successfully executed fixed code for chart")
+                    else:
+                        logger.warning(f"Fixed code execution failed: {execution_result.get('error')[:200]}")
+                else:
+                    logger.warning(f"Dataset not found for user {current_user.id}, dataset_id: {request.dataset_id}")
+            except Exception as exec_error:
+                logger.error(f"Error executing fixed code: {str(exec_error)}")
+        
         logger.info("Extracted error context for Plotly code fix")
         
         return {
-            "fixed_complete_code": stitched_code,  
+            "fixed_complete_code": stitched_code,
+            "figure": figure_data,
+            "execution_success": execution_success,
             "user_id": current_user.id,
             "fix_failed": False
         }

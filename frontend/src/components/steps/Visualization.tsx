@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { PlotlyChartRenderer } from '../PlotlyChartRenderer';
+import { FixNotification } from '../FixNotification';
 import { config, getAuthHeaders } from '../../config';
 
 type Row = Record<string, number | string>;
@@ -32,6 +33,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   const hasGeneratedInitialChart = useRef(false);
   const visualizationRef = useRef<HTMLDivElement>(null);
   const downloadMenuRef = useRef<HTMLDivElement>(null);
+  const [showFixNotification, setShowFixNotification] = useState(false);
+  const [zoomedChartIndex, setZoomedChartIndex] = useState<number | null>(null);
 
   // Update local data when prop changes
   useEffect(() => {
@@ -140,18 +143,29 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   };
 
   // Callback to handle when a specific chart is fixed
-  const handleChartFixed = (chartIndex: number, fixedCode: string) => {
+  const handleChartFixed = (chartIndex: number, fixedCode: string, figureData?: any) => {
     console.log(`Updating chart ${chartIndex} with fixed code`);
+    // Dismiss the notification when fix is complete
+    setShowFixNotification(false);
+    
     setChartSpecs(prevSpecs => {
       const newSpecs = [...prevSpecs];
       if (newSpecs[chartIndex]) {
         newSpecs[chartIndex] = {
           ...newSpecs[chartIndex],
-          chart_spec: fixedCode
+          chart_spec: fixedCode,
+          figure: figureData || newSpecs[chartIndex].figure, // Update figure if provided
+          execution_success: figureData ? true : newSpecs[chartIndex].execution_success,
+          execution_error: figureData ? undefined : newSpecs[chartIndex].execution_error
         };
       }
       return newSpecs;
     });
+  };
+
+  // Handler for chart zoom
+  const handleChartZoom = (chartIndex: number) => {
+    setZoomedChartIndex(chartIndex);
   };
 
   const generateChart = async (userQuery: string) => {
@@ -169,41 +183,78 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
 
     try {
       // Use /analyze for first chart, /chat for subsequent queries
-      const endpoint = chartSpecs.length > 0 ? 'chat' : 'analyze';
+      const isFirstChart = chartSpecs.length === 0;
       
-      const response = await fetch(`${config.backendUrl}/api/data/${endpoint}`, {
-        method: 'POST',
-        headers: getAuthHeaders({
-          'Content-Type': 'application/json',
-        }),
-        credentials: 'include',
-        body: JSON.stringify({
-          query: userQuery,
-          dataset_id: datasetId,
-          color_theme: context.colorTheme
-        })
-      });
+      if (isFirstChart) {
+        // First chart: Use analyze endpoint
+        const response = await fetch(`${config.backendUrl}/api/data/analyze`, {
+          method: 'POST',
+          headers: getAuthHeaders({
+            'Content-Type': 'application/json',
+          }),
+          credentials: 'include',
+          body: JSON.stringify({
+            query: userQuery,
+            dataset_id: datasetId,
+            color_theme: context.colorTheme
+          })
+        });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to generate chart');
-      }
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || 'Failed to generate chart');
+        }
 
-      const result = await response.json();
-      
-      // Fetch full dataset before rendering chart (if not already fetched)
-      await fetchFullDataset();
-      
-      // Remove the thinking message and update chart specs
-      setChatHistory(prev => prev.slice(0, -1));
-      
-      // Handle both array (new format) and single chart (old format)
-      if (result.charts && Array.isArray(result.charts)) {
-        // New format: array of charts
-        setChartSpecs(result.charts);
-      } else if (result.chart_spec) {
-        // Old format: single chart - wrap in array
-        setChartSpecs([{ chart_spec: result.chart_spec, chart_type: 'unknown', title: 'Visualization', chart_index: 0 }]);
+        const result = await response.json();
+        
+        // Fetch full dataset before rendering chart (if not already fetched)
+        await fetchFullDataset();
+        
+        // Remove the thinking message and update chart specs
+        setChatHistory(prev => prev.slice(0, -1));
+        
+        // Handle both array (new format) and single chart (old format)
+        if (result.charts && Array.isArray(result.charts)) {
+          // New format: array of charts
+          setChartSpecs(result.charts);
+        } else if (result.chart_spec) {
+          // Old format: single chart - wrap in array
+          setChartSpecs([{ chart_spec: result.chart_spec, chart_type: 'unknown', title: 'Visualization', chart_index: 0 }]);
+        }
+      } else {
+        // Subsequent queries: Use chat endpoint with chart context
+        const response = await fetch(`${config.backendUrl}/api/chat`, {
+          method: 'POST',
+          headers: getAuthHeaders({
+            'Content-Type': 'application/json',
+          }),
+          credentials: 'include',
+          body: JSON.stringify({
+            message: userQuery,
+            dataset_id: datasetId,
+            plotly_code: chartSpecs[0]?.chart_spec || '',  // Pass current chart code
+            fig_data: chartSpecs[0]?.figure || null  // Pass current figure data
+          })
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || 'Failed to process chat request');
+        }
+
+        const result = await response.json();
+        
+        // Remove the thinking message and add AI response
+        setChatHistory(prev => {
+          const newHistory = prev.slice(0, -1);
+          return [...newHistory, { 
+            type: 'assistant', 
+            message: result.reply 
+          }];
+        });
+        
+        // Note: Chat endpoint returns text response, not new charts
+        // If the response contains code, you might want to handle that separately
       }
       
     } catch (err) {
@@ -404,6 +455,11 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
 
   return (
     <>
+      <FixNotification 
+        show={showFixNotification} 
+        onDismiss={() => setShowFixNotification(false)} 
+      />
+      
       {/* Fullscreen Modal */}
       {isFullscreen && (
         <div className="fullscreen-modal" onClick={() => setIsFullscreen(false)}>
@@ -421,10 +477,83 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                           chartSpec={spec} 
                           data={localData}
                           chartIndex={index}
+                          datasetId={datasetId}
                           onChartFixed={handleChartFixed}
+                          onFixingStatusChange={(isFixing) => setShowFixNotification(isFixing)}
                         />
                       ))}
                     </div>
+          </div>
+        </div>
+      )}
+
+      {/* Chart Zoom Modal */}
+      {zoomedChartIndex !== null && chartSpecs[zoomedChartIndex] && (
+        <div 
+          className="fullscreen-modal" 
+          onClick={() => setZoomedChartIndex(null)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            zIndex: 10000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '40px'
+          }}
+        >
+          <div 
+            className="fullscreen-content" 
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '90%',
+              height: '90%',
+              backgroundColor: '#ffffff',
+              borderRadius: '12px',
+              padding: '20px',
+              position: 'relative',
+              maxWidth: '1400px',
+              maxHeight: '900px'
+            }}
+          >
+            <button 
+              className="fullscreen-close" 
+              onClick={() => setZoomedChartIndex(null)}
+              style={{
+                position: 'absolute',
+                top: '20px',
+                right: '20px',
+                background: 'rgba(0, 0, 0, 0.1)',
+                border: 'none',
+                borderRadius: '50%',
+                width: '40px',
+                height: '40px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 10001
+              }}
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+            <div style={{ width: '100%', height: '100%' }}>
+              <PlotlyChartRenderer 
+                chartSpec={chartSpecs[zoomedChartIndex]} 
+                data={localData}
+                chartIndex={zoomedChartIndex}
+                datasetId={datasetId}
+                onChartFixed={handleChartFixed}
+                onFixingStatusChange={(isFixing) => setShowFixNotification(isFixing)}
+              />
+            </div>
           </div>
         </div>
       )}
@@ -673,15 +802,26 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
             {(!isLoading || chartSpecs.length > 0) && (
                     <div className="chart-display">
                       {chartSpecs.length > 0 ? (
-                        chartSpecs.map((spec, index) => (
-                          <PlotlyChartRenderer 
-                            key={`chart-${index}`}
-                            chartSpec={spec} 
-                            data={localData}
-                            chartIndex={index}
-                            onChartFixed={handleChartFixed}
-                          />
-                        ))
+                        <div style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fill, minmax(1000px, 1fr))',
+                          gap: '24px',
+                          padding: '20px',
+                          alignItems: 'start'
+                        }}>
+                          {chartSpecs.map((spec, index) => (
+                            <PlotlyChartRenderer 
+                              key={`chart-${index}`}
+                              chartSpec={spec} 
+                              data={localData}
+                              chartIndex={index}
+                              datasetId={datasetId}
+                              onChartFixed={handleChartFixed}
+                              onFixingStatusChange={(isFixing) => setShowFixNotification(isFixing)}
+                              onZoom={handleChartZoom}
+                            />
+                          ))}
+                        </div>
                       ) : (
                         <div className="empty-state">
                           <p>Ask a question about your data to generate a visualization</p>

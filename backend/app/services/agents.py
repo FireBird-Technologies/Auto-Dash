@@ -72,11 +72,11 @@ class chat_function(dspy.Module):
         route = self.router(user_query=user_query)
         
         if 'data_query' in route.query_type:
-            response = await self.fig_editor_mod(user_query=user_query, fig_data=fig_data)
+            response = self.fig_editor_mod(user_query=user_query, fig_data=fig_data)
         elif 'plotly_edit_query' in route.query_type:
-            response = await self.plotly_editor_mod(user_query=user_query,dataset_context=data_context, plotly_code=plotly_code)
+            response =  self.plotly_editor_mod(user_query=user_query,dataset_context=data_context, plotly_code=plotly_code)
         else:
-            response = await self.general_qa(user_query=user_query)
+            response = self.general_qa(user_query=user_query)
             
             
         return_dict = {'route':route,'response':response}
@@ -704,11 +704,17 @@ def clean_plotly_code(code: str) -> str:
     # Remove any remaining markdown artifacts
     cleaned = cleaned.replace('```', '')
     
-    # Remove fig.show() calls
-    cleaned = re.sub(r'fig\.show\(\s*\)', '', cleaned)
+    # Remove fig.show() calls - enhanced regex to catch all variations
+    cleaned = re.sub(r'fig\.show\s*\(\s*\)', '', cleaned)  # fig.show()
+    cleaned = re.sub(r'fig\.show\s*\([^)]*\)', '', cleaned)  # fig.show(renderer='browser')
+    cleaned = re.sub(r'\.show\s*\(\s*\)', '', cleaned)  # .show() on any variable
     
     # Remove fig.write_html() calls
     cleaned = re.sub(r'fig\.write_html\([^)]*\)', '', cleaned)
+    
+    # Remove any plotly.io.show() calls
+    cleaned = re.sub(r'plotly\.io\.show\([^)]*\)', '', cleaned)
+    cleaned = re.sub(r'pio\.show\([^)]*\)', '', cleaned)
     
     # Remove data loading code - df already exists, never create or load it
     cleaned = re.sub(r'(data|df)\s*=\s*pd\.read_csv\([^)]*\)', '# Data already loaded', cleaned)

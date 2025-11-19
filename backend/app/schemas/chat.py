@@ -17,5 +17,6 @@ class ChatResponse(BaseModel):
 class FixVisualizationRequest(BaseModel):
     plotly_code: str
     error_message: str
+    dataset_id: Optional[str] = None
 
 
