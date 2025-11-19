@@ -72,11 +72,11 @@ class chat_function(dspy.Module):
         route = self.router(user_query=user_query)
         
         if 'data_query' in route.query_type:
-            response = await self.fig_editor_mod(user_query=user_query, fig_data=fig_data)
+            response = self.fig_editor_mod(user_query=user_query, fig_data=fig_data)
         elif 'plotly_edit_query' in route.query_type:
-            response = await self.plotly_editor_mod(user_query=user_query,dataset_context=data_context, plotly_code=plotly_code)
+            response =  self.plotly_editor_mod(user_query=user_query,dataset_context=data_context, plotly_code=plotly_code)
         else:
-            response = await self.general_qa(user_query=user_query)
+            response = self.general_qa(user_query=user_query)
             
             
         return_dict = {'route':route,'response':response}

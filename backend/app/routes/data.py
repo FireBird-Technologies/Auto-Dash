@@ -938,67 +938,6 @@ async def analyze_data(
     #     )
 
 
-@router.post("/chat")
-async def chat_with_data(
-    request: ChatQueryRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """
-    Conversational refinement endpoint - used after initial visualization.
-    Allows users to refine, modify, or ask questions about existing visualizations.
-    """
-    # Get the dataset
-    if request.dataset_id:
-        df = dataset_service.get_dataset(current_user.id, request.dataset_id)
-        if df is None:
-            raise HTTPException(status_code=404, detail="Dataset not found")
-        dataset_id = request.dataset_id
-    else:
-        # Use the most recent dataset
-        result = dataset_service.get_latest_dataset(current_user.id)
-        if result is None:
-            raise HTTPException(
-                status_code=400,
-                detail="No dataset available. Please upload a file first."
-            )
-        dataset_id, df = result
-    
-    # Get the dataset context from memory
-    dataset_context = dataset_service.get_context(current_user.id, dataset_id)
-    
-    # If context not available yet, provide basic fallback info
-    if not dataset_context:
-        columns = [str(col) for col in df.columns.tolist()]
-        dataset_context = f"Dataset with {len(df)} rows and {len(df.columns)} columns. Columns: {', '.join(columns)}"
-    
-    # Generate chart specification using DSPy agents with context
-    from ..services.chart_creator import generate_chart_spec
-    
-    try:
-        chart_specs = await generate_chart_spec(df, request.query, dataset_context)
-        
-        # Handle array of chart specs (new format) or single chart (old format)
-        if isinstance(chart_specs, list):
-            return {
-                "message": f"Visualization updated - {len(chart_specs)} chart(s) generated",
-                "query": request.query,
-                "dataset_id": dataset_id,
-                "charts": chart_specs  # Array of chart specs
-            }
-        else:
-            # Backward compatibility for single chart
-            return {
-                "message": "Visualization updated",
-                "query": request.query,
-                "dataset_id": dataset_id,
-                "chart_spec": chart_specs
-            }
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error updating visualization: {str(e)}"
-        )
 def plotly_fix_metric(example, pred, trace=None) -> float:
     """
     Simple code scorer that checks if Plotly code runs successfully.
