@@ -202,8 +202,8 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
       style={{
         width: '100%',
         maxWidth: '1000px',
-        height: '800px',
-        minHeight: '800px',
+        height: '100%',
+        minHeight: '600px',
         position: 'relative',
         border: '1px solid rgba(0, 0, 0, 0.1)',
         borderRadius: '8px',
@@ -211,7 +211,9 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
         backgroundColor: '#ffffff',
         cursor: 'pointer',
         transition: 'all 0.2s ease',
-        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)'
+        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
+        display: 'flex',
+        flexDirection: 'column'
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.2)';
@@ -260,22 +262,31 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
       
       {/* Render chart */}
       {figureData && (
-        <Plot
-          data={figureData.data || []}
-          layout={{
-            ...figureData.layout,
-            autosize: true,
-            margin: figureData.layout?.margin || { l: 60, r: 30, t: 80, b: 60 }
-          }}
-          config={{
-            responsive: true,
-            displayModeBar: true,
-            displaylogo: false,
-            modeBarButtonsToRemove: ['sendDataToCloud']
-          }}
-          style={{ width: '100%', height: '100%' }}
-          useResizeHandler={true}
-        />
+        <div style={{
+          width: '100%',
+          height: '100%',
+          flex: 1,
+          minHeight: 0
+        }}>
+          <Plot
+            data={figureData.data || []}
+            layout={{
+              ...figureData.layout,
+              autosize: true,
+              width: undefined,
+              height: undefined,
+              margin: figureData.layout?.margin || { l: 60, r: 30, t: 80, b: 60 }
+            }}
+            config={{
+              responsive: true,
+              displayModeBar: true,
+              displaylogo: false,
+              modeBarButtonsToRemove: ['sendDataToCloud']
+            }}
+            style={{ width: '100%', height: '100%' }}
+            useResizeHandler={true}
+          />
+        </div>
       )}
     </div>
   );

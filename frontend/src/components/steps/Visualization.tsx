@@ -20,7 +20,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   const [isLoading, setIsLoading] = useState(false);
   const [chartSpecs, setChartSpecs] = useState<any[]>([]);  // Changed to array
   const [error, setError] = useState<string | null>(null);
-  const [chatHistory, setChatHistory] = useState<Array<{type: 'user' | 'assistant', message: string}>>([]);
+  const [chatHistory, setChatHistory] = useState<Array<{type: 'user' | 'assistant', message: string, matchedChart?: {index: number, type: string, title: string}}>>([]);
   const [contextPrepared, setContextPrepared] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(320);
@@ -250,7 +250,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
           const newHistory = prev.slice(0, -1);
           return [...newHistory, { 
             type: 'assistant', 
-            message: result.reply 
+            message: result.reply,
+            matchedChart: result.matched_chart
           }];
         });
         
@@ -643,6 +644,24 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                     {msg.type === 'user' ? 'You' : 'AI'}
                   </div>
                   <div className={`chat-bubble ${msg.type}-bubble`}>
+                    {msg.matchedChart && (
+                      <div style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '4px 10px',
+                        backgroundColor: 'rgba(99, 102, 241, 0.15)',
+                        borderRadius: '12px',
+                        fontSize: '12px',
+                        fontWeight: '500',
+                        marginBottom: '8px',
+                        border: '1px solid rgba(99, 102, 241, 0.3)',
+                        color: '#818cf8'
+                      }}>
+                        <span style={{ fontSize: '14px' }}>📊</span>
+                        <span>Chart {msg.matchedChart.index}: {msg.matchedChart.title || msg.matchedChart.type}</span>
+                      </div>
+                    )}
                     {msg.type === 'assistant' ? (
                       <MarkdownMessage content={msg.message} />
                     ) : (
@@ -813,7 +832,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                       {chartSpecs.length > 0 ? (
                         <div style={{
                           display: 'grid',
-                          gridTemplateColumns: 'repeat(auto-fill, minmax(1000px, 1fr))',
+                          gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 1000px), 1fr))',
                           gap: '24px',
                           padding: '20px',
                           alignItems: 'start'

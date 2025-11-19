@@ -914,10 +914,32 @@ async def analyze_data(
     query = request.query + "/n use these colors "+ str(request.color_theme)
     
     # try:
-    chart_specs = await generate_chart_spec(df, query, dataset_context)
+    chart_specs, full_plan = await generate_chart_spec(df, query, dataset_context)
     
-    # Handle array of chart specs (new format) or single chart (old format)
+    # Store chart metadata including plans
     if isinstance(chart_specs, list):
+        for chart in chart_specs:
+            chart_index = chart.get('chart_index', 0)
+            chart_spec = chart.get('chart_spec', '')
+            chart_plan = chart.get('plan', full_plan)  # Use chart-specific plan or fallback to full plan
+            figure_data = chart.get('figure')
+            chart_type = chart.get('chart_type')
+            title = chart.get('title', 'Visualization')
+            
+            try:
+                dataset_service.set_chart_metadata(
+                    user_id=current_user.id,
+                    dataset_id=dataset_id,
+                    chart_index=chart_index,
+                    chart_spec=chart_spec,
+                    plan=chart_plan,
+                    figure_data=figure_data,
+                    chart_type=chart_type,
+                    title=title
+                )
+            except Exception as e:
+                logger.warning(f"Failed to store chart metadata for chart {chart_index}: {e}")
+        
         return {
             "message": f"{len(chart_specs)} chart(s) generated successfully",
             "query": request.query,
@@ -1236,4 +1258,44 @@ async def get_dashboard_count(
         "user_id": current_user.id,
         "dashboard_count": len(datasets),
         "message": "Dashboard count endpoint ready"
+    }
+
+
+@router.get("/datasets/{dataset_id}/charts/{chart_index}")
+async def get_chart_info(
+    dataset_id: str,
+    chart_index: int,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get chart metadata including plan, code, and figure for a specific chart.
+    
+    Args:
+        dataset_id: Dataset identifier
+        chart_index: Chart index (0, 1, 2, etc.)
+    
+    Returns:
+        Dict with chart metadata including plan, code, type, title, and figure
+    """
+    metadata = dataset_service.get_chart_metadata(
+        current_user.id,
+        dataset_id,
+        chart_index
+    )
+    
+    if not metadata:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Chart {chart_index} not found for dataset {dataset_id}"
+        )
+    
+    return {
+        "chart_index": chart_index,
+        "dataset_id": dataset_id,
+        "chart_spec": metadata.get("chart_spec"),
+        "plan": metadata.get("plan"),
+        "chart_type": metadata.get("chart_type"),
+        "title": metadata.get("title"),
+        "figure": metadata.get("figure"),
+        "created_at": metadata.get("created_at")
     }

@@ -12,6 +12,7 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     reply: str
     user: str | None = None
+    matched_chart: Optional[Dict[str, Any]] = None
 
 
 class FixVisualizationRequest(BaseModel):

@@ -17,6 +17,11 @@ export interface ChatRequest {
 export interface ChatResponse {
   reply: string;
   user?: string;
+  matched_chart?: {
+    index: number;
+    type: string;
+    title: string;
+  };
 }
 
 /**

@@ -35,44 +35,46 @@ class plotly_editor(dspy.Signature):
     edited_code = dspy.OutputField(desc="Edited code", prefix="```python")
     reasoning = dspy.OutputField(desc="Why did you make these edits explain")
 
-class fig_editor(dspy.Signature):
-    """ 
-    You are an AI that generates Python code to analyze Plotly figure data.
-    
-    IMPORTANT: The code you generate must:
-    1. Extract ALL data from fig.data (not just samples)
-    2. Iterate through ALL traces in fig.data
-    3. Extract ALL y-values (prices) from each trace
-    4. Perform the requested calculation on the complete dataset
-    
-    The fig.data is a list of trace objects. Each trace has:
-    - trace.y: array of y-values (prices in this case)
-    - trace.x: array of x-values (area in this case)
-    - trace.name: name of the trace (if available)
-    
-    Generate code that loops through ALL traces and extracts ALL values.
-     Return pure Python code that can be executed directly with exec().
+class data_query_sig(dspy.Signature):
     """
-    user_query = dspy.InputField(desc="edits the user needs to make")
-    fig_data = dspy.InputField(desc="The initial fig.data")
-    code = dspy.OutputField(desc="Edited code")
-    reasoning = dspy.OutputField(desc="Why did you make these edits explain")
+    You are a pandas expert AI that edits a DataFrame according to user instructions.
+
+    IMPORTANT: The code you generate MUST:
+    1. Take a DataFrame named `df` as input (do not create or load the DataFrame, assume it exists)
+    2. Use only pandas (and optionally numpy) for any modifications or analysis
+    3. Make only the edits or calculations requested by the user in `user_query`
+    4. Output only executable python code to achieve the instructions
+    5. Do NOT include I/O (file reads/writes), only work in memory
+
+    Return pure Python code that can be executed directly with exec().
+    """
+    user_query = dspy.InputField(desc="edits the user wants to make to the DataFrame df")
+    dataset_context = dspy.InputField(desc="The input pandas DataFrame")
+    code = dspy.OutputField(desc="Python code for the manipulation")
+    reasoning = dspy.OutputField(desc="Why did you make these edits? Explain your reasoning.")
+
+class chart_matcher(dspy.Signature):
+    """Match user query to chart index. Return integer index."""
+    query = dspy.InputField(desc="user query")
+    charts = dspy.InputField(desc="JSON: [{'i':0,'t':'scatter_plot','n':'Title','p':{}},...]")
+    chart_index = dspy.OutputField(type=int, desc="Matching chart index or -1")
 
 class chat_function(dspy.Module):
     def __init__(self):
         self.plotly_editor_mod = dspy.Predict(plotly_editor)
-        self.fig_editor_mod = dspy.Predict(fig_editor)
+        self.data_query_mod = dspy.Predict(data_query_sig)
         self.general_qa = dspy.Predict("user_query->answer")
+
   
-        self.router = dspy.Predict("user_query->query_type:Literal['data_query','general_query','plotly_edit_query'],reasoning")
+        self.router = dspy.Predict("user_query->query_type:Literal['data_query','general_query','need_more_clarity','plotly_edit_query'],reasoning")
 
         
         
-    async def aforward(self, user_query, fig_data, data_context,plotly_code):
+    async def aforward(self, user_query, data_context,plotly_code):
         route = self.router(user_query=user_query)
         
         if 'data_query' in route.query_type:
-            response = self.fig_editor_mod(user_query=user_query, fig_data=fig_data)
+            response = self.data_query_mod(user_query=user_query, dataset_context=dataset_context)
         elif 'plotly_edit_query' in route.query_type:
             response =  self.plotly_editor_mod(user_query=user_query,dataset_context=data_context, plotly_code=plotly_code)
         else:
@@ -763,11 +765,13 @@ class PlotlyVisualizationModule(dspy.Module):
                 plan_output = json.loads(plan_output)
             except json.JSONDecodeError:
                 logger.error("Failed to parse plan JSON: %s", plan.plan)
-                return self.fail
+                return self.fail, None
 
         logger.info("GenerateVisualizationPlan result: %s", plan_output)
         
         tasks = []
+        chart_plans = {}  # Store individual chart plans by chart_type
+        chart_types_order = []  # Track order of chart types
         
         if 'False' in str(plan.relevant_query):
             # Query is relevant for visualization
@@ -784,6 +788,8 @@ class PlotlyVisualizationModule(dspy.Module):
                     
                     try:
                         chart_plan = plan_output[chart_key]
+                        chart_plans[chart_key] = chart_plan  # Store plan for this chart type
+                        chart_types_order.append(chart_key)  # Track order
                     except Exception as e:
                         logger.error(f"Failed to extract chart plan for {chart_key}: {e}")
                         continue
@@ -800,7 +806,10 @@ class PlotlyVisualizationModule(dspy.Module):
                     (s['styling'] for s in self.styling_instructions if s.get('category') == 'bar_charts'),
                     {}
                 )
-                tasks.append(self.chart_sigs['bar_chart'](
+                chart_key = 'bar_chart'
+                chart_plans[chart_key] = plan_output  # Use full plan as fallback
+                chart_types_order.append(chart_key)
+                tasks.append(self.chart_sigs[chart_key](
                     plan=plan.plan,
                     dataset_context=dataset_context,
                     styling=style
@@ -829,9 +838,12 @@ class PlotlyVisualizationModule(dspy.Module):
                     if 'df = data' not in cleaned and 'df=' not in cleaned and 'df =' not in cleaned:
                         cleaned = "df = data\n\n" + cleaned
                 
-                # Get chart type and title
-                chart_type = list(self.chart_sigs.keys())[min(i, len(self.chart_sigs) - 1)]
+                # Get chart type and title from the order we tracked
+                chart_type = chart_types_order[i] if i < len(chart_types_order) else list(self.chart_sigs.keys())[min(i, len(self.chart_sigs) - 1)]
                 title = "Visualization"
+                
+                # Get the plan for this specific chart
+                chart_plan = chart_plans.get(chart_type, plan_output)
                 
                 try:
                     if chart_type in plan_output:
@@ -845,13 +857,15 @@ class PlotlyVisualizationModule(dspy.Module):
                     'chart_spec': cleaned,
                     'chart_type': chart_type,
                     'title': title,
-                    'chart_index': i
+                    'chart_index': i,
+                    'plan': chart_plan  # Include plan for this specific chart
                 })
                 
                 logger.info(f"Chart {i+1} ({chart_type}): {title} - cleaned successfully")
             
             logger.info(f"Generated {len(chart_specs)} charts")
-            return chart_specs
+            # Return tuple: (chart_specs, full_plan_output)
+            return chart_specs, plan_output
         else:
             logger.info("Query not relevant for visualization. Returning FAIL_MESSAGE.")
-            return self.fail + str(plan.relevant_query)
+            return self.fail + str(plan.relevant_query), None
