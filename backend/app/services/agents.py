@@ -74,7 +74,7 @@ class chat_function(dspy.Module):
         route = self.router(user_query=user_query)
         
         if 'data_query' in route.query_type:
-            response = self.data_query_mod(user_query=user_query, dataset_context=dataset_context)
+            response = self.data_query_mod(user_query=user_query, dataset_context=data_context)
         elif 'plotly_edit_query' in route.query_type:
             response =  self.plotly_editor_mod(user_query=user_query,dataset_context=data_context, plotly_code=plotly_code)
         else:
