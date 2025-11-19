@@ -942,18 +942,57 @@ async def analyze_data(
 def plotly_fix_metric(example, pred, trace=None) -> float:
     """
     Simple code scorer that checks if Plotly code runs successfully.
+    Penalizes code that tries to modify data or includes fig.show().
     
     Returns:
         float: Score (0.0=error, 1.0=success)
     """
     try:
+        # Import clean_plotly_code and re for pattern matching
+        from ..services.agents import clean_plotly_code
+        import re
+        
         # Handle both dict and object inputs
         original_code = example.get('plotly_code') if isinstance(example, dict) else example.plotly_code
         fixed_code = pred.get('fix') if isinstance(pred, dict) else (pred.fix if hasattr(pred, 'fix') else str(pred))
         
+        # Clean the fixed code to remove fig.show() calls
+        fixed_code = clean_plotly_code(fixed_code)
+        
+        # Comment out any remaining fig.show() calls before executing
+        # This ensures they're visible but don't execute
+        fixed_code = re.sub(r'(fig\.show\s*\([^)]*\))', r'# \1  # Commented out to prevent opening browser tab', fixed_code)
+        fixed_code = re.sub(r'(\.show\s*\(\s*\))', r'# \1  # Commented out to prevent opening browser tab', fixed_code)
+        fixed_code = re.sub(r'(plotly\.io\.show\([^)]*\))', r'# \1  # Commented out to prevent opening browser tab', fixed_code)
+        fixed_code = re.sub(r'(pio\.show\([^)]*\))', r'# \1  # Commented out to prevent opening browser tab', fixed_code)
+        
         # If code wasn't modified, return 0
         if fixed_code.strip() == original_code.strip():
             return 0.0
+        
+        # Check if code tries to modify/load data (should use existing df/data)
+        data_modification_patterns = [
+            r'pd\.read_csv\s*\(',
+            r'pd\.read_excel\s*\(',
+            r'pd\.read_',
+            r'pd\.DataFrame\s*\(',
+            r'data\s*=\s*pd\.',
+            r'df\s*=\s*pd\.',
+            r'data\s*=\s*data\[',  # Reassigning data
+            r'df\s*=\s*data\s*$',  # Reassigning df from data
+        ]
+        
+        for pattern in data_modification_patterns:
+            if re.search(pattern, fixed_code, re.MULTILINE | re.IGNORECASE):
+                # Penalize heavily - this will trigger retry
+                return 0.0
+        
+        # Create no-op functions to prevent show() calls
+        def noop_show(*args, **kwargs):
+            pass
+        
+        def noop_display(*args, **kwargs):
+            pass
         
         # Try to execute the fixed code
         exec_globals = {
@@ -961,6 +1000,8 @@ def plotly_fix_metric(example, pred, trace=None) -> float:
             'np': np,
             'go': go,
             'plotly': plotly,
+            'show': noop_show,
+            'display': noop_display,
         }
         
         # Try to import plotly.express
