@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { PlotlyChartRenderer } from '../PlotlyChartRenderer';
 import { FixNotification } from '../FixNotification';
+import { MarkdownMessage } from '../MarkdownMessage';
 import { config, getAuthHeaders } from '../../config';
 
 type Row = Record<string, number | string>;
@@ -634,8 +635,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
               <div className="chat-welcome">
                 <div className="assistant-avatar">AI</div>
                 <div className="chat-bubble assistant-bubble">
-                  <p>Hi! I'm your AI assistant. Ask me to create visualizations from your data.</p>
-                  <p className="chat-hint">Try: "Show me a bar chart of average prices by bedroom count"</p>
+                  <MarkdownMessage content={'Hi! I\'m your AI assistant. Ask me to create visualizations from your data.\n\n**Try:** "Show me a bar chart of average prices by bedroom count"'} />
                 </div>
               </div>
             ) : (
@@ -645,7 +645,11 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                     {msg.type === 'user' ? 'You' : 'AI'}
                   </div>
                   <div className={`chat-bubble ${msg.type}-bubble`}>
-                    {msg.message}
+                    {msg.type === 'assistant' ? (
+                      <MarkdownMessage content={msg.message} />
+                    ) : (
+                      msg.message
+                    )}
                   </div>
                 </div>
               ))
