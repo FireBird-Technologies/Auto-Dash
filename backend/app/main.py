@@ -17,6 +17,7 @@ from .routes.chat import router as chat_router
 from .routes.google import router as google_router
 from .routes.payment import router as stripe_router
 from .routes.data import router as data_router
+from .routes.export import router as export_router
 
 app = FastAPI(title="AutoDash Backend", version="0.1.0")
 
@@ -87,6 +88,9 @@ app.include_router(stripe_router)
 
 # Data routes
 app.include_router(data_router)
+
+# Export routes
+app.include_router(export_router)
 
 
 # Initialize DB

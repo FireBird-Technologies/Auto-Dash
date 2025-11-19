@@ -540,14 +540,14 @@ REQUIRED FORMAT:
 - MUST end with: fig (the variable name that stores the figure object)
 
 FORBIDDEN - DO NOT INCLUDE:
-❌ fig.show() or fig.write_html() calls
-❌ Data loading code (pd.read_csv, pd.read_excel, pd.DataFrame(), data = ..., df = pd.read_..., etc.)
-❌ Data creation code (df = ..., data = ..., etc.) - df ALREADY EXISTS
-❌ Markdown code blocks (```)
-❌ HTML or JavaScript code
-❌ File I/O operations
+- fig.show() or fig.write_html() calls
+- Data loading code (pd.read_csv, pd.read_excel, pd.DataFrame(), data = ..., df = pd.read_..., etc.)
+- Data creation code (df = ..., data = ..., etc.) - df ALREADY EXISTS
+- Markdown code blocks (```)
+- HTML or JavaScript code
+- File I/O operations
 
-✅ REQUIRED:
+REQUIRED:
 1. Use 'df' directly - it's already loaded and available (NEVER add df = ... or data = ...)
 2. Process/aggregate data using pandas if needed (e.g., df.groupby(), df.agg(), etc.)
 3. Create Plotly figure with go.Figure() or px functions using 'df'
