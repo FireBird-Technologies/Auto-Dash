@@ -15,7 +15,7 @@ import plotly
 import plotly.graph_objects as go
 import scipy
 from scipy import stats, signal, optimize
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
 from .agents import PlotlyVisualizationModule
 import logging
 
@@ -121,7 +121,7 @@ async def generate_chart_spec(
     df: pd.DataFrame | Dict[str, pd.DataFrame], 
     query: str, 
     dataset_context: str = None
-) -> List[Dict[str, Any]]:
+) -> Tuple[List[Dict[str, Any]], dict]:
     """
     Generate Plotly chart specifications based on the user's query.
     
@@ -131,11 +131,13 @@ async def generate_chart_spec(
         dataset_context: Rich textual description of the dataset
         
     Returns:
-        list: Array of chart specifications, each containing:
+        tuple: (list of chart specs, full plan dict)
+            Each chart spec contains:
             - chart_spec: Python code for generating the chart
             - chart_type: Type of chart (bar_chart, line_chart, etc.)
             - title: Chart title
             - chart_index: Index in the array
+            - plan: Plan for this specific chart
             - figure: Executed Plotly figure as JSON (if successful)
             - error: Error message (if execution failed)
     """
@@ -157,7 +159,7 @@ async def generate_chart_spec(
             dataset_context = f"Dataset with {len(df)} rows and {len(df.columns)} columns: {', '.join(columns)}"
     
     # Generate the visualization with dataset context
-    result = await viz_module.aforward(
+    result, full_plan = await viz_module.aforward(
         query=query,
         dataset_context=dataset_context
     )
@@ -175,7 +177,7 @@ async def generate_chart_spec(
                 chart_spec['execution_error'] = execution_result.get('error')
                 logger.warning(f"Chart execution failed: {execution_result.get('error')}")
         
-        return result
+        return result, full_plan or {}
     
     # Handle fail message (string)
     if isinstance(result, str):
@@ -190,12 +192,13 @@ async def generate_chart_spec(
             'chart_type': 'error',
             'title': 'Error',
             'chart_index': 0,
+            'plan': full_plan or {},
             'figure': figure,
             'execution_success': success,
             'execution_error': error
-        }]
+        }], full_plan or {}
     
-    return result
+    return result, full_plan or {}
         
 #     except Exception as e:
 #         logger.error(f"Failed to generate visualization: {e}")

@@ -3,7 +3,7 @@ Unified dataset service for in-memory storage and context generation.
 Handles dataset storage, retrieval, and asynchronous context generation using DSPy.
 """
 import asyncio
-from typing import Dict, Optional, List, Tuple
+from typing import Dict, Optional, List, Tuple, Any
 import pandas as pd
 import dspy
 from sqlalchemy.orm import Session
@@ -143,6 +143,91 @@ class DatasetService:
             del self._store[user_id][dataset_id]
             return True
         return False
+    
+    # ==================== Chart Metadata Methods ====================
+    
+    def set_chart_metadata(
+        self,
+        user_id: int,
+        dataset_id: str,
+        chart_index: int,
+        chart_spec: str,
+        plan: dict,
+        figure_data: Optional[Dict[str, Any]] = None,
+        chart_type: Optional[str] = None,
+        title: Optional[str] = None
+    ) -> None:
+        """
+        Store chart metadata including plan, code, and figure data.
+        
+        Args:
+            user_id: User ID
+            dataset_id: Dataset identifier
+            chart_index: Chart index (0, 1, 2, etc.)
+            chart_spec: Plotly code for the chart
+            plan: The visualization plan (dict) for this chart
+            figure_data: Optional executed figure data
+            chart_type: Optional chart type (bar_chart, line_chart, etc.)
+            title: Optional chart title
+        """
+        if user_id not in self._store:
+            self._store[user_id] = {}
+        
+        if dataset_id not in self._store[user_id]:
+            raise ValueError(f"Dataset {dataset_id} not found. Upload dataset first.")
+        
+        dataset = self._store[user_id][dataset_id]
+        
+        # Initialize charts metadata if first time
+        if "charts" not in dataset:
+            dataset["charts"] = {}
+        
+        # Store chart metadata
+        dataset["charts"][chart_index] = {
+            "chart_spec": chart_spec,
+            "plan": plan,
+            "figure": figure_data,
+            "chart_type": chart_type,
+            "title": title,
+            "created_at": datetime.utcnow().isoformat()
+        }
+    
+    def get_chart_metadata(
+        self,
+        user_id: int,
+        dataset_id: str,
+        chart_index: int
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get chart metadata including plan, code, and figure.
+        
+        Returns:
+            Dict with chart metadata or None if not found
+        """
+        if user_id in self._store and dataset_id in self._store[user_id]:
+            charts = self._store[user_id][dataset_id].get("charts", {})
+            return charts.get(chart_index)
+        return None
+    
+    def get_chart_plan(
+        self,
+        user_id: int,
+        dataset_id: str,
+        chart_index: int
+    ) -> Optional[dict]:
+        """Get the plan for a specific chart."""
+        metadata = self.get_chart_metadata(user_id, dataset_id, chart_index)
+        return metadata.get("plan") if metadata else None
+    
+    def get_chart_code(
+        self,
+        user_id: int,
+        dataset_id: str,
+        chart_index: int
+    ) -> Optional[str]:
+        """Get the code for a specific chart."""
+        metadata = self.get_chart_metadata(user_id, dataset_id, chart_index)
+        return metadata.get("chart_spec") if metadata else None
     
     def get_latest_dataset(self, user_id: int) -> Optional[Tuple[str, pd.DataFrame]]:
         """Get the most recently uploaded dataset for a user"""

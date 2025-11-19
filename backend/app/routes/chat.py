@@ -4,7 +4,7 @@ from ..core.security import get_current_subject, get_current_user
 from ..core.db import get_db
 from ..models import User
 from sqlalchemy.orm import Session
-from ..services.agents import chat_function
+from ..services.agents import chat_function, chart_matcher
 from ..services.dataset_service import dataset_service
 import dspy
 import os
@@ -55,37 +55,75 @@ async def chat(
                         columns = [str(col) for col in df.columns.tolist()]
                         data_context = f"Dataset with {len(df)} rows and {len(df.columns)} columns. Columns: {', '.join(columns)}"
         
-        # Get optional fig_data and plotly_code from payload
+        # Find matching chart using chart_matcher if dataset_id provided
         fig_data = ""
         plotly_code = ""
+        matched_chart_info = None
         
-        if payload.fig_data:
+        if payload.dataset_id:
+            charts = dataset_service._store.get(current_user.id, {}).get(payload.dataset_id, {}).get("charts", {})
+            
+            if charts:
+                # Compress chart metadata to 200 chars for matching
+                def compress_chart(idx, c):
+                    t = c.get("chart_type", "")[:30]
+                    n = c.get("title", "")[:50]
+                    p = str(c.get("plan", {}))[:100]
+                    return {"i": idx, "t": t, "n": n, "p": p}
+                
+                charts_json = json.dumps([compress_chart(idx, c) for idx, c in charts.items()], default=str)[:200]
+                
+                # Use gpt-4o-mini only for chart matching
+                match_lm = dspy.LM(
+                    "openai/gpt-4o-mini",
+                    api_key=os.getenv("OPENAI_API_KEY"),
+                    max_tokens=1000
+                )
+                
+                with dspy.context(lm=match_lm):
+                    match_result = dspy.Predict(chart_matcher)(
+                        query=payload.message,
+                        charts=charts_json
+                    )
+                
+                matched_index = int(match_result.chart_index)
+                
+                if matched_index >= 0 and matched_index in charts:
+                    matching_chart = charts[matched_index]
+                    plotly_code = matching_chart.get("chart_spec", "")
+                    figure = matching_chart.get("figure")
+                    if figure:
+                        fig_data = json.dumps(figure)
+                    
+                    # Store matched chart info for frontend
+                    matched_chart_info = {
+                        "index": matched_index,
+                        "type": matching_chart.get("chart_type", ""),
+                        "title": matching_chart.get("title", "")
+                    }
+                    logger.info(f"Matched chart {matched_index} ({matching_chart.get('chart_type')}) for query")
+        
+        # Fallback to payload if no match found or no charts
+        if not plotly_code and payload.plotly_code:
+            plotly_code = payload.plotly_code
+        
+        if not fig_data and payload.fig_data:
             if isinstance(payload.fig_data, dict):
                 fig_data = json.dumps(payload.fig_data)
             else:
                 fig_data = str(payload.fig_data)
         
-        if payload.plotly_code:
-            plotly_code = payload.plotly_code
-        
         # Initialize chat_function
         chat_fn = chat_function()
         
-        # Set up DSPy language model
-        lm = dspy.LM(
-            "openai/gpt-4o-mini",
-            api_key=os.getenv("OPENAI_API_KEY"),
-            max_tokens=2000
+        # Use default model from environment (configured in main.py) for main chat
+        # No need to set up lm here, it uses dspy.configure(lm=default_lm) from main.py
+        result = await chat_fn.aforward(
+            user_query=payload.message,
+            fig_data=fig_data,
+            data_context=data_context,
+            plotly_code=plotly_code
         )
-        
-        # Call chat_function with DSPy context
-        with dspy.context(lm=lm):
-            result = await chat_fn.aforward(
-                user_query=payload.message,
-                fig_data=fig_data,
-                data_context=data_context,
-                plotly_code=plotly_code
-            )
         
         # Extract response from result
         route_info = result.get('route', {})
@@ -96,7 +134,7 @@ async def chat(
         if hasattr(response_obj, 'answer'):
             reply = str(response_obj.answer)
         elif hasattr(response_obj, 'edited_code'):
-            reply = f"```python:\n{str(response_obj.edited_code)}"+"```"
+            reply = f"```python:\n{str(response_obj.edited_code)}"
             if hasattr(response_obj, 'reasoning'):
                 reply = f"{str(response_obj.reasoning)}\n\n{reply}"
         elif hasattr(response_obj, 'analysis_code'):
@@ -107,7 +145,8 @@ async def chat(
         
         return ChatResponse(
             reply=reply,
-            user=str(current_user.id)
+            user=str(current_user.id),
+            matched_chart=matched_chart_info
         )
         
     except Exception as e:
