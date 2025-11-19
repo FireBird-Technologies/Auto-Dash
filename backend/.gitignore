@@ -5,3 +5,20 @@ app/.env
 *.db 
 
 .venv
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json

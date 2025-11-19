@@ -27,6 +27,65 @@ if not logger.handlers:
     logger.addHandler(ch)
 
 
+class plotly_editor(dspy.Signature):
+    """ You are an AI that edits plotly code"""
+    user_query = dspy.InputField(desc="edits the user needs to make")
+    plotly_code = dspy.InputField(desc="The initial plotly code")
+    dataset_context = dspy.InputField(desc="Context of the dataset ")
+    edited_code = dspy.OutputField(desc="Edited code")
+    reasoning = dspy.OutputField(desc="Why did you make these edits explain")
+
+class fig_editor(dspy.Signature):
+    """ 
+    You are an AI that generates Python code to analyze Plotly figure data.
+    
+    IMPORTANT: The code you generate must:
+    1. Extract ALL data from fig.data (not just samples)
+    2. Iterate through ALL traces in fig.data
+    3. Extract ALL y-values (prices) from each trace
+    4. Perform the requested calculation on the complete dataset
+    
+    The fig.data is a list of trace objects. Each trace has:
+    - trace.y: array of y-values (prices in this case)
+    - trace.x: array of x-values (area in this case)
+    - trace.name: name of the trace (if available)
+    
+    Generate code that loops through ALL traces and extracts ALL values.
+     Return pure Python code that can be executed directly with exec().
+    """
+    user_query = dspy.InputField(desc="edits the user needs to make")
+    fig_data = dspy.InputField(desc="The initial fig.data")
+    code = dspy.OutputField(desc="Edited code")
+    reasoning = dspy.OutputField(desc="Why did you make these edits explain")
+
+class chat_function(dspy.Module):
+    def __init__(self):
+        self.plotly_editor_mod = dspy.Predict(plotly_editor)
+        self.fig_editor_mod = dspy.Predict(fig_editor)
+        self.general_qa = dspy.Predict("user_query->answer")
+  
+        self.router = dspy.Predict("user_query->query_type:Literal['data_query','general_query','plotly_edit_query'],reasoning")
+
+        
+        
+    async def aforward(self, user_query, fig_data, data_context,plotly_code):
+        route = self.router(user_query=user_query)
+        
+        if 'data_query' in route.query_type:
+            response = await self.fig_editor_mod(user_query=user_query, fig_data=fig_data)
+        elif 'plotly_edit_query' in route.query_type:
+            response = await self.plotly_editor_mod(user_query=user_query,dataset_context=data_context, plotly_code=plotly_code)
+        else:
+            response = await self.general_qa(user_query=user_query)
+            
+            
+        return_dict = {'route':route,'response':response}
+            
+            
+        
+        
+        return return_dict
+
 # ============================================================================
 # STYLING INSTRUCTIONS
 # ============================================================================
@@ -476,21 +535,22 @@ COMMON_PLOTLY_DOCS = """
 REQUIRED FORMAT:
 - Pure Python code using Plotly
 - Start with imports: import plotly.graph_objects as go (or import plotly.express as px)
-- Data is ALREADY available as 'data' parameter (pandas DataFrame)
+- ALWAYS assume 'df' already exists (pandas DataFrame) - DO NOT create or load it
 - Create figure using Plotly
 - MUST end with: fig (the variable name that stores the figure object)
 
 FORBIDDEN - DO NOT INCLUDE:
 ❌ fig.show() or fig.write_html() calls
-❌ Data loading code (pd.read_csv, etc.)
+❌ Data loading code (pd.read_csv, pd.read_excel, pd.DataFrame(), data = ..., df = pd.read_..., etc.)
+❌ Data creation code (df = ..., data = ..., etc.) - df ALREADY EXISTS
 ❌ Markdown code blocks (```)
 ❌ HTML or JavaScript code
 ❌ File I/O operations
 
 ✅ REQUIRED:
-1. Use 'data' parameter (pandas DataFrame) - it's already loaded
-2. Process/aggregate data using pandas if needed
-3. Create Plotly figure with go.Figure() or px functions
+1. Use 'df' directly - it's already loaded and available (NEVER add df = ... or data = ...)
+2. Process/aggregate data using pandas if needed (e.g., df.groupby(), df.agg(), etc.)
+3. Create Plotly figure with go.Figure() or px functions using 'df'
 4. Configure layout with fig.update_layout()
 5. END with just: fig (on its own line, this returns the figure)
 
@@ -498,8 +558,8 @@ EXAMPLE STRUCTURE:
 import plotly.graph_objects as go
 import pandas as pd
 
-# Process data
-grouped = data.groupby('category')['value'].sum().reset_index()
+# Process data (df already exists, use it directly)
+grouped = df.groupby('category')['value'].sum().reset_index()
 
 # Create figure
 fig = go.Figure()
@@ -650,9 +710,13 @@ def clean_plotly_code(code: str) -> str:
     # Remove fig.write_html() calls
     cleaned = re.sub(r'fig\.write_html\([^)]*\)', '', cleaned)
     
-    # Remove data loading code
+    # Remove data loading code - df already exists, never create or load it
     cleaned = re.sub(r'(data|df)\s*=\s*pd\.read_csv\([^)]*\)', '# Data already loaded', cleaned)
     cleaned = re.sub(r'(data|df)\s*=\s*pd\.read_[a-z]+\([^)]*\)', '# Data already loaded', cleaned)
+    cleaned = re.sub(r'(data|df)\s*=\s*pd\.DataFrame\([^)]*\)', '# Data already loaded', cleaned)
+    cleaned = re.sub(r'(data|df)\s*=\s*data\[[^\]]+\]', '# Data already loaded', cleaned)
+    cleaned = re.sub(r'df\s*=\s*data\.copy\(\)', '# df already exists', cleaned)
+    cleaned = re.sub(r'df\s*=\s*data\s*$', '# df already exists', cleaned, flags=re.MULTILINE)
     
     # Ensure code ends with 'fig' on its own line
     lines = cleaned.strip().split('\n')
@@ -745,15 +809,18 @@ class PlotlyVisualizationModule(dspy.Module):
                 raw_code = getattr(r, 'plotly_code', str(r))
                 cleaned = clean_plotly_code(raw_code)
                 
-                # Prepend data selection code for multi-sheet Excel
-                if data_source.get('file_type') == 'excel' and data_source.get('sheet_name'):
+                # Prepend data selection code based on file type
+                file_type = data_source.get('file_type', 'csv')  # Default to CSV if not specified
+                
+                if file_type == 'excel' and data_source.get('sheet_name'):
+                    # Multi-sheet Excel: use the specified sheet
                     sheet_name = data_source['sheet_name']
-                    # Add sheet selection at the beginning
                     data_selection = f"# Select sheet from Excel file\ndf = data['{sheet_name}']\n\n"
                     cleaned = data_selection + cleaned
-                elif data_source.get('file_type') == 'csv':
-                    # For CSV, ensure df is set to data
-                    if 'df = data' not in cleaned and 'df=' not in cleaned:
+                else:
+                    # CSV or single-sheet: use data directly
+                    # Only add df = data if not already present
+                    if 'df = data' not in cleaned and 'df=' not in cleaned and 'df =' not in cleaned:
                         cleaned = "df = data\n\n" + cleaned
                 
                 # Get chart type and title
