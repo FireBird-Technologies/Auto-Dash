@@ -67,6 +67,12 @@ class data_query_sig(dspy.Signature):
     7. ALWAYS include output - use print() or store in 'result' variable
     8. DO NOT import or use: matplotlib, plotly, seaborn, bokeh, or any visualization library
 
+    FORMATTING REQUIREMENTS:
+    - Round all numeric results to MAX 2 decimal places (use .round(2))
+    - Format datetime columns to show ONLY date (YYYY-MM-DD) using .dt.date or .dt.strftime('%Y-%m-%d')
+    - Do NOT show hours/minutes/seconds in datetime unless user explicitly asks for time precision
+    - Apply formatting before displaying or storing results
+
     Return pure Python code that can be executed directly with exec().
     """
     user_query = dspy.InputField(desc="Analysis or edits the user wants to perform on the DataFrame")

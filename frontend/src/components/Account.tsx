@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { config, getAuthHeaders } from '../config';
+import { config, getAuthHeaders, checkAuthResponse } from '../config';
 
 interface SubscriptionInfo {
   tier: string;
@@ -45,6 +45,8 @@ export const Account: React.FC<AccountProps> = ({ onClose }) => {
         headers: getAuthHeaders(),
       });
 
+      await checkAuthResponse(response);
+
       if (!response.ok) {
         throw new Error('Failed to fetch profile');
       }
@@ -77,6 +79,8 @@ export const Account: React.FC<AccountProps> = ({ onClose }) => {
         body: JSON.stringify({ name: editName }),
       });
 
+      await checkAuthResponse(response);
+
       if (!response.ok) {
         throw new Error('Failed to update profile');
       }
@@ -101,6 +105,8 @@ export const Account: React.FC<AccountProps> = ({ onClose }) => {
         method: 'DELETE',
         headers: getAuthHeaders(),
       });
+
+      await checkAuthResponse(response);
 
       if (!response.ok) {
         throw new Error('Failed to deactivate account');

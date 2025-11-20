@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import Plot from 'react-plotly.js';
-import { config, getAuthHeaders } from '../config';
+import { config, getAuthHeaders, checkAuthResponse } from '../config';
 
 interface PlotlyChartRendererProps {
   chartSpec: any;
@@ -146,6 +146,8 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
           dataset_id: datasetId
         })
       });
+
+      await checkAuthResponse(response);
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
