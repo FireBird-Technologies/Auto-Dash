@@ -789,13 +789,13 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                         alignItems: 'center',
                         gap: '6px',
                         padding: '4px 10px',
-                        backgroundColor: 'rgba(99, 102, 241, 0.15)',
+                        backgroundColor: 'rgba(239, 68, 68, 0.15)',
                         borderRadius: '12px',
                         fontSize: '12px',
                         fontWeight: '500',
                         marginBottom: '8px',
-                        border: '1px solid rgba(99, 102, 241, 0.3)',
-                        color: '#818cf8'
+                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                        color: '#ef4444'
                       }}>
                         <span>Chart {msg.matchedChart.index}: {msg.matchedChart.title || msg.matchedChart.type}</span>
                       </div>
@@ -819,7 +819,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                 alignItems: 'center',
                                 gap: '8px',
                                 padding: '8px 16px',
-                                backgroundColor: isExecutingCode ? '#6b7280' : '#6366f1',
+                                background: isExecutingCode ? '#6b7280' : 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)',
                                 color: 'white',
                                 border: 'none',
                                 borderRadius: '8px',
@@ -827,16 +827,19 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                 fontWeight: '500',
                                 cursor: isExecutingCode ? 'not-allowed' : 'pointer',
                                 transition: 'all 0.2s',
-                                opacity: isExecutingCode ? 0.6 : 1
+                                opacity: isExecutingCode ? 0.6 : 1,
+                                boxShadow: isExecutingCode ? 'none' : '0 2px 8px rgba(239, 68, 68, 0.2)'
                               }}
                               onMouseEnter={(e) => {
                                 if (!isExecutingCode) {
-                                  e.currentTarget.style.backgroundColor = '#4f46e5';
+                                  e.currentTarget.style.background = 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)';
+                                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.3)';
                                 }
                               }}
                               onMouseLeave={(e) => {
                                 if (!isExecutingCode) {
-                                  e.currentTarget.style.backgroundColor = '#6366f1';
+                                  e.currentTarget.style.background = 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)';
+                                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(239, 68, 68, 0.2)';
                                 }
                               }}
                             >
@@ -1216,20 +1219,23 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                 onClick={applyChartPreview}
                 style={{
                   padding: '12px 24px',
-                  backgroundColor: '#6366f1',
+                  background: 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)',
                   color: 'white',
                   border: 'none',
                   borderRadius: '8px',
                   fontSize: '14px',
                   fontWeight: 500,
                   cursor: 'pointer',
-                  transition: 'all 0.2s'
+                  transition: 'all 0.2s',
+                  boxShadow: '0 2px 8px rgba(239, 68, 68, 0.2)'
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = '#4f46e5';
+                  e.currentTarget.style.background = 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.3)';
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = '#6366f1';
+                  e.currentTarget.style.background = 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)';
+                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(239, 68, 68, 0.2)';
                 }}
               >
                 Apply Changes
