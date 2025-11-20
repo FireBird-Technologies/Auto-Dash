@@ -293,7 +293,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     // Add success message
     setChatHistory(prev => [...prev, {
       type: 'assistant',
-      message: '✓ Chart updated successfully!'
+      message: 'Chart updated successfully!'
     }]);
   };
 
@@ -797,7 +797,6 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                         border: '1px solid rgba(99, 102, 241, 0.3)',
                         color: '#818cf8'
                       }}>
-                        <span style={{ fontSize: '14px' }}>📊</span>
                         <span>Chart {msg.matchedChart.index}: {msg.matchedChart.title || msg.matchedChart.type}</span>
                       </div>
                     )}
@@ -842,15 +841,9 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                               }}
                             >
                               {isExecutingCode ? (
-                                <>
-                                  <span>⏳</span>
-                                  <span>Running...</span>
-                                </>
+                                <span>Running...</span>
                               ) : (
-                                <>
-                                  <span>▶</span>
-                                  <span>{msg.codeType === 'plotly_edit' ? 'Run Code' : 'Run Analysis'}</span>
-                                </>
+                                <span>{msg.codeType === 'plotly_edit' ? 'Run Code' : 'Run Analysis'}</span>
                               )}
                             </button>
                           </div>
@@ -890,7 +883,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
               className="chat-send-button"
               title={isLoading ? 'Generating...' : 'Send message'}
             >
-              {isLoading ? '⏳' : '➤'}
+              {isLoading ? '...' : 'Send'}
             </button>
           </div>
         </aside>
@@ -1191,7 +1184,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                   e.currentTarget.style.borderColor = '#e5e7eb';
                 }}
               >
-                ✗ Discard
+                Discard
               </button>
               <button
                 onClick={applyChartPreview}
@@ -1213,7 +1206,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                   e.currentTarget.style.backgroundColor = '#6366f1';
                 }}
               >
-                ✓ Apply Changes
+                Apply Changes
               </button>
             </div>
           </div>
