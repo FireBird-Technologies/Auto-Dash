@@ -1,6 +1,8 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
+import { config, getAuthHeaders } from '../../config';
 
 interface StyleContextProps {
+  datasetId: string;
   onComplete: (context: {
     description: string;
     colorTheme?: string;
@@ -16,12 +18,41 @@ const predefinedThemes = [
   { name: 'Monochrome', colors: ['#212529', '#495057', '#adb5bd'] },
 ];
 
-export const StyleContext: React.FC<StyleContextProps> = ({ onComplete }) => {
+export const StyleContext: React.FC<StyleContextProps> = ({ datasetId, onComplete }) => {
   const [description, setDescription] = useState('');
   const [selectedTheme, setSelectedTheme] = useState(0);
   const [customColors, setCustomColors] = useState(['#FF516B', '#99C3FA', '#99FABE']);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [isThemePickerExpanded, setIsThemePickerExpanded] = useState(false);
+
+  // Auto-fill first suggestion instead of placeholder
+  useEffect(() => {
+    const loadSuggestion = async () => {
+      if (!datasetId || description) return; // Don't override if user already typed
+
+      try {
+        const response = await fetch(
+          `${config.backendUrl}/api/data/datasets/${datasetId}/suggest-queries`,
+          {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            credentials: 'include',
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.suggestions?.[0]) {
+            setDescription(data.suggestions[0]);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load suggestion:', error);
+      }
+    };
+
+    loadSuggestion();
+  }, [datasetId, description]);
 
   const handleComplete = useCallback(() => {
     if (description.trim()) {
@@ -44,7 +75,7 @@ export const StyleContext: React.FC<StyleContextProps> = ({ onComplete }) => {
         <textarea
           value={description}
           onChange={e => setDescription(e.target.value)}
-          placeholder="E.g., Show me sales trends over time, compare regional performance, identify correlations..."
+          placeholder=""
           className="insight-textarea"
           rows={6}
           autoFocus

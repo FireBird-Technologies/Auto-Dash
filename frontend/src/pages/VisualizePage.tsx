@@ -39,6 +39,7 @@ export const VisualizePage: React.FC = () => {
       case 1:
         return (
           <StyleContext
+            datasetId={datasetId}
             onComplete={(context) => {
               setVizContext(context);
               setCurrentStep(2);
