@@ -78,7 +78,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, children }) => {
             {language || 'code'}
           </span>
           <span style={{ fontSize: '11px', color: '#858585' }}>
-            {isExpanded ? '▼' : '▶'}
+            {isExpanded ? 'v' : '>'}
           </span>
         </div>
         <button
@@ -99,7 +99,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, children }) => {
           onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
           onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
         >
-          {copied ? '✓ Copied' : 'Copy'}
+          {copied ? 'Copied' : 'Copy'}
         </button>
       </div>
       
@@ -224,6 +224,29 @@ export const MarkdownMessage: React.FC<MarkdownMessageProps> = ({ content }) => 
               </td>
             );
           },
+          h3({ children }: any) {
+            return (
+              <h3 style={{
+                fontSize: '16px',
+                fontWeight: '600',
+                margin: '16px 0 12px 0',
+                color: '#1f2937',
+                borderBottom: '2px solid #f3f4f6',
+                paddingBottom: '8px'
+              }}>
+                {children}
+              </h3>
+            );
+          },
+          hr() {
+            return (
+              <hr style={{
+                border: 'none',
+                borderTop: '1px solid #e5e7eb',
+                margin: '20px 0'
+              }} />
+            );
+          },
           p({ children }: any) {
             return <p style={{ margin: '8px 0' }}>{children}</p>;
           },
@@ -240,7 +263,35 @@ export const MarkdownMessage: React.FC<MarkdownMessageProps> = ({ content }) => 
             return <strong style={{ fontWeight: '600' }}>{children}</strong>;
           },
           em({ children }: any) {
-            return <em style={{ fontStyle: 'italic' }}>{children}</em>;
+            return <em style={{ fontStyle: 'italic', color: '#6b7280' }}>{children}</em>;
+          },
+          blockquote({ children }: any) {
+            return (
+              <blockquote style={{
+                borderLeft: '4px solid #ef4444',
+                paddingLeft: '16px',
+                margin: '12px 0',
+                color: '#6b7280',
+                fontStyle: 'italic'
+              }}>
+                {children}
+              </blockquote>
+            );
+          },
+          pre({ children }: any) {
+            return (
+              <pre style={{
+                backgroundColor: '#f9fafb',
+                padding: '12px',
+                borderRadius: '6px',
+                overflow: 'auto',
+                fontSize: '13px',
+                lineHeight: '1.5',
+                border: '1px solid #e5e7eb'
+              }}>
+                {children}
+              </pre>
+            );
           }
         }}
       >

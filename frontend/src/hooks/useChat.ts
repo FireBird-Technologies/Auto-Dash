@@ -77,7 +77,7 @@ export function useChat(options: UseChatOptions = {}) {
       // Add error message
       setMessages(prev => [...prev, {
         type: 'error',
-        message: `❌ ${errorMessage}`,
+        message: `Error: ${errorMessage}`,
         timestamp: new Date(),
       }]);
 
