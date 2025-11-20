@@ -485,7 +485,7 @@ class GenerateVisualizationPlan(dspy.Signature):
     Available chart types: bar_chart, line_chart, scatter_plot, heatmap, histogram, pie_chart, box_plot, area_chart
     
     Keep instructions short (2-3 lines per chart).
-    Include only essential charts—avoid redundant ones.
+    Include only essential charts - avoid redundant ones.
     """
 
     query = dspy.InputField(
@@ -506,7 +506,7 @@ class GenerateVisualizationPlan(dspy.Signature):
     )
 
     relevant_query = dspy.OutputField(
-        desc="Boolean flag — True if the query is NOT about visualizations. False if it IS relevant.",
+        desc="Boolean flag - True if the query is NOT about visualizations. False if it IS relevant.",
         type=bool
     )
 
@@ -556,7 +556,7 @@ fig.add_annotation(
 # ============================================================================
 
 COMMON_PLOTLY_DOCS = """
-🚨🚨🚨 CRITICAL OUTPUT FORMAT - READ CAREFULLY 🚨🚨🚨
+CRITICAL OUTPUT FORMAT - READ CAREFULLY
 
 REQUIRED FORMAT:
 - Pure Python code using Plotly

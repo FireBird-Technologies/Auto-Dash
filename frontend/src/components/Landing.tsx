@@ -209,13 +209,13 @@ export const Landing: React.FC<LandingProps> = ({ onStart }) => {
             <h2 className="section-heading">See AutoDash in Action</h2>
             <p className="section-subheading">
               Try interacting with this fully functional visualization below. 
-              Hover, filter, and sort to explore the data—all powered by Plotly and natural language.
+              Hover, filter, and sort to explore the data - all powered by Plotly and natural language.
             </p>
           </div>
           <DemoVisualization />
           <div className="demo-cta">
             <p className="demo-cta-text">
-              This is just one example. AutoDash can create <strong>any visualization you can imagine</strong>—just describe it.
+              This is just one example. AutoDash can create <strong>any visualization you can imagine</strong> - just describe it.
             </p>
             <GoogleAuthButton
               onSuccess={(token) => {
@@ -320,7 +320,7 @@ export const Landing: React.FC<LandingProps> = ({ onStart }) => {
           <div className="benefits-grid">
             <div className="benefit-card">
               <h3>No Code Required</h3>
-              <p>Built for everyone—from analysts to executives. If you can describe it, AutoDash can visualize it.</p>
+              <p>Built for everyone - from analysts to executives. If you can describe it, AutoDash can visualize it.</p>
             </div>
             <div className="benefit-card">
               <h3>Lightning Fast</h3>
@@ -346,7 +346,7 @@ export const Landing: React.FC<LandingProps> = ({ onStart }) => {
               onStart();
             }}
           >
-            Get Started — It's Free
+            Get Started - It's Free
           </GoogleAuthButton>
         </div>
       </section>

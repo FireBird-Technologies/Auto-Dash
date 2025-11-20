@@ -118,13 +118,13 @@ def try_convert_to_numeric(series: pd.Series, col_name: str) -> pd.Series:
                 
                 # Only return converted if we successfully converted at least some values
                 if converted.notna().sum() > 0:
-                    logger.info(f"✓ Converted '{col_name}' to numeric (float)")
+                    logger.info(f"Converted '{col_name}' to numeric (float)")
                     return converted
         
         return series
         
     except Exception as e:
-        logger.warning(f"✗ Could not convert '{col_name}' to numeric: {e}")
+        logger.warning(f"Could not convert '{col_name}' to numeric: {e}")
         return series
 
 
@@ -143,13 +143,13 @@ def try_convert_to_datetime(series: pd.Series, col_name: str) -> pd.Series:
         
         # Only return converted if we successfully converted at least some values
         if converted.notna().sum() > 0:
-            logger.info(f"✓ Converted '{col_name}' to datetime")
+            logger.info(f"Converted '{col_name}' to datetime")
             return converted
         
         return series
         
     except Exception as e:
-        logger.warning(f"✗ Could not convert '{col_name}' to datetime: {e}")
+        logger.warning(f"Could not convert '{col_name}' to datetime: {e}")
         return series
 
 
@@ -254,7 +254,7 @@ class FileProcessor:
                     
                     # Check if we got meaningful data (more than 1 column)
                     if self.df.shape[1] > 1:
-                        print(f"✓ Successfully read CSV with encoding={encoding}, delimiter='{delimiter}'")
+                        print(f"Successfully read CSV with encoding={encoding}, delimiter='{delimiter}'")
                         return self.df
                 except Exception as e:
                     continue
@@ -274,7 +274,7 @@ class FileProcessor:
                 self.df = restore_headers_if_lost(self.df)
             except Exception:
                 pass
-            print("✓ Read CSV as single column (may need manual parsing)")
+            print("Read CSV as single column (may need manual parsing)")
             return self.df
         except Exception as e:
             raise Exception(f"Failed to read CSV: {str(e)}")
@@ -291,7 +291,7 @@ class FileProcessor:
                     engine=engine,
                     sheet_name=0  # Read first sheet
                 )
-                print(f"✓ Successfully read Excel with engine={engine}")
+                print(f"Successfully read Excel with engine={engine}")
                 return self.df
             except Exception as e:
                 continue
@@ -1365,41 +1365,72 @@ async def execute_code(
             
             # Collect results
             results = []
+            section_count = 0
             
             # 1. Captured print output
             printed_output = output_buffer.getvalue()
             if printed_output.strip():
-                results.append(printed_output.strip())
+                section_count += 1
+                # Add section header with emoji
+                results.append(f"### Analysis Output\n\n{printed_output.strip()}")
             
             # 2. Check for 'result' variable
             if 'result' in exec_globals:
                 result_val = exec_globals['result']
+                section_count += 1
+                
                 if isinstance(result_val, pd.DataFrame):
                     # Format DataFrame as markdown table (first 20 rows)
                     df_preview = result_val.head(20)
-                    results.append(f"**Result DataFrame ({len(result_val)} rows x {len(result_val.columns)} cols):**\n\n{df_preview.to_markdown(index=False)}")
+                    row_info = f"{len(result_val)} rows x {len(result_val.columns)} columns"
+                    if len(result_val) > 20:
+                        row_info += f" (showing first 20)"
+                    
+                    results.append(
+                        f"### Result\n\n"
+                        f"*{row_info}*\n\n"
+                        f"{df_preview.to_markdown(index=False)}"
+                    )
                 elif isinstance(result_val, pd.Series):
-                    results.append(f"**Result Series ({len(result_val)} values):**\n\n{result_val.to_markdown()}")
+                    results.append(
+                        f"### Result\n\n"
+                        f"*{len(result_val)} values*\n\n"
+                        f"{result_val.to_markdown()}"
+                    )
                 else:
-                    results.append(f"**Result:**\n```\n{result_val}\n```")
+                    results.append(f"### Result\n\n```\n{result_val}\n```")
             
             # 3. Check for 'display' or 'output' variables
             for var_name in ['display', 'output', 'summary']:
                 if var_name in exec_globals and var_name not in ['pd', 'np', 'json', 'data', 'df'] and not var_name.startswith('_'):
                     val = exec_globals[var_name]
+                    section_count += 1
+                    
                     if isinstance(val, pd.DataFrame):
                         df_preview = val.head(20)
-                        results.append(f"**{var_name.title()} ({len(val)} rows x {len(val.columns)} cols):**\n\n{df_preview.to_markdown(index=False)}")
+                        row_info = f"{len(val)} rows x {len(val.columns)} columns"
+                        if len(val) > 20:
+                            row_info += f" (showing first 20)"
+                        
+                        results.append(
+                            f"### {var_name.title()}\n\n"
+                            f"*{row_info}*\n\n"
+                            f"{df_preview.to_markdown(index=False)}"
+                        )
                     elif isinstance(val, pd.Series):
-                        results.append(f"**{var_name.title()} ({len(val)} values):**\n\n{val.to_markdown()}")
+                        results.append(
+                            f"### {var_name.title()}\n\n"
+                            f"*{len(val)} values*\n\n"
+                            f"{val.to_markdown()}"
+                        )
                     else:
-                        results.append(f"**{var_name.title()}:**\n```\n{val}\n```")
+                        results.append(f"### {var_name.title()}\n\n```\n{val}\n```")
             
-            # Combine all results
+            # Combine all results with section dividers
             if results:
-                final_result = "\n\n".join(results)
+                final_result = "\n\n---\n\n".join(results)
             else:
-                final_result = "✓ Code executed successfully (no output)"
+                final_result = "Code executed successfully (no output)"
             
             logger.info(f"Analysis completed successfully. Output length: {len(final_result)}")
             

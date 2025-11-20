@@ -316,7 +316,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     setChatHistory(prev => [
       ...prev,
       { type: 'user', message: userQuery },
-      { type: 'assistant', message: ' Analyzing your data and generating visualization...' }
+      { type: 'assistant', message: 'Crafting your visualization... Great insights take a moment!' }
     ]);
 
     try {
@@ -762,7 +762,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                 <h3>AI Assistant</h3>
               </div>
               <span className={`chat-status ${isLoading ? 'thinking' : 'online'}`}>
-                {isLoading ? '● Thinking...' : '● Online'}
+                {isLoading ? 'Thinking...' : 'Online'}
               </span>
             </div>
           </div>
@@ -802,6 +802,25 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                     )}
                     {msg.type === 'assistant' ? (
                       <>
+                        {msg.codeType && (
+                          <div style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '4px 10px',
+                            backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                            borderRadius: '12px',
+                            fontSize: '11px',
+                            fontWeight: '600',
+                            marginBottom: '8px',
+                            border: '1px solid rgba(99, 102, 241, 0.2)',
+                            color: '#6366f1',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.5px'
+                          }}>
+                            {msg.codeType === 'plotly_edit' ? 'Chart Editor' : 'Data Analysis'}
+                          </div>
+                        )}
                         <MarkdownMessage content={msg.message} />
                         {msg.codeType && msg.executableCode && (
                           <div style={{ marginTop: '12px' }}>
@@ -1030,13 +1049,13 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
             {isLoading && chartSpecs.length === 0 && (
             <div className="magic-loading">
               <div className="magic-sparkles">
-                <span className="sparkle">•</span>
-                <span className="sparkle">•</span>
-                <span className="sparkle">•</span>
-                <span className="sparkle">•</span>
-                <span className="sparkle">•</span>
+                <span className="sparkle">*</span>
+                <span className="sparkle">*</span>
+                <span className="sparkle">*</span>
+                <span className="sparkle">*</span>
+                <span className="sparkle">*</span>
               </div>
-              <p className="magic-text">Transforming your data into art..</p>
+              <p className="magic-text">Crafting beautiful insights from your data...</p>
             </div>
             )}
 

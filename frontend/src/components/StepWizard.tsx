@@ -28,7 +28,7 @@ export const StepWizard: React.FC<StepWizardProps> = ({
             onClick={() => index < currentStep && onStepChange(index)}
           >
             <div className="step-number">
-              {index < currentStep ? '✓' : index + 1}
+              {index < currentStep ? 'done' : index + 1}
             </div>
             <div className="step-content">
               <div className="step-title">{step.title}</div>

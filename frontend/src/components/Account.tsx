@@ -144,7 +144,7 @@ export const Account: React.FC<AccountProps> = ({ onClose }) => {
           <h1>Account Settings</h1>
           {onClose && (
             <button onClick={onClose} className="close-button" aria-label="Close">
-              ×
+              x
             </button>
           )}
         </div>

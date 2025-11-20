@@ -292,9 +292,9 @@ function Visualization({ datasetId }) {
 
 The `chat_function` module routes queries to different handlers:
 
-- **general_query**: General Q&A → returns answer
-- **plotly_edit_query**: Plotly code editing → returns edited_code and reasoning
-- **data_query**: Data analysis → returns analysis_code
+- **general_query**: General Q&A -> returns answer
+- **plotly_edit_query**: Plotly code editing -> returns edited_code and reasoning
+- **data_query**: Data analysis -> returns analysis_code
 
 The routing is automatic based on the query content and provided parameters.
 
