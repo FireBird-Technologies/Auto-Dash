@@ -1,4 +1,5 @@
 import os
+import logging
 from dotenv import load_dotenv
 import dspy
 from pathlib import Path
@@ -9,6 +10,11 @@ from starlette.middleware.sessions import SessionMiddleware
 # Load environment from backend/.env BEFORE importing modules that read env
 _ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(dotenv_path=_ENV_PATH, override=False)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 
 from .core.db import Base, engine
 from .routes.health import router as health_router

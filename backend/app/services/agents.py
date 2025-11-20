@@ -28,7 +28,16 @@ if not logger.handlers:
 
 
 class plotly_editor(dspy.Signature):
-    """ You are an AI that edits plotly code"""
+    """ You are an AI that edits plotly code
+    
+    IMPORTANT:
+    1. You must output the FULL executable Python code, not just the changes.
+    2. The code must start with imports (e.g. import plotly.graph_objects as go).
+    3. The code must assume 'df' is already available (do not load it).
+    4. The code must create the 'fig' object and populate it.
+    5. The code must end with 'fig' on the last line.
+    6. You MUST add data traces (fig.add_trace) or use px functions. Do NOT just update layout.
+    """
     user_query = dspy.InputField(desc="edits the user needs to make")
     plotly_code = dspy.InputField(desc="The initial plotly code")
     dataset_context = dspy.InputField(desc="Context of the dataset ")

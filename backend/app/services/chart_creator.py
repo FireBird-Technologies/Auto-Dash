@@ -34,6 +34,23 @@ def execute_plotly_code(code: str, data: Dict[str, pd.DataFrame]) -> Dict[str, A
         dict: Plotly figure as JSON
     """
     try:
+        # Validate data exists
+        if data is None:
+            logger.error("No data provided for execution")
+            raise ValueError("No data provided for execution")
+        
+        if not isinstance(data, dict):
+            logger.error(f"Data must be a dict, got {type(data)}")
+            raise ValueError(f"Data must be a dict, got {type(data)}")
+        
+        if not data:
+            logger.error("Data dict is empty - no sheets available")
+            raise ValueError("Data dict is empty - no sheets available")
+        
+        # Log sheet information
+        sheet_names = list(data.keys())
+        logger.info(f"Executing code with {len(sheet_names)} sheet(s): {sheet_names}")
+        
         # Import clean_plotly_code to ensure fig.show() is always removed
         from .agents import clean_plotly_code
         
@@ -41,7 +58,6 @@ def execute_plotly_code(code: str, data: Dict[str, pd.DataFrame]) -> Dict[str, A
         code = clean_plotly_code(code)
         
         # Create execution environment with necessary imports
-        # Data is always a dict: {sheet_name: DataFrame}
         exec_globals = {
             'pd': pd,
             'np': np,
@@ -55,13 +71,25 @@ def execute_plotly_code(code: str, data: Dict[str, pd.DataFrame]) -> Dict[str, A
         }
         
         # Set up dataframes: first sheet as default 'df', all sheets available by name
-        sheet_names = list(data.keys())
-        if sheet_names:
-            # Default df is first sheet
-            exec_globals['df'] = data[sheet_names[0]]
-            # Make all sheets available by their cleaned names
-            for sheet_name, sheet_df in data.items():
-                exec_globals[sheet_name] = sheet_df
+        if not sheet_names:
+            logger.error("No sheets found in data")
+            raise ValueError("No sheets found in data")
+        
+        # Default df is first sheet
+        first_sheet_df = data[sheet_names[0]]
+        if first_sheet_df is None:
+            logger.error(f"First sheet '{sheet_names[0]}' has None DataFrame")
+            raise ValueError(f"First sheet '{sheet_names[0]}' has None DataFrame")
+        
+        exec_globals['df'] = first_sheet_df
+        logger.info(f"Default df: '{sheet_names[0]}' ({first_sheet_df.shape[0]} rows × {first_sheet_df.shape[1]} cols)")
+        
+        # Make all sheets available by their cleaned names
+        for sheet_name, sheet_df in data.items():
+            if sheet_df is None:
+                logger.warning(f"Skipping sheet '{sheet_name}': DataFrame is None")
+                continue
+            exec_globals[sheet_name] = sheet_df
         
         # Try to import plotly.express if available
         try:
@@ -79,33 +107,50 @@ def execute_plotly_code(code: str, data: Dict[str, pd.DataFrame]) -> Dict[str, A
             """No-op function to prevent display() calls"""
             pass
         
-        exec_globals['show'] = noop_show  # Prevent any show() calls
-        exec_globals['display'] = noop_display  # Prevent Jupyter display() calls
+        exec_globals['show'] = noop_show
+        exec_globals['display'] = noop_display
         
         # Execute the code
+        logger.info("Executing plotly code...")
+        logger.info(f"Code to execute:\n{code}")
         exec(code, exec_globals)
         
         # Get the figure object (should be stored in 'fig' variable)
         fig = exec_globals.get('fig')
         
         if fig is None:
+            logger.error("Code did not produce a 'fig' variable")
             raise ValueError("Code did not produce a 'fig' variable")
         
         if not isinstance(fig, go.Figure):
+            logger.error(f"'fig' is not a Plotly Figure object, got {type(fig)}")
             raise ValueError(f"'fig' is not a Plotly Figure object, got {type(fig)}")
         
         # Enforce max width (1000px) and height (800px) constraints
         current_width = getattr(fig.layout, 'width', None) if fig.layout else None
         current_height = getattr(fig.layout, 'height', None) if fig.layout else None
         
-        # Set dimensions, ensuring they don't exceed max values
         width = min(current_width, 1000) if current_width else 1000
         height = min(current_height, 800) if current_height else 800
         
         fig.update_layout(width=width, height=height)
         
+        fig.show()
         # Convert figure to JSON
         fig_json = json.loads(fig.to_json())
+        
+        # VALIDATION: Check if figure has data
+        if not fig.data:
+            logger.warning("Figure has no data traces! Raising ValueError.")
+            # Log the code that failed to produce data
+            logger.warning(f"Code that produced empty figure:\n{code}")
+            raise ValueError("The generated code created a figure with no data traces. Did you forget fig.add_trace()?")
+            
+        # Log first trace data sample to verify content
+        if fig.data:
+            logger.info(f"Figure data sample (trace 0): {str(fig.data[0])[:300]}...")
+
+        logger.info("✓ Plotly code executed successfully")
         
         return {
             'success': True,
@@ -114,7 +159,7 @@ def execute_plotly_code(code: str, data: Dict[str, pd.DataFrame]) -> Dict[str, A
         }
         
     except Exception as e:
-        logger.error(f"Error executing Plotly code: {e}")
+        logger.error(f"✗ Plotly execution failed: {e}")
         logger.error(f"Code was:\n{code}")
         return {
             'success': False,
