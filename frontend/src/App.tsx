@@ -4,6 +4,8 @@ import { Navbar } from './components/Navbar';
 import { Landing } from './components/Landing';
 import { Account } from './components/Account';
 import { VisualizePage } from './pages/VisualizePage';
+import { PricingPage } from './pages/PricingPage';
+import { PaymentPage } from './pages/PaymentPage';
 
 function AuthHandler() {
   const navigate = useNavigate();
@@ -16,7 +18,17 @@ function AuthHandler() {
     if (token && sessionStorage.getItem('auth_callback')) {
       localStorage.setItem('auth_token', token);
       sessionStorage.removeItem('auth_callback');
-      navigate('/visualize', { replace: true });
+      
+      // Check if user selected a plan before auth
+      const selectedPlan = sessionStorage.getItem('selected_plan');
+      
+      if (selectedPlan === 'pro') {
+        sessionStorage.removeItem('selected_plan');
+        navigate('/payment', { replace: true });
+      } else {
+        sessionStorage.removeItem('selected_plan');
+        navigate('/visualize', { replace: true });
+      }
     }
   }, [navigate, location]);
 
@@ -25,22 +37,46 @@ function AuthHandler() {
 
 function AppRoutes() {
   const navigate = useNavigate();
+  const location = useLocation();
   const isAuthenticated = !!localStorage.getItem('auth_token');
+  
+  // Hide navbar on pricing and payment pages
+  const hideNavbar = location.pathname === '/pricing' || location.pathname === '/payment';
 
   return (
     <>
       <AuthHandler />
-      <Navbar onAccountClick={() => navigate('/account')} />
+      {!hideNavbar && <Navbar onAccountClick={() => navigate('/account')} />}
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         <Routes>
-          <Route path="/" element={<Landing onStart={() => navigate('/visualize')} />} />
+          <Route 
+            path="/" 
+            element={
+              isAuthenticated ? (
+                <Navigate to="/visualize" replace />
+              ) : (
+                <Landing onStart={() => navigate('/visualize')} />
+              )
+            } 
+          />
+          <Route path="/pricing" element={<PricingPage />} />
+          <Route 
+            path="/payment" 
+            element={
+              isAuthenticated ? (
+                <PaymentPage />
+              ) : (
+                <Navigate to="/pricing" replace />
+              )
+            } 
+          />
           <Route 
             path="/visualize" 
             element={
               isAuthenticated ? (
                 <VisualizePage />
               ) : (
-                <Navigate to="/" replace />
+                <Navigate to="/pricing" replace />
               )
             } 
           />
@@ -50,7 +86,7 @@ function AppRoutes() {
               isAuthenticated ? (
                 <Account onClose={() => navigate(-1)} />
               ) : (
-                <Navigate to="/" replace />
+                <Navigate to="/pricing" replace />
               )
             } 
           />

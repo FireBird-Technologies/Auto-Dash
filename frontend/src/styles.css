@@ -56,6 +56,7 @@ body {
   font-size: 22px;
   background: linear-gradient(135deg, var(--aa-text), var(--aa-primary));
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
@@ -108,6 +109,7 @@ body {
   margin: 0;
   background: linear-gradient(135deg, var(--aa-text), var(--aa-primary));
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
@@ -689,6 +691,7 @@ body {
   margin: 0 0 16px;
   background: linear-gradient(135deg, var(--aa-text), var(--aa-primary));
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
@@ -833,6 +836,7 @@ body {
   font-weight: 900;
   background: linear-gradient(135deg, var(--aa-primary), var(--aa-primary-600));
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
   opacity: 0.3;
   flex-shrink: 0;
@@ -1172,6 +1176,31 @@ body {
 /* User Menu in Navbar */
 .navbar {
   justify-content: space-between;
+}
+
+/* Navbar Pricing Button - Red Button */
+.navbar-pricing-button {
+  padding: 10px 20px;
+  background: linear-gradient(135deg, var(--aa-primary), var(--aa-primary-600));
+  border: none;
+  border-radius: 10px;
+  color: white;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(255, 107, 107, 0.25);
+}
+
+.navbar-pricing-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(255, 107, 107, 0.35);
+  background: linear-gradient(135deg, #ff5252, #ff6b6b);
+}
+
+.navbar-pricing-button.active {
+  background: linear-gradient(135deg, #ff5252, #ff6b6b);
+  box-shadow: 0 6px 16px rgba(255, 107, 107, 0.35);
 }
 
 .user-menu {
@@ -1733,8 +1762,8 @@ body {
   letter-spacing: 0.5px;
   background: linear-gradient(135deg, #ff6b6b 0%, #ff8787 100%);
   -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
   background-clip: text;
+  -webkit-text-fill-color: transparent;
   animation: pulse 2s ease-in-out infinite;
 }
 
@@ -2535,4 +2564,740 @@ body {
 
 .chat-bubble table tbody tr {
   transition: background-color 0.15s ease;
+}
+
+/* ============================================
+   PRICING PAGE
+   ============================================ */
+
+.pricing-page {
+  /* Using reusable .page-wrapper */
+  width: 100%;
+  min-height: 100vh;
+  overflow-y: auto;
+  background: linear-gradient(135deg, #fff7f8 0%, #ffffff 100%);
+  padding: 60px 20px;
+}
+
+.pricing-container {
+  /* Using reusable .page-container */
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* ============================================
+   REUSABLE COMPONENTS
+   ============================================ */
+
+/* Reusable back button for all pages */
+.back-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: white;
+  border: 1px solid var(--aa-border);
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--aa-text);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-bottom: 32px;
+}
+
+.back-button:hover {
+  border-color: var(--aa-primary);
+  background: var(--aa-bg);
+  transform: translateX(-4px);
+}
+
+.back-button svg {
+  flex-shrink: 0;
+}
+
+/* Reusable page title */
+.page-title {
+  font-size: 36px;
+  font-weight: 800;
+  margin: 0 0 12px;
+  color: var(--aa-text);
+}
+
+.page-title-center {
+  text-align: center;
+}
+
+/* Reusable page container */
+.page-container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* Reusable page wrapper */
+.page-wrapper {
+  width: 100%;
+  min-height: 100vh;
+  overflow-y: auto;
+  background: linear-gradient(135deg, #fff7f8 0%, #ffffff 100%);
+  padding: 40px 20px;
+}
+
+/* Reusable form card */
+.form-card {
+  background: white;
+  padding: 32px;
+  border-radius: 16px;
+  border: 1px solid var(--aa-border);
+  box-shadow: 0 10px 30px rgba(255, 107, 107, 0.08);
+}
+
+/* Reusable subtitle */
+.page-subtitle {
+  font-size: 16px;
+  color: var(--aa-muted);
+  margin: 0 0 40px;
+  line-height: 1.6;
+}
+
+.page-subtitle-center {
+  text-align: center;
+}
+
+.pricing-header {
+  text-align: center;
+  margin-bottom: 60px;
+}
+
+.pricing-title {
+  font-size: clamp(36px, 5vw, 48px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0 0 16px;
+  background: linear-gradient(135deg, var(--aa-text), var(--aa-primary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.pricing-subtitle {
+  font-size: 18px;
+  color: var(--aa-muted);
+  margin: 0 0 32px 0;
+  line-height: 1.6;
+}
+
+.billing-toggle-container {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  align-items: center;
+  background: white;
+  padding: 6px;
+  border-radius: 14px;
+  border: 2px solid var(--aa-border);
+  max-width: 400px;
+  margin: 0 auto;
+  box-shadow: 0 4px 12px rgba(255, 107, 107, 0.08);
+}
+
+.billing-toggle-button {
+  flex: 1;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--aa-text);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  position: relative;
+}
+
+.billing-toggle-button.active {
+  background: linear-gradient(135deg, var(--aa-primary), var(--aa-primary-600));
+  color: white;
+  box-shadow: 0 4px 12px rgba(255, 107, 107, 0.25);
+}
+
+.pricing-save-badge {
+  font-size: 14px;
+  color: #10b981;
+  font-weight: 600;
+  margin: 8px 0 0 0;
+  text-align: center;
+}
+
+.pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 32px;
+  margin-bottom: 80px;
+}
+
+.pricing-card {
+  background: white;
+  border: 2px solid var(--aa-border);
+  border-radius: 20px;
+  padding: 40px 32px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  transition: all 0.3s ease;
+  box-shadow: 0 10px 30px rgba(255, 107, 107, 0.05);
+}
+
+.pricing-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 20px 40px rgba(255, 107, 107, 0.15);
+}
+
+.pricing-card-featured {
+  border-color: var(--aa-primary);
+  box-shadow: 0 20px 40px rgba(255, 107, 107, 0.15);
+  transform: scale(1.05);
+}
+
+.pricing-card-featured:hover {
+  transform: scale(1.05) translateY(-8px);
+}
+
+.pricing-badge {
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, var(--aa-primary), var(--aa-primary-600));
+  color: white;
+  padding: 6px 20px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(255, 107, 107, 0.3);
+}
+
+.pricing-card-header {
+  text-align: center;
+  margin-bottom: 32px;
+  padding-bottom: 32px;
+  border-bottom: 1px solid var(--aa-border);
+}
+
+.pricing-plan-name {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0 0 20px;
+  color: var(--aa-text);
+}
+
+.pricing-amount {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.pricing-currency {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--aa-muted);
+  margin-right: 4px;
+}
+
+.pricing-price {
+  font-size: 56px;
+  font-weight: 800;
+  color: var(--aa-text);
+  line-height: 1;
+}
+
+.pricing-price-custom {
+  font-size: 40px;
+  font-weight: 800;
+  color: var(--aa-text);
+  line-height: 1;
+}
+
+.pricing-period {
+  font-size: 16px;
+  color: var(--aa-muted);
+  margin-left: 4px;
+}
+
+.pricing-description {
+  font-size: 15px;
+  color: var(--aa-muted);
+  margin: 0;
+}
+
+.pricing-features {
+  flex: 1;
+  margin-bottom: 32px;
+}
+
+.pricing-features ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pricing-features li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 15px;
+  color: var(--aa-text);
+}
+
+.pricing-features li svg {
+  flex-shrink: 0;
+  color: var(--aa-primary);
+}
+
+.pricing-card-footer {
+  margin-top: auto;
+}
+
+.pricing-faq {
+  text-align: center;
+  margin-top: 80px;
+}
+
+.pricing-faq h2 {
+  font-size: 32px;
+  font-weight: 800;
+  margin: 0 0 48px;
+  color: var(--aa-text);
+}
+
+.faq-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 32px;
+  text-align: left;
+}
+
+.faq-item {
+  background: white;
+  padding: 24px;
+  border-radius: 16px;
+  border: 1px solid var(--aa-border);
+  box-shadow: 0 4px 12px rgba(255, 107, 107, 0.05);
+  transition: all 0.3s ease;
+}
+
+.faq-item:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 20px rgba(255, 107, 107, 0.1);
+}
+
+.faq-item h4 {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0 0 12px;
+  color: var(--aa-text);
+}
+
+.faq-item p {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--aa-muted);
+  margin: 0;
+}
+
+@media (max-width: 968px) {
+  .pricing-page {
+    padding: 40px 20px;
+  }
+
+  .pricing-header {
+    margin-bottom: 40px;
+  }
+
+  .pricing-grid {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+
+  .pricing-card-featured {
+    transform: scale(1);
+  }
+
+  .pricing-card-featured:hover {
+    transform: translateY(-8px);
+  }
+
+  .faq-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+}
+
+/* ============================================
+   CONTACT FORM
+   ============================================ */
+
+.contact-form-container {
+  /* Using reusable .page-wrapper */
+  width: 100%;
+  min-height: 100vh;
+  overflow-y: auto;
+  background: linear-gradient(135deg, #fff7f8 0%, #ffffff 100%);
+  padding: 40px 20px;
+}
+
+.contact-form-wrapper {
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+
+.contact-form-content {
+  background: white;
+  border-radius: 20px;
+  padding: 48px 40px;
+  box-shadow: 0 20px 40px rgba(255, 107, 107, 0.08);
+}
+
+/* Using reusable .page-title, .page-title-center, and .page-subtitle */
+
+.contact-form {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-group label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--aa-text);
+}
+
+.form-input,
+.form-textarea {
+  width: 100%;
+  padding: 14px 16px;
+  border: 2px solid var(--aa-border);
+  border-radius: 12px;
+  font-size: 15px;
+  font-family: inherit;
+  color: var(--aa-text);
+  background: white;
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.form-input:focus,
+.form-textarea:focus {
+  border-color: var(--aa-primary);
+  box-shadow: 0 0 0 3px rgba(255, 107, 107, 0.1);
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 120px;
+  line-height: 1.6;
+}
+
+.contact-success {
+  text-align: center;
+  padding: 80px 40px;
+  background: white;
+  border-radius: 20px;
+  box-shadow: 0 20px 40px rgba(255, 107, 107, 0.08);
+}
+
+.success-icon {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 24px;
+  background: linear-gradient(135deg, #10b981, #059669);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  animation: scaleIn 0.5s ease-out;
+}
+
+.contact-success h2 {
+  font-size: 32px;
+  font-weight: 800;
+  margin: 0 0 16px;
+  color: var(--aa-text);
+}
+
+.contact-success p {
+  font-size: 16px;
+  color: var(--aa-muted);
+  margin: 0;
+  line-height: 1.6;
+}
+
+@media (max-width: 768px) {
+  .contact-form-container {
+    padding: 20px 16px;
+  }
+
+  .contact-form-content {
+    padding: 32px 24px;
+  }
+
+  .page-title {
+    font-size: 28px;
+  }
+
+  .contact-success {
+    padding: 60px 24px;
+  }
+
+  .success-icon {
+    width: 64px;
+    height: 64px;
+  }
+
+  .contact-success h2 {
+    font-size: 24px;
+  }
+}
+
+/* ============================================
+   PAYMENT PAGE
+   ============================================ */
+
+.payment-page {
+  /* Using reusable .page-wrapper */
+  width: 100%;
+  min-height: 100vh;
+  overflow-y: auto;
+  background: linear-gradient(135deg, #fff7f8 0%, #ffffff 100%);
+  padding: 40px 20px;
+}
+
+.payment-container {
+  /* Using reusable .page-container */
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+
+.payment-content {
+  background: white;
+  border-radius: 20px;
+  padding: 48px;
+  box-shadow: 0 20px 40px rgba(255, 107, 107, 0.08);
+}
+
+.payment-header {
+  text-align: center;
+  margin-bottom: 48px;
+}
+
+/* Using reusable .page-title and .page-subtitle */
+
+.payment-layout {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr;
+  gap: 48px;
+}
+
+/* Order Summary */
+.order-summary {
+  background: linear-gradient(135deg, #fff7f8 0%, #ffffff 100%);
+  padding: 32px;
+  border-radius: 16px;
+  border: 1px solid var(--aa-border);
+  height: fit-content;
+}
+
+.order-summary h3 {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0 0 24px;
+  color: var(--aa-text);
+}
+
+.billing-period-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.period-option {
+  padding: 16px;
+  background: white;
+  border: 2px solid var(--aa-border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-align: left;
+}
+
+.period-option:hover {
+  border-color: var(--aa-primary);
+  box-shadow: 0 4px 12px rgba(255, 107, 107, 0.1);
+}
+
+.period-option.active {
+  border-color: var(--aa-primary);
+  background: linear-gradient(135deg, rgba(255, 107, 107, 0.05), white);
+  box-shadow: 0 4px 12px rgba(255, 107, 107, 0.15);
+}
+
+.period-option-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.period-name {
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--aa-text);
+}
+
+.period-price {
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--aa-primary);
+}
+
+.period-detail {
+  font-size: 13px;
+  color: var(--aa-muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.save-badge {
+  padding: 2px 8px;
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 6px;
+  margin-left: 8px;
+}
+
+.summary-details {
+  margin-top: 24px;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  font-size: 15px;
+  color: var(--aa-text);
+}
+
+.summary-row.discount {
+  color: #10b981;
+  font-weight: 500;
+}
+
+.summary-divider {
+  height: 1px;
+  background: var(--aa-border);
+  margin: 12px 0;
+}
+
+.summary-row.total {
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--aa-text);
+}
+
+.features-included {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--aa-border);
+}
+
+.features-included h4 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 12px;
+  color: var(--aa-text);
+}
+
+.features-included ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.features-included li {
+  font-size: 14px;
+  color: var(--aa-muted);
+}
+
+/* Payment Form */
+.payment-form-wrapper {
+  background: white;
+  padding: 32px;
+  border-radius: 16px;
+  border: 1px solid var(--aa-border);
+}
+
+.payment-form h3 {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0 0 24px;
+  color: var(--aa-text);
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.payment-disclaimer {
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--aa-muted);
+  text-align: center;
+  line-height: 1.6;
+}
+
+/* Responsive Payment Page */
+@media (max-width: 968px) {
+  .payment-layout {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+
+  .payment-content {
+    padding: 32px 24px;
+  }
+
+  .page-title {
+    font-size: 28px;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
+  }
 }

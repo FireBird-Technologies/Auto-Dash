@@ -368,6 +368,7 @@ export const Landing: React.FC<LandingProps> = ({ onStart }) => {
           <div className="footer-links">
             <a href="https://github.com" target="_blank" rel="noopener noreferrer">GitHub</a>
             <a href="#features">Features</a>
+            <a href="/pricing">Pricing</a>
             <a href="#benefits">Benefits</a>
           </div>
         </div>

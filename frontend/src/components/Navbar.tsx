@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { config, getAuthHeaders } from '../config';
 
 interface NavbarProps {
@@ -12,6 +13,8 @@ interface UserInfo {
 }
 
 export const Navbar: React.FC<NavbarProps> = ({ onAccountClick }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [user, setUser] = useState<UserInfo | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -85,7 +88,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onAccountClick }) => {
 
   return (
     <nav className="navbar">
-      <div className="brand">
+      <div className="brand" onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
         <img 
           src="/logo.svg" 
           alt="AutoDash" 
@@ -97,7 +100,15 @@ export const Navbar: React.FC<NavbarProps> = ({ onAccountClick }) => {
         />
       </div>
 
-      {user && (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+        <button 
+          className={`navbar-pricing-button ${location.pathname === '/pricing' ? 'active' : ''}`}
+          onClick={() => navigate('/pricing')}
+        >
+          {user ? 'Upgrade' : 'Pricing'}
+        </button>
+
+        {user && (
         <div className="user-menu" ref={menuRef}>
           <button
             className="user-menu-button"
@@ -149,7 +160,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onAccountClick }) => {
             </div>
           )}
         </div>
-      )}
+        )}
+      </div>
     </nav>
   );
 };
