@@ -194,6 +194,27 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
     }
   };
 
+  const downloadCode = () => {
+    if (!chartSpec?.chart_spec) return;
+    
+    const code = chartSpec.chart_spec;
+    const title = chartSpec.title || 'chart';
+    const filename = `${title.toLowerCase().replace(/[^a-z0-9]+/g, '_')}.py`;
+    
+    // Create blob with Python code
+    const blob = new Blob([code], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    
+    // Create download link and trigger
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div 
       ref={containerRef}
@@ -224,6 +245,55 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
         e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.05)';
       }}
     >
+      {/* Download Code Button */}
+      {chartSpec?.chart_spec && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            downloadCode();
+          }}
+          title="Download Python code"
+          style={{
+            position: 'absolute',
+            bottom: '12px',
+            right: '12px',
+            zIndex: 100,
+            background: 'rgba(255, 255, 255, 0.95)',
+            border: '1px solid rgba(0, 0, 0, 0.1)',
+            borderRadius: '6px',
+            padding: '8px 12px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            fontSize: '13px',
+            fontWeight: '500',
+            color: '#374151',
+            transition: 'all 0.2s',
+            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = '#6366f1';
+            e.currentTarget.style.color = 'white';
+            e.currentTarget.style.borderColor = '#6366f1';
+            e.currentTarget.style.boxShadow = '0 4px 8px rgba(99, 102, 241, 0.3)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.95)';
+            e.currentTarget.style.color = '#374151';
+            e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.1)';
+            e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.05)';
+          }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          <span>Code</span>
+        </button>
+      )}
+      
       {/* Loading overlay when fixing */}
       {isFixing && (
         <div style={{

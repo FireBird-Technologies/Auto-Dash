@@ -2527,3 +2527,12 @@ body {
     min-width: 80px;
   }
 }
+
+/* Markdown table hover effects */
+.chat-bubble table tbody tr:hover {
+  background-color: rgba(99, 102, 241, 0.05);
+}
+
+.chat-bubble table tbody tr {
+  transition: background-color 0.15s ease;
+}

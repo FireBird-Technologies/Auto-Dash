@@ -1313,21 +1313,91 @@ async def execute_code(
             }
     
     elif code_type == "analysis":
-        # Simple exec for analysis code
+        # Execute analysis code with proper data setup
         try:
-            exec_globals = {'pd': pd, 'np': np, 'json': json, 'data': df, 'df': df if not isinstance(df, dict) else None}
-            exec(code, exec_globals)
-            result = exec_globals.get("result", "Code executed successfully")
+            import io
+            import sys
+            from contextlib import redirect_stdout
+            import traceback
+            
+            # Set up execution environment similar to execute_plotly_code
+            sheet_names = list(df.keys())
+            first_sheet_df = df[sheet_names[0]]
+            
+            exec_globals = {
+                'pd': pd,
+                'np': np,
+                'json': json,
+                'data': df,
+                'df': first_sheet_df,  # Default df is first sheet
+            }
+            
+            # Make all sheets available by their names
+            for sheet_name, sheet_df in df.items():
+                exec_globals[sheet_name] = sheet_df
+            
+            logger.info(f"Executing analysis code with {len(sheet_names)} sheet(s): {sheet_names}")
+            logger.info(f"Analysis code:\n{code}")
+            
+            # Capture stdout (print statements)
+            output_buffer = io.StringIO()
+            
+            with redirect_stdout(output_buffer):
+                exec(code, exec_globals)
+            
+            # Collect results
+            results = []
+            
+            # 1. Captured print output
+            printed_output = output_buffer.getvalue()
+            if printed_output.strip():
+                results.append(printed_output.strip())
+            
+            # 2. Check for 'result' variable
+            if 'result' in exec_globals:
+                result_val = exec_globals['result']
+                if isinstance(result_val, pd.DataFrame):
+                    # Format DataFrame as markdown table (first 20 rows)
+                    df_preview = result_val.head(20)
+                    results.append(f"**Result DataFrame ({len(result_val)} rows x {len(result_val.columns)} cols):**\n\n{df_preview.to_markdown(index=False)}")
+                elif isinstance(result_val, pd.Series):
+                    results.append(f"**Result Series ({len(result_val)} values):**\n\n{result_val.to_markdown()}")
+                else:
+                    results.append(f"**Result:**\n```\n{result_val}\n```")
+            
+            # 3. Check for 'display' or 'output' variables
+            for var_name in ['display', 'output', 'summary']:
+                if var_name in exec_globals and var_name not in ['pd', 'np', 'json', 'data', 'df'] and not var_name.startswith('_'):
+                    val = exec_globals[var_name]
+                    if isinstance(val, pd.DataFrame):
+                        df_preview = val.head(20)
+                        results.append(f"**{var_name.title()} ({len(val)} rows x {len(val.columns)} cols):**\n\n{df_preview.to_markdown(index=False)}")
+                    elif isinstance(val, pd.Series):
+                        results.append(f"**{var_name.title()} ({len(val)} values):**\n\n{val.to_markdown()}")
+                    else:
+                        results.append(f"**{var_name.title()}:**\n```\n{val}\n```")
+            
+            # Combine all results
+            if results:
+                final_result = "\n\n".join(results)
+            else:
+                final_result = "✓ Code executed successfully (no output)"
+            
+            logger.info(f"Analysis completed successfully. Output length: {len(final_result)}")
+            
             return {
                 "success": True,
                 "code_type": "analysis",
-                "result": str(result)
+                "result": final_result
             }
         except Exception as e:
+            import traceback
+            error_msg = f"{str(e)}\n\n**Traceback:**\n```\n{traceback.format_exc()}\n```"
+            logger.error(f"Analysis execution failed: {e}")
             return {
                 "success": False,
                 "code_type": "analysis",
-                "error": str(e)
+                "error": error_msg
             }
     
     raise HTTPException(status_code=400, detail=f"Invalid code_type: {code_type}")
