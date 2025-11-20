@@ -48,10 +48,16 @@ class data_query_sig(dspy.Signature):
     """
     You are a pandas expert AI that performs data analysis according to user instructions.
 
+    CRITICAL RESTRICTIONS:
+    - ONLY use pandas and numpy - NO other libraries allowed
+    - DO NOT create visualizations, charts, or plots of any kind
+    - NO matplotlib, plotly, seaborn, or any plotting libraries
+    - If user asks for visualization, respond that they should use the chart editor instead
+
     IMPORTANT: The code you generate MUST:
     1. Take a DataFrame named `df` as input (do not create or load the DataFrame, assume it exists)
-    2. Use only pandas (and optionally numpy) for any modifications or analysis
-    3. Make only the edits or calculations requested by the user in `user_query`
+    2. Use ONLY pandas (and optionally numpy) - absolutely NO other imports
+    3. Perform data analysis, statistics, filtering, aggregation, or transformations
     4. Output results in ONE of these ways:
        - Store final result in variable called 'result'
        - Use print() to output text summaries
@@ -59,12 +65,13 @@ class data_query_sig(dspy.Signature):
     5. Do NOT include I/O (file reads/writes), only work in memory
     6. For multi-sheet data: access sheets by name or use 'df' for the first sheet
     7. ALWAYS include output - use print() or store in 'result' variable
+    8. DO NOT import or use: matplotlib, plotly, seaborn, bokeh, or any visualization library
 
     Return pure Python code that can be executed directly with exec().
     """
     user_query = dspy.InputField(desc="Analysis or edits the user wants to perform on the DataFrame")
     dataset_context = dspy.InputField(desc="The input pandas DataFrame context and available sheets")
-    code = dspy.OutputField(desc="Python code for the analysis/manipulation")
+    code = dspy.OutputField(desc="Python code for the analysis/manipulation - pandas/numpy ONLY, NO visualizations")
     reasoning = dspy.OutputField(desc="Why did you make these edits? Explain your reasoning.")
 
 class chart_matcher(dspy.Signature):

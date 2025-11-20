@@ -1319,6 +1319,23 @@ async def execute_code(
             import sys
             from contextlib import redirect_stdout
             import traceback
+            import re
+            
+            # Validate code - check for forbidden imports
+            forbidden_libraries = [
+                'matplotlib', 'plotly', 'seaborn', 'bokeh', 'altair', 
+                'holoviews', 'ggplot', 'pygal', 'dash', 'streamlit'
+            ]
+            
+            # Check for import statements
+            for lib in forbidden_libraries:
+                # Match various import patterns
+                if re.search(rf'\bimport\s+{lib}\b|\bfrom\s+{lib}\b', code, re.IGNORECASE):
+                    return {
+                        "success": False,
+                        "code_type": "analysis",
+                        "error": f"Error: Importing '{lib}' is not allowed in analysis mode. Please use only pandas and numpy for data analysis. For visualizations, use the chart editor instead."
+                    }
             
             # Set up execution environment similar to execute_plotly_code
             sheet_names = list(df.keys())
@@ -1330,6 +1347,7 @@ async def execute_code(
                 'json': json,
                 'data': df,
                 'df': first_sheet_df,  # Default df is first sheet
+                '__builtins__': __builtins__,  # Required for exec
             }
             
             # Make all sheets available by their names
