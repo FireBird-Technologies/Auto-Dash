@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { PlotlyChartRenderer } from '../PlotlyChartRenderer';
 import { FixNotification } from '../FixNotification';
 import { MarkdownMessage } from '../MarkdownMessage';
-import { config, getAuthHeaders } from '../../config';
+import { config, getAuthHeaders, checkAuthResponse } from '../../config';
 
 type Row = Record<string, number | string>;
 
@@ -194,6 +194,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
         })
       });
 
+      await checkAuthResponse(response);
+
       if (!response.ok) {
         throw new Error('Failed to execute analysis code');
       }
@@ -239,6 +241,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
           code_type: 'plotly_edit'
         })
       });
+
+      await checkAuthResponse(response);
 
       if (!response.ok) {
         throw new Error('Failed to execute plotly code');
@@ -338,6 +342,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
           })
         });
 
+        await checkAuthResponse(response);
+
         if (!response.ok) {
           const errorData = await response.json();
           throw new Error(errorData.detail || 'Failed to generate chart');
@@ -374,6 +380,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
             fig_data: chartSpecs[0]?.figure || null  // Pass current figure data
           })
         });
+
+        await checkAuthResponse(response);
 
         if (!response.ok) {
           const errorData = await response.json();
