@@ -163,11 +163,11 @@ async def generate_chart_spec(
     
     # Always add execution environment info
     execution_info = (
-        f"\n\nIMPORTANT - Available DataFrames:\n"
+        "\n\nIMPORTANT - Available DataFrames:\n"
         f"- Available sheets: {', '.join(sheet_names)}\n"
         f"- Default DataFrame 'df' contains: '{sheet_names[0]}'\n"
-        f"- Access sheets by name: {', '.join([f\"'{name}'\" for name in sheet_names])}\n"
-        f"- Use 'df' for default data or access specific sheets directly"
+        f"- Access sheets by name: {', '.join([repr(name) for name in sheet_names])}\n"
+        "- Use 'df' for default data or access specific sheets directly"
     )
     dataset_context += execution_info
     

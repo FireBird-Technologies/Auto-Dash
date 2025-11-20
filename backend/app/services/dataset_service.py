@@ -353,15 +353,16 @@ class DatasetService:
                     for name, info in sheets_info.items()
                 }
             }
-            
+
             # Add execution environment info to context
+            sheet_names_str = ", ".join(sheet_names_list)
+            sheet_names_quoted = ", ".join([f"'{name}'" for name in sheet_names_list])
             execution_info = (
-                f"\n\nIMPORTANT - Available DataFrames in execution environment:\n"
-                f"- Available sheets: {', '.join(sheet_names_list)}\n"
+                "\n\nIMPORTANT - Available DataFrames in execution environment:\n"
+                f"- Available sheets: {sheet_names_str}\n"
                 f"- Default DataFrame: 'df' (contains: {sheet_names_list[0]})\n"
-                f"- Access specific sheets by name: {', '.join([f\"'{name}'\" for name in sheet_names_list])}\n"
+                f"- Access specific sheets by name: {sheet_names_quoted}\n"
             )
-            
             # Generate context using DSPy
             with dspy.context(lm = dspy.LM('openai/gpt-4o-mini', max_tokens =2500)):
                 result = self.context_creator(
