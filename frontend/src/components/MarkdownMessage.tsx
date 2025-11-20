@@ -168,13 +168,17 @@ export const MarkdownMessage: React.FC<MarkdownMessageProps> = ({ content }) => 
           },
           table({ children }: any) {
             return (
-              <div style={{ overflowX: 'auto', margin: '12px 0' }}>
+              <div style={{ 
+                overflowX: 'auto', 
+                margin: '12px 0',
+                borderRadius: '8px',
+                border: '1px solid rgba(0, 0, 0, 0.1)',
+                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)'
+              }}>
                 <table style={{
                   borderCollapse: 'collapse',
                   width: '100%',
-                  border: '1px solid rgba(0, 0, 0, 0.1)',
-                  borderRadius: '8px',
-                  overflow: 'hidden'
+                  fontSize: '13px'
                 }}>
                   {children}
                 </table>
@@ -195,6 +199,18 @@ export const MarkdownMessage: React.FC<MarkdownMessageProps> = ({ content }) => 
               }}>
                 {children}
               </th>
+            );
+          },
+          tbody({ children }: any) {
+            return <tbody>{children}</tbody>;
+          },
+          tr({ children }: any) {
+            return (
+              <tr style={{
+                transition: 'background-color 0.15s'
+              }}>
+                {children}
+              </tr>
             );
           },
           td({ children }: any) {

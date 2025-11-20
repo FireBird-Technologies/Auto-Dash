@@ -46,20 +46,25 @@ class plotly_editor(dspy.Signature):
 
 class data_query_sig(dspy.Signature):
     """
-    You are a pandas expert AI that edits a DataFrame according to user instructions.
+    You are a pandas expert AI that performs data analysis according to user instructions.
 
     IMPORTANT: The code you generate MUST:
     1. Take a DataFrame named `df` as input (do not create or load the DataFrame, assume it exists)
     2. Use only pandas (and optionally numpy) for any modifications or analysis
     3. Make only the edits or calculations requested by the user in `user_query`
-    4. Output only executable python code to achieve the instructions
+    4. Output results in ONE of these ways:
+       - Store final result in variable called 'result'
+       - Use print() to output text summaries
+       - Store DataFrame results in 'display' or 'summary' variables
     5. Do NOT include I/O (file reads/writes), only work in memory
+    6. For multi-sheet data: access sheets by name or use 'df' for the first sheet
+    7. ALWAYS include output - use print() or store in 'result' variable
 
     Return pure Python code that can be executed directly with exec().
     """
-    user_query = dspy.InputField(desc="edits the user wants to make to the DataFrame df")
-    dataset_context = dspy.InputField(desc="The input pandas DataFrame")
-    code = dspy.OutputField(desc="Python code for the manipulation")
+    user_query = dspy.InputField(desc="Analysis or edits the user wants to perform on the DataFrame")
+    dataset_context = dspy.InputField(desc="The input pandas DataFrame context and available sheets")
+    code = dspy.OutputField(desc="Python code for the analysis/manipulation")
     reasoning = dspy.OutputField(desc="Why did you make these edits? Explain your reasoning.")
 
 class chart_matcher(dspy.Signature):
@@ -747,12 +752,13 @@ def clean_plotly_code(code: str) -> str:
     cleaned = re.sub(r'pio\.show\([^)]*\)', '', cleaned)
     
     # Remove data loading code - df already exists, never create or load it
-    cleaned = re.sub(r'(data|df)\s*=\s*pd\.read_csv\([^)]*\)', '# Data already loaded', cleaned)
-    cleaned = re.sub(r'(data|df)\s*=\s*pd\.read_[a-z]+\([^)]*\)', '# Data already loaded', cleaned)
-    cleaned = re.sub(r'(data|df)\s*=\s*pd\.DataFrame\([^)]*\)', '# Data already loaded', cleaned)
-    cleaned = re.sub(r'(data|df)\s*=\s*data\[[^\]]+\]', '# Data already loaded', cleaned)
-    cleaned = re.sub(r'df\s*=\s*data\.copy\(\)', '# df already exists', cleaned)
-    cleaned = re.sub(r'df\s*=\s*data\s*$', '# df already exists', cleaned, flags=re.MULTILINE)
+    # Use word boundaries \b to ensure we only match 'data' or 'df' as complete variable names
+    cleaned = re.sub(r'\b(data|df)\b\s*=\s*pd\.read_csv\([^)]*\)', '# Data already loaded', cleaned)
+    cleaned = re.sub(r'\b(data|df)\b\s*=\s*pd\.read_[a-z]+\([^)]*\)', '# Data already loaded', cleaned)
+    cleaned = re.sub(r'\b(data|df)\b\s*=\s*pd\.DataFrame\([^)]*\)', '# Data already loaded', cleaned)
+    cleaned = re.sub(r'\b(data|df)\b\s*=\s*data\[[^\]]+\]', '# Data already loaded', cleaned)
+    cleaned = re.sub(r'\bdf\b\s*=\s*data\.copy\(\)', '# df already exists', cleaned)
+    cleaned = re.sub(r'\bdf\b\s*=\s*data\s*$', '# df already exists', cleaned, flags=re.MULTILINE)
     
     # Ensure code ends with 'fig' on its own line
     lines = cleaned.strip().split('\n')

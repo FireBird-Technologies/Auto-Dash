@@ -143,11 +143,13 @@ async def chat(
             reply = f"```python\n{executable_code}\n```"
             if hasattr(response_obj, 'reasoning'):
                 reply = f"{str(response_obj.reasoning)}\n\n{reply}"
-        elif hasattr(response_obj, 'analysis_code'):
+        elif hasattr(response_obj, 'code'):
             # Analysis code
             code_type = 'analysis'
-            executable_code = str(response_obj.analysis_code)
+            executable_code = str(response_obj.code)
             reply = f"```python\n{executable_code}\n```"
+            if hasattr(response_obj, 'reasoning'):
+                reply = f"{str(response_obj.reasoning)}\n\n{reply}"
         else:
             # Fallback: convert response to string
             reply = str(response_obj)
