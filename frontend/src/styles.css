@@ -2530,7 +2530,7 @@ body {
 
 /* Markdown table hover effects */
 .chat-bubble table tbody tr:hover {
-  background-color: rgba(99, 102, 241, 0.05);
+  background-color: rgba(239, 68, 68, 0.05);
 }
 
 .chat-bubble table tbody tr {

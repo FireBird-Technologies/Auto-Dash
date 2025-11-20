@@ -273,10 +273,10 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
             boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)'
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.background = '#6366f1';
+            e.currentTarget.style.background = 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)';
             e.currentTarget.style.color = 'white';
-            e.currentTarget.style.borderColor = '#6366f1';
-            e.currentTarget.style.boxShadow = '0 4px 8px rgba(99, 102, 241, 0.3)';
+            e.currentTarget.style.borderColor = '#ef4444';
+            e.currentTarget.style.boxShadow = '0 4px 8px rgba(239, 68, 68, 0.3)';
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.background = 'rgba(255, 255, 255, 0.95)';
