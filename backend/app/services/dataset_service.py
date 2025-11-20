@@ -285,7 +285,7 @@ class DatasetService:
     async def generate_context_async(
         self, 
         dataset_id: str, 
-        df: pd.DataFrame,
+        df: pd.DataFrame | Dict[str, pd.DataFrame],
         user_id: Optional[int] = None
     ) -> str:
         """
@@ -376,7 +376,7 @@ class DatasetService:
                 dataset.context = generated_context
                 dataset.context_generated_at = datetime.utcnow()
                 dataset.context_status = "completed"
-                dataset.columns_info = dataframe_info
+                dataset.columns_info = sheets_info
                 db.commit()
             
             # Update in-memory context

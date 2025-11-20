@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { config, getAuthHeaders } from '../config';
+import { config, getAuthHeaders, checkAuthResponse } from '../config';
 
 interface NavbarProps {
   onAccountClick?: () => void;
@@ -50,6 +50,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onAccountClick }) => {
         headers: getAuthHeaders(),
       });
 
+      await checkAuthResponse(response);
+
       if (response.ok) {
         const data = await response.json();
         setUser({
@@ -65,10 +67,11 @@ export const Navbar: React.FC<NavbarProps> = ({ onAccountClick }) => {
 
   const handleLogout = async () => {
     try {
-      await fetch(`${config.backendUrl}/api/auth/logout`, {
+      const response = await fetch(`${config.backendUrl}/api/auth/logout`, {
         method: 'POST',
         headers: getAuthHeaders(),
       });
+      await checkAuthResponse(response);
     } catch (error) {
       console.error('Logout error:', error);
     } finally {

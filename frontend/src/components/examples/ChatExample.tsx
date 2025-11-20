@@ -219,7 +219,7 @@ async function askQuestion() {
 
       {/* Documentation Link */}
       <div style={{ marginTop: '40px', padding: '20px', background: '#e8f5e9', borderRadius: '8px' }}>
-        <h3>📚 Full Documentation</h3>
+        <h3>Full Documentation</h3>
         <p>
           See <code>frontend/src/services/README_CHAT.md</code> for complete API documentation,
           more examples, and integration guides.
