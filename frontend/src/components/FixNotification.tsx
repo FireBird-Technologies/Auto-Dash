@@ -57,7 +57,7 @@ export const FixNotification: React.FC<FixNotificationProps> = ({ show, onDismis
         }}
         title="Dismiss"
       >
-        ×
+        x
       </button>
       
       <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginTop: '4px' }}>
@@ -77,7 +77,7 @@ export const FixNotification: React.FC<FixNotificationProps> = ({ show, onDismis
             marginBottom: '5px',
             letterSpacing: '-0.01em'
           }}>
-            🔧 Fixing visualization...
+            Perfecting your chart...
           </div>
           <div style={{ 
             fontSize: '13px', 
@@ -85,7 +85,7 @@ export const FixNotification: React.FC<FixNotificationProps> = ({ show, onDismis
             lineHeight: '1.5',
             fontWeight: '400'
           }}>
-            Our AI is analyzing the error and generating a fix.
+            Quality takes time - our AI is crafting the perfect visualization.
           </div>
         </div>
       </div>

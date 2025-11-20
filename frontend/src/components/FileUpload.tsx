@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { config, getAuthHeaders } from '../config';
+import { config, getAuthHeaders, checkAuthResponse } from '../config';
 
 type Row = Record<string, number | string>;
 
@@ -23,6 +23,8 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded }) => {
       credentials: 'include',
     });
 
+    await checkAuthResponse(response);
+
     if (!response.ok) {
       const errorData = await response.json();
       throw new Error(errorData.detail || 'Upload failed');
@@ -42,6 +44,8 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded }) => {
         headers: getAuthHeaders(),
         credentials: 'include',
       });
+
+      await checkAuthResponse(response);
 
       if (!response.ok) {
         const errorData = await response.json();

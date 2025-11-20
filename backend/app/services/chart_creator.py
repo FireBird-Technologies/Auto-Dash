@@ -82,7 +82,7 @@ def execute_plotly_code(code: str, data: Dict[str, pd.DataFrame]) -> Dict[str, A
             raise ValueError(f"First sheet '{sheet_names[0]}' has None DataFrame")
         
         exec_globals['df'] = first_sheet_df
-        logger.info(f"Default df: '{sheet_names[0]}' ({first_sheet_df.shape[0]} rows × {first_sheet_df.shape[1]} cols)")
+        logger.info(f"Default df: '{sheet_names[0]}' ({first_sheet_df.shape[0]} rows x {first_sheet_df.shape[1]} cols)")
         
         # Make all sheets available by their cleaned names
         for sheet_name, sheet_df in data.items():
@@ -150,7 +150,7 @@ def execute_plotly_code(code: str, data: Dict[str, pd.DataFrame]) -> Dict[str, A
         if fig.data:
             logger.info(f"Figure data sample (trace 0): {str(fig.data[0])[:300]}...")
 
-        logger.info("✓ Plotly code executed successfully")
+        logger.info("Plotly code executed successfully")
         
         return {
             'success': True,
@@ -159,7 +159,7 @@ def execute_plotly_code(code: str, data: Dict[str, pd.DataFrame]) -> Dict[str, A
         }
         
     except Exception as e:
-        logger.error(f"✗ Plotly execution failed: {e}")
+        logger.error(f"Plotly execution failed: {e}")
         logger.error(f"Code was:\n{code}")
         return {
             'success': False,

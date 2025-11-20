@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { PlotlyChartRenderer } from '../PlotlyChartRenderer';
 import { FixNotification } from '../FixNotification';
 import { MarkdownMessage } from '../MarkdownMessage';
-import { config, getAuthHeaders } from '../../config';
+import { config, getAuthHeaders, checkAuthResponse } from '../../config';
 
 type Row = Record<string, number | string>;
 
@@ -194,6 +194,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
         })
       });
 
+      await checkAuthResponse(response);
+
       if (!response.ok) {
         throw new Error('Failed to execute analysis code');
       }
@@ -239,6 +241,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
           code_type: 'plotly_edit'
         })
       });
+
+      await checkAuthResponse(response);
 
       if (!response.ok) {
         throw new Error('Failed to execute plotly code');
@@ -316,7 +320,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     setChatHistory(prev => [
       ...prev,
       { type: 'user', message: userQuery },
-      { type: 'assistant', message: ' Analyzing your data and generating visualization...' }
+      { type: 'assistant', message: 'Crafting your visualization... Great insights take a moment!' }
     ]);
 
     try {
@@ -337,6 +341,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
             color_theme: context.colorTheme
           })
         });
+
+        await checkAuthResponse(response);
 
         if (!response.ok) {
           const errorData = await response.json();
@@ -374,6 +380,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
             fig_data: chartSpecs[0]?.figure || null  // Pass current figure data
           })
         });
+
+        await checkAuthResponse(response);
 
         if (!response.ok) {
           const errorData = await response.json();
@@ -762,7 +770,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                 <h3>AI Assistant</h3>
               </div>
               <span className={`chat-status ${isLoading ? 'thinking' : 'online'}`}>
-                {isLoading ? '● Thinking...' : '● Online'}
+                {isLoading ? 'Thinking...' : 'Online'}
               </span>
             </div>
           </div>
@@ -789,19 +797,38 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                         alignItems: 'center',
                         gap: '6px',
                         padding: '4px 10px',
-                        backgroundColor: 'rgba(99, 102, 241, 0.15)',
+                        backgroundColor: 'rgba(239, 68, 68, 0.15)',
                         borderRadius: '12px',
                         fontSize: '12px',
                         fontWeight: '500',
                         marginBottom: '8px',
-                        border: '1px solid rgba(99, 102, 241, 0.3)',
-                        color: '#818cf8'
+                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                        color: '#ef4444'
                       }}>
                         <span>Chart {msg.matchedChart.index}: {msg.matchedChart.title || msg.matchedChart.type}</span>
                       </div>
                     )}
                     {msg.type === 'assistant' ? (
                       <>
+                        {msg.codeType && (
+                          <div style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '4px 10px',
+                            backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                            borderRadius: '12px',
+                            fontSize: '11px',
+                            fontWeight: '600',
+                            marginBottom: '8px',
+                            border: '1px solid rgba(99, 102, 241, 0.2)',
+                            color: '#6366f1',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.5px'
+                          }}>
+                            {msg.codeType === 'plotly_edit' ? 'Chart Editor' : 'Data Analysis'}
+                          </div>
+                        )}
                         <MarkdownMessage content={msg.message} />
                         {msg.codeType && msg.executableCode && (
                           <div style={{ marginTop: '12px' }}>
@@ -819,7 +846,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                 alignItems: 'center',
                                 gap: '8px',
                                 padding: '8px 16px',
-                                backgroundColor: isExecutingCode ? '#6b7280' : '#6366f1',
+                                background: isExecutingCode ? '#6b7280' : 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)',
                                 color: 'white',
                                 border: 'none',
                                 borderRadius: '8px',
@@ -827,16 +854,19 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                 fontWeight: '500',
                                 cursor: isExecutingCode ? 'not-allowed' : 'pointer',
                                 transition: 'all 0.2s',
-                                opacity: isExecutingCode ? 0.6 : 1
+                                opacity: isExecutingCode ? 0.6 : 1,
+                                boxShadow: isExecutingCode ? 'none' : '0 2px 8px rgba(239, 68, 68, 0.2)'
                               }}
                               onMouseEnter={(e) => {
                                 if (!isExecutingCode) {
-                                  e.currentTarget.style.backgroundColor = '#4f46e5';
+                                  e.currentTarget.style.background = 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)';
+                                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.3)';
                                 }
                               }}
                               onMouseLeave={(e) => {
                                 if (!isExecutingCode) {
-                                  e.currentTarget.style.backgroundColor = '#6366f1';
+                                  e.currentTarget.style.background = 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)';
+                                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(239, 68, 68, 0.2)';
                                 }
                               }}
                             >
@@ -1027,13 +1057,13 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
             {isLoading && chartSpecs.length === 0 && (
             <div className="magic-loading">
               <div className="magic-sparkles">
-                <span className="sparkle">•</span>
-                <span className="sparkle">•</span>
-                <span className="sparkle">•</span>
-                <span className="sparkle">•</span>
-                <span className="sparkle">•</span>
+                <span className="sparkle">*</span>
+                <span className="sparkle">*</span>
+                <span className="sparkle">*</span>
+                <span className="sparkle">*</span>
+                <span className="sparkle">*</span>
               </div>
-              <p className="magic-text">Transforming your data into art..</p>
+              <p className="magic-text">Crafting beautiful insights from your data...</p>
             </div>
             )}
 
@@ -1216,20 +1246,23 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                 onClick={applyChartPreview}
                 style={{
                   padding: '12px 24px',
-                  backgroundColor: '#6366f1',
+                  background: 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)',
                   color: 'white',
                   border: 'none',
                   borderRadius: '8px',
                   fontSize: '14px',
                   fontWeight: 500,
                   cursor: 'pointer',
-                  transition: 'all 0.2s'
+                  transition: 'all 0.2s',
+                  boxShadow: '0 2px 8px rgba(239, 68, 68, 0.2)'
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = '#4f46e5';
+                  e.currentTarget.style.background = 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.3)';
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = '#6366f1';
+                  e.currentTarget.style.background = 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)';
+                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(239, 68, 68, 0.2)';
                 }}
               >
                 Apply Changes

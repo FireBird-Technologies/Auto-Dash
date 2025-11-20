@@ -73,20 +73,55 @@ async def chat(
                 
                 charts_json = json.dumps([compress_chart(idx, c) for idx, c in charts.items()], default=str)[:200]
                 
-                # Use gpt-4o-mini only for chart matching
+                # Define reward function for chart matching
+                def chart_match_reward(args, pred) -> float:
+                    """
+                    Reward function for BestOfN:
+                    - 1.0: Valid chart index that exists
+                    - 0.5: Returns -1 (explicit no match)
+                    - 0.0: Invalid/out-of-range index
+                    """
+                    try:
+                        chart_idx = int(pred.chart_index)
+                        if chart_idx in charts:
+                            return 1.0  # Perfect - matched an existing chart
+                        elif chart_idx == -1:
+                            return 0.5  # Valid response but no match
+                        else:
+                            return 0.0  # Invalid index
+                    except (ValueError, AttributeError, TypeError):
+                        return 0.0  # Invalid response
+                
+                # Use gpt-4o-mini for chart matching
                 match_lm = dspy.LM(
                     "openai/gpt-4o-mini",
                     api_key=os.getenv("OPENAI_API_KEY"),
                     max_tokens=1000
                 )
                 
+                # Set up BestOfN with chart_matcher
+                chart_matcher_module = dspy.Predict(chart_matcher)
+                best_of_n_matcher = dspy.BestOfN(
+                    module=chart_matcher_module,
+                    N=3,  # Try up to 3 times
+                    reward_fn=chart_match_reward,
+                    threshold=1.0  # Stop early if we get a perfect match (score=1.0)
+                )
+                
                 with dspy.context(lm=match_lm):
-                    match_result = dspy.Predict(chart_matcher)(
+                    match_result = best_of_n_matcher(
                         query=payload.message,
                         charts=charts_json
                     )
                 
                 matched_index = int(match_result.chart_index)
+                logger.info(f"BestOfN chart matcher returned: {matched_index}")
+                
+                # Safety: Default to first chart if no valid match
+                if matched_index < 0 or matched_index not in charts:
+                    if charts:
+                        matched_index = min(charts.keys())
+                        logger.info(f"No valid match from BestOfN, defaulting to chart {matched_index}")
                 
                 if matched_index >= 0 and matched_index in charts:
                     matching_chart = charts[matched_index]
@@ -101,7 +136,7 @@ async def chat(
                         "type": matching_chart.get("chart_type", ""),
                         "title": matching_chart.get("title", "")
                     }
-                    logger.info(f"Matched chart {matched_index} ({matching_chart.get('chart_type')}) for query")
+                    logger.info(f"Using chart {matched_index} ({matching_chart.get('chart_type')}) for query")
         
         # Fallback to payload if no match found or no charts
         if not plotly_code and payload.plotly_code:

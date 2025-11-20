@@ -86,7 +86,7 @@ export const Chat: React.FC<ChatProps> = ({
       
       setMessages(prev => [...prev, {
         type: 'error',
-        message: `❌ ${errorMessage}`,
+        message: `Error: ${errorMessage}`,
         timestamp: new Date(),
       }]);
     } finally {
@@ -107,7 +107,7 @@ export const Chat: React.FC<ChatProps> = ({
       <div className="chat-messages">
         {messages.length === 0 ? (
           <div className="chat-empty-state">
-            <p>💬 Ask me anything about your data!</p>
+            <p>Ask me anything about your data!</p>
             <p className="chat-empty-hint">
               I can help with analysis, trends, or editing visualizations.
             </p>
@@ -154,7 +154,7 @@ export const Chat: React.FC<ChatProps> = ({
           className="chat-send-button"
           title={isLoading ? 'Sending...' : 'Send message'}
         >
-          {isLoading ? '⏳' : '➤'}
+          {isLoading ? '...' : '>'}
         </button>
       </div>
     </div>

@@ -5,7 +5,7 @@
  * Handles general Q&A, plotly code editing, and data analysis queries.
  */
 
-import { config, getAuthHeaders } from '../config';
+import { config, getAuthHeaders, checkAuthResponse } from '../config';
 
 export interface ChatRequest {
   message: string;
@@ -43,6 +43,8 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
       credentials: 'include',
       body: JSON.stringify(request),
     });
+
+    await checkAuthResponse(response);
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
