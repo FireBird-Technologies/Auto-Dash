@@ -28,7 +28,16 @@ if not logger.handlers:
 
 
 class plotly_editor(dspy.Signature):
-    """ You are an AI that edits plotly code"""
+    """ You are an AI that edits plotly code
+    
+    IMPORTANT:
+    1. You must output the FULL executable Python code, not just the changes.
+    2. The code must start with imports (e.g. import plotly.graph_objects as go).
+    3. The code must assume 'df' is already available (do not load it).
+    4. The code must create the 'fig' object and populate it.
+    5. The code must end with 'fig' on the last line.
+    6. You MUST add data traces (fig.add_trace) or use px functions. Do NOT just update layout.
+    """
     user_query = dspy.InputField(desc="edits the user needs to make")
     plotly_code = dspy.InputField(desc="The initial plotly code")
     dataset_context = dspy.InputField(desc="Context of the dataset ")
@@ -470,7 +479,10 @@ class GenerateVisualizationPlan(dspy.Signature):
     query = dspy.InputField(
         desc="User's natural language query, e.g., 'Compare monthly revenue trends across regions.'"
     )
-    dataset_context = dspy.InputField(desc="Dataset information including file_type, sheets (for Excel), columns, types, sample data, statistics")
+    dataset_context = dspy.InputField(
+        desc="Dataset information including available sheet names, columns, types, sample data, statistics. "
+        "IMPORTANT: Lists which DataFrames are available (df is default, sheets accessible by name)"
+    )
     
     plan = dspy.OutputField(
         desc=(
@@ -585,7 +597,9 @@ class bar_chart_plotly(dspy.Signature):
     
     plan = dspy.InputField(desc="User requirements for bar chart")
     styling = dspy.InputField(desc="Chart styling preferences")
-    dataset_context = dspy.InputField(desc="Dataset columns and stats")
+    dataset_context = dspy.InputField(
+        desc="Dataset info: available sheets, columns, stats. Use 'df' for default data or access sheets by name"
+    )
     plotly_code = dspy.OutputField(desc="Pure Python Plotly code - must end with 'fig'")
 
 
@@ -598,7 +612,9 @@ class line_chart_plotly(dspy.Signature):
     
     plan = dspy.InputField(desc="User requirements for line chart")
     styling = dspy.InputField(desc="Chart styling preferences")
-    dataset_context = dspy.InputField(desc="Dataset columns and stats")
+    dataset_context = dspy.InputField(
+        desc="Dataset info: available sheets, columns, stats. Use 'df' for default data or access sheets by name"
+    )
     plotly_code = dspy.OutputField(desc="Pure Python Plotly code - must end with 'fig'")
 
 
@@ -611,7 +627,9 @@ class scatter_plot_plotly(dspy.Signature):
     
     plan = dspy.InputField(desc="User requirements for scatter plot")
     styling = dspy.InputField(desc="Chart styling preferences")
-    dataset_context = dspy.InputField(desc="Dataset columns and stats")
+    dataset_context = dspy.InputField(
+        desc="Dataset info: available sheets, columns, stats. Use 'df' for default data or access sheets by name"
+    )
     plotly_code = dspy.OutputField(desc="Pure Python Plotly code - must end with 'fig'")
 
 
@@ -624,7 +642,9 @@ class histogram_plotly(dspy.Signature):
     
     plan = dspy.InputField(desc="User requirements for histogram")
     styling = dspy.InputField(desc="Chart styling preferences")
-    dataset_context = dspy.InputField(desc="Dataset columns and stats")
+    dataset_context = dspy.InputField(
+        desc="Dataset info: available sheets, columns, stats. Use 'df' for default data or access sheets by name"
+    )
     plotly_code = dspy.OutputField(desc="Pure Python Plotly code - must end with 'fig'")
 
 
@@ -637,7 +657,9 @@ class heatmap_plotly(dspy.Signature):
     
     plan = dspy.InputField(desc="User requirements for heatmap")
     styling = dspy.InputField(desc="Chart styling preferences")
-    dataset_context = dspy.InputField(desc="Dataset columns and stats")
+    dataset_context = dspy.InputField(
+        desc="Dataset info: available sheets, columns, stats. Use 'df' for default data or access sheets by name"
+    )
     plotly_code = dspy.OutputField(desc="Pure Python Plotly code - must end with 'fig'")
 
 
@@ -650,7 +672,9 @@ class pie_chart_plotly(dspy.Signature):
     
     plan = dspy.InputField(desc="User requirements for pie chart")
     styling = dspy.InputField(desc="Chart styling preferences")
-    dataset_context = dspy.InputField(desc="Dataset columns and stats")
+    dataset_context = dspy.InputField(
+        desc="Dataset info: available sheets, columns, stats. Use 'df' for default data or access sheets by name"
+    )
     plotly_code = dspy.OutputField(desc="Pure Python Plotly code - must end with 'fig'")
 
 
@@ -663,7 +687,9 @@ class box_plot_plotly(dspy.Signature):
     
     plan = dspy.InputField(desc="User requirements for box plot")
     styling = dspy.InputField(desc="Chart styling preferences")
-    dataset_context = dspy.InputField(desc="Dataset columns and stats")
+    dataset_context = dspy.InputField(
+        desc="Dataset info: available sheets, columns, stats. Use 'df' for default data or access sheets by name"
+    )
     plotly_code = dspy.OutputField(desc="Pure Python Plotly code - must end with 'fig'")
 
 
@@ -676,7 +702,9 @@ class area_chart_plotly(dspy.Signature):
     
     plan = dspy.InputField(desc="User requirements for area chart")
     styling = dspy.InputField(desc="Chart styling preferences")
-    dataset_context = dspy.InputField(desc="Dataset columns and stats")
+    dataset_context = dspy.InputField(
+        desc="Dataset info: available sheets, columns, stats. Use 'df' for default data or access sheets by name"
+    )
     plotly_code = dspy.OutputField(desc="Pure Python Plotly code - must end with 'fig'")
 
 
@@ -823,20 +851,6 @@ class PlotlyVisualizationModule(dspy.Module):
             for i, r in enumerate(results):
                 raw_code = getattr(r, 'plotly_code', str(r))
                 cleaned = clean_plotly_code(raw_code)
-                
-                # Prepend data selection code based on file type
-                file_type = data_source.get('file_type', 'csv')  # Default to CSV if not specified
-                
-                if file_type == 'excel' and data_source.get('sheet_name'):
-                    # Multi-sheet Excel: use the specified sheet
-                    sheet_name = data_source['sheet_name']
-                    data_selection = f"# Select sheet from Excel file\ndf = data['{sheet_name}']\n\n"
-                    cleaned = data_selection + cleaned
-                else:
-                    # CSV or single-sheet: use data directly
-                    # Only add df = data if not already present
-                    if 'df = data' not in cleaned and 'df=' not in cleaned and 'df =' not in cleaned:
-                        cleaned = "df = data\n\n" + cleaned
                 
                 # Get chart type and title from the order we tracked
                 chart_type = chart_types_order[i] if i < len(chart_types_order) else list(self.chart_sigs.keys())[min(i, len(self.chart_sigs) - 1)]

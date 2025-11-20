@@ -3,6 +3,7 @@ Unified dataset service for in-memory storage and context generation.
 Handles dataset storage, retrieval, and asynchronous context generation using DSPy.
 """
 import asyncio
+import re
 from typing import Dict, Optional, List, Tuple, Any
 import pandas as pd
 import dspy
@@ -11,6 +12,27 @@ from datetime import datetime
 from ..models import Dataset
 from ..core.db import SessionLocal
 from .agents import CreateDatasetContext
+
+
+def clean_sheet_name(name: str) -> str:
+    """
+    Clean sheet/file name for use as Python variable.
+    - Replace spaces with underscore
+    - Remove numbers
+    - Remove file extension
+    """
+    # Remove file extension
+    name = re.sub(r'\.(csv|xlsx?|xls)$', '', name, flags=re.IGNORECASE)
+    # Replace spaces with underscore
+    name = name.replace(' ', '_')
+    # Remove numbers
+    name = re.sub(r'\d+', '', name)
+    # Remove multiple underscores
+    name = re.sub(r'_+', '_', name)
+    # Remove leading/trailing underscores
+    name = name.strip('_')
+    # Ensure not empty
+    return name if name else 'data'
 
 
 class DatasetService:
@@ -38,36 +60,40 @@ class DatasetService:
     ) -> dict:
         """
         Store a dataset in memory for a user.
-        For CSV: df is a single DataFrame
-        For Excel: df can be a dict of {sheet_name: DataFrame}
+        Normalizes all data to dict format: {sheet_name: DataFrame}
+        For CSV: wraps in dict with cleaned filename as key
+        For Excel: keeps as dict with cleaned sheet names as keys
         Returns metadata about the stored dataset.
         """
         if user_id not in self._store:
             self._store[user_id] = {}
         
-        # Determine if multi-sheet
-        is_multisheet = isinstance(df, dict)
-        
-        # Calculate metadata
-        if is_multisheet:
-            sheet_names = list(df.keys())
-            total_rows = sum(len(sheet_df) for sheet_df in df.values())
-            # Use first sheet for column info
-            first_sheet = df[sheet_names[0]]
-            columns = first_sheet.columns.tolist()
-            column_count = len(columns)
+        # Normalize to dict format
+        if isinstance(df, dict):
+            # Excel: clean sheet names
+            cleaned_data = {clean_sheet_name(name): sheet_df for name, sheet_df in df.items()}
+            is_multisheet = len(cleaned_data) > 1
         else:
-            sheet_names = None
-            total_rows = len(df)
-            columns = df.columns.tolist()
-            column_count = len(columns)
+            # CSV: wrap in dict with cleaned filename
+            cleaned_name = clean_sheet_name(filename)
+            cleaned_data = {cleaned_name: df}
+            is_multisheet = False
+        
+        # Get sheet names and metadata
+        sheet_names = list(cleaned_data.keys())
+        total_rows = sum(len(sheet_df) for sheet_df in cleaned_data.values())
+        
+        # Use first sheet for column info
+        first_sheet = cleaned_data[sheet_names[0]]
+        columns = first_sheet.columns.tolist()
+        column_count = len(columns)
         
         self._store[user_id][dataset_id] = {
-            "df": df,
+            "df": cleaned_data,  # Always a dict now
             "filename": filename,
             "file_type": file_type,
             "is_multisheet": is_multisheet,
-            "sheet_names": sheet_names,
+            "sheet_names": sheet_names,  # Cleaned names
             "uploaded_at": datetime.utcnow(),
             "row_count": total_rows,
             "column_count": column_count,
@@ -79,8 +105,8 @@ class DatasetService:
         
         return self.get_dataset_info(user_id, dataset_id)
     
-    def get_dataset(self, user_id: int, dataset_id: str) -> Optional[pd.DataFrame]:
-        """Retrieve a dataset DataFrame from memory"""
+    def get_dataset(self, user_id: int, dataset_id: str) -> Optional[Dict[str, pd.DataFrame]]:
+        """Retrieve a dataset from memory (always returns dict format)"""
         if user_id in self._store and dataset_id in self._store[user_id]:
             return self._store[user_id][dataset_id]["df"]
         return None
@@ -299,59 +325,48 @@ class DatasetService:
             if user_id and user_id in self._store and dataset_id in self._store[user_id]:
                 self._store[user_id][dataset_id]["context_status"] = "generating"
             
-            # Prepare dataframe info - handle multi-sheet Excel
-            is_multisheet = isinstance(df, dict)
+            # Data is always a dict now (normalized in store_dataset)
+            # Prepare dataframe info for all sheets
+            sheet_names_list = list(df.keys())
+            is_multisheet = len(sheet_names_list) > 1
             
-            if is_multisheet:
-                # Multi-sheet Excel: describe all sheets
-                sheets_info = {}
-                for sheet_name, sheet_df in df.items():
-                    sheets_info[sheet_name] = {
-                        "columns": sheet_df.columns.tolist(),
-                        "dtypes": sheet_df.dtypes.astype(str).to_dict(),
-                        "shape": sheet_df.shape,
-                        "sample_values": sheet_df.head(2).to_dict('records'),
-                        "statistics": sheet_df.describe().to_dict() if len(sheet_df) > 0 else {}
-                    }
-                
-                dataframe_info = {
-                    "file_type": "excel",
-                    "sheets": sheets_info
-                }
-                
-                # For DSPy input, create a summary
-                context_info = {
-                    "file_type": "excel",
-                    "sheets": {
-                        name: {
-                            "columns": info["columns"],
-                            "shape": info["shape"],
-                            "sample": df[name].head(2).to_markdown()
-                        }
-                        for name, info in sheets_info.items()
-                    }
-                }
-            else:
-                # Single DataFrame (CSV or single-sheet Excel)
-                dataframe_info = {
-                    "file_type": "csv",
-                    "columns": df.columns.tolist(),
-                    "dtypes": df.dtypes.astype(str).to_dict(),
-                    "shape": df.shape,
-                    "sample_values": df.head(3).to_dict('records'),
-                    "statistics": df.describe().to_dict() if len(df) > 0 else {}
-                }
-                
-                context_info = {
-                    "file_type": "csv",
-                    "columns": df.describe().to_dict(),
-                    "sample_values": df.head(2).to_markdown()
+            sheets_info = {}
+            for sheet_name, sheet_df in df.items():
+                sheets_info[sheet_name] = {
+                    "columns": sheet_df.columns.tolist(),
+                    "dtypes": sheet_df.dtypes.astype(str).to_dict(),
+                    "shape": sheet_df.shape,
+                    "sample_values": sheet_df.head(2).to_dict('records'),
+                    "statistics": sheet_df.describe().to_dict() if len(sheet_df) > 0 else {}
                 }
             
+            # Create DSPy input with available sheet names
+            context_info = {
+                "available_sheets": sheet_names_list,
+                "is_multisheet": is_multisheet,
+                "sheets": {
+                    name: {
+                        "columns": info["columns"],
+                        "shape": info["shape"],
+                        "sample": df[name].head(2).to_markdown()
+                    }
+                    for name, info in sheets_info.items()
+                }
+            }
+
+            # Add execution environment info to context
+            sheet_names_str = ", ".join(sheet_names_list)
+            sheet_names_quoted = ", ".join([f"'{name}'" for name in sheet_names_list])
+            execution_info = (
+                "\n\nIMPORTANT - Available DataFrames in execution environment:\n"
+                f"- Available sheets: {sheet_names_str}\n"
+                f"- Default DataFrame: 'df' (contains: {sheet_names_list[0]})\n"
+                f"- Access specific sheets by name: {sheet_names_quoted}\n"
+            )
             # Generate context using DSPy
             with dspy.context(lm = dspy.LM('openai/gpt-4o-mini', max_tokens =2500)):
                 result = self.context_creator(
-                    dataframe_info=str(context_info)
+                    dataframe_info=str(context_info) + execution_info
                 )
             
             generated_context = result.dataset_context

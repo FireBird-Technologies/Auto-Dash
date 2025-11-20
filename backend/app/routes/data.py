@@ -761,13 +761,18 @@ async def get_dataset_preview(
     if df is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
     
+    # Get first sheet (df is now always a dict)
+    sheet_names = list(df.keys())
+    first_sheet = df[sheet_names[0]]
+    
     # Replace NaN with None (which becomes null in JSON)
-    df_clean = df.replace({np.nan: None, np.inf: None, -np.inf: None})
+    df_clean = first_sheet.replace({np.nan: None, np.inf: None, -np.inf: None})
     
     return {
         "dataset_id": dataset_id,
         "preview": df_clean.head(rows).to_dict('records'),
-        "total_rows": len(df)
+        "total_rows": len(first_sheet),
+        "sheet_name": sheet_names[0]
     }
 
 
@@ -791,18 +796,15 @@ async def get_full_dataset(
     if df is None:
         raise HTTPException(status_code=404, detail="Dataset not found")
     
-    # Store original row count
-    total_rows = len(df)
-
-
+    # Get first sheet (df is now always a dict)
+    sheet_names = list(df.keys())
+    first_sheet = df[sheet_names[0]]
     
-    # Apply limit (default 5000 rows for performance)
-    # Use limit=0 in query params to get unlimited rows
-    if total_rows > limit:
-        df = df.sample(n=limit) 
+    # Store original row count
+    total_rows = len(first_sheet)
     
     # Replace NaN with None (which becomes null in JSON)
-    df_clean = df.replace({np.nan: None, np.inf: None, -np.inf: None})
+    df_clean = first_sheet.replace({np.nan: None, np.inf: None, -np.inf: None})
     
     return {
         "dataset_id": dataset_id,
@@ -810,7 +812,8 @@ async def get_full_dataset(
         "rows": len(df_clean),
         "columns": df_clean.columns.tolist(),
         "total_rows_in_dataset": total_rows,
-        "limited": len(df_clean) < total_rows
+        "sheet_name": sheet_names[0],
+        "available_sheets": sheet_names
     }
 
 
@@ -904,9 +907,12 @@ async def analyze_data(
     dataset_context = dataset_service.get_context(current_user.id, dataset_id)
     
     # If context not available yet, provide basic fallback info
+    # df is always a dict now
     if not dataset_context:
-        columns = [str(col) for col in df.columns.tolist()]
-        dataset_context = f"Dataset with {len(df)} rows and {len(df.columns)} columns. Columns: {', '.join(columns)}"
+        sheet_names = list(df.keys())
+        first_sheet = df[sheet_names[0]]
+        columns = [str(col) for col in first_sheet.columns.tolist()]
+        dataset_context = f"Dataset with {len(first_sheet)} rows and {len(first_sheet.columns)} columns. Columns: {', '.join(columns)}. Available sheets: {', '.join(sheet_names)}"
     
     # Generate chart specification using DSPy agents with context
     from ..services.chart_creator import generate_chart_spec
@@ -1285,12 +1291,20 @@ async def execute_code(
         from ..services.chart_creator import execute_plotly_code
         
         try:
-            fig_json = execute_plotly_code(code, df)
-            return {
-                "success": True,
-                "code_type": "plotly_edit",
-                "figure": fig_json
-            }
+            result = execute_plotly_code(code, df)
+            
+            if result.get("success"):
+                return {
+                    "success": True,
+                    "code_type": "plotly_edit",
+                    "figure": result.get("figure")
+                }
+            else:
+                return {
+                    "success": False,
+                    "code_type": "plotly_edit",
+                    "error": result.get("error")
+                }
         except Exception as e:
             return {
                 "success": False,
