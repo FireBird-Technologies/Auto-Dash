@@ -134,8 +134,8 @@ def execute_plotly_code(code: str, data: Dict[str, pd.DataFrame]) -> Dict[str, A
         height = min(current_height, 800) if current_height else 800
         
         fig.update_layout(width=width, height=height)
-        
-        fig.show()
+        # enable this when debugging else comment
+        #fig.show()
         # Convert figure to JSON
         fig_json = json.loads(fig.to_json())
         
