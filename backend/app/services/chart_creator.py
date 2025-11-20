@@ -22,13 +22,13 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def execute_plotly_code(code: str, data: pd.DataFrame | Dict[str, pd.DataFrame]) -> Dict[str, Any]:
+def execute_plotly_code(code: str, data: Dict[str, pd.DataFrame]) -> Dict[str, Any]:
     """
     Execute Plotly Python code and return the figure as JSON.
     
     Args:
         code: Python code that generates a Plotly figure
-        data: pandas DataFrame (for CSV) or dict of DataFrames (for multi-sheet Excel)
+        data: Dict of DataFrames with sheet names as keys (normalized format)
         
     Returns:
         dict: Plotly figure as JSON
@@ -41,8 +41,7 @@ def execute_plotly_code(code: str, data: pd.DataFrame | Dict[str, pd.DataFrame])
         code = clean_plotly_code(code)
         
         # Create execution environment with necessary imports
-        # For multi-sheet Excel, code should use: df = data['SheetName']
-        # For CSV/single sheet, code can use: df = data or just data
+        # Data is always a dict: {sheet_name: DataFrame}
         exec_globals = {
             'pd': pd,
             'np': np,
@@ -53,8 +52,16 @@ def execute_plotly_code(code: str, data: pd.DataFrame | Dict[str, pd.DataFrame])
             'signal': signal,
             'optimize': optimize,
             'data': data,
-            'df': data if not isinstance(data, dict) else None  # Only set df for non-dict data
         }
+        
+        # Set up dataframes: first sheet as default 'df', all sheets available by name
+        sheet_names = list(data.keys())
+        if sheet_names:
+            # Default df is first sheet
+            exec_globals['df'] = data[sheet_names[0]]
+            # Make all sheets available by their cleaned names
+            for sheet_name, sheet_df in data.items():
+                exec_globals[sheet_name] = sheet_df
         
         # Try to import plotly.express if available
         try:
@@ -145,18 +152,24 @@ async def generate_chart_spec(
         # Get or initialize the visualization module
     viz_module = PlotlyVisualizationModule()
     
+    # Data is always dict format now
+    sheet_names = list(df.keys())
+    first_sheet = df[sheet_names[0]]
+    
     # Use dataset context or provide fallback
     if not dataset_context:
-        if isinstance(df, dict):
-            # Multi-sheet Excel
-            sheet_names = list(df.keys())
-            first_sheet = df[sheet_names[0]]
-            columns = [str(col) for col in first_sheet.columns.tolist()]
-            dataset_context = f"Multi-sheet Excel with {len(df)} sheets: {', '.join(sheet_names)}. First sheet has {len(first_sheet)} rows and columns: {', '.join(columns)}"
-        else:
-            # Single DataFrame
-            columns = [str(col) for col in df.columns.tolist()]
-            dataset_context = f"Dataset with {len(df)} rows and {len(df.columns)} columns: {', '.join(columns)}"
+        columns = [str(col) for col in first_sheet.columns.tolist()]
+        dataset_context = f"Dataset with {len(first_sheet)} rows and {len(first_sheet.columns)} columns. Columns: {', '.join(columns)}"
+    
+    # Always add execution environment info
+    execution_info = (
+        f"\n\nIMPORTANT - Available DataFrames:\n"
+        f"- Available sheets: {', '.join(sheet_names)}\n"
+        f"- Default DataFrame 'df' contains: '{sheet_names[0]}'\n"
+        f"- Access sheets by name: {', '.join([f\"'{name}'\" for name in sheet_names])}\n"
+        f"- Use 'df' for default data or access specific sheets directly"
+    )
+    dataset_context += execution_info
     
     # Generate the visualization with dataset context
     result, full_plan = await viz_module.aforward(
