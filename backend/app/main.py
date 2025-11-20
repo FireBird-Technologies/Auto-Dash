@@ -24,7 +24,6 @@ from .routes.google import router as google_router
 from .routes.payment import router as stripe_router
 from .routes.data import router as data_router
 from .routes.export import router as export_router
-from .routes.query_suggestion import router as query_suggestion_router
 
 app = FastAPI(title="AutoDash Backend", version="0.1.0")
 
@@ -98,8 +97,6 @@ app.include_router(data_router)
 
 # Export routes
 app.include_router(export_router)
-
-app.include_router(query_suggestion_router)
 
 # Initialize DB
 if os.getenv("AUTO_MIGRATE", "1") == "1":

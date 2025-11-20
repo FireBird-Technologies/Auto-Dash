@@ -1490,3 +1490,42 @@ async def get_chart_info(
         "figure": metadata.get("figure"),
         "created_at": metadata.get("created_at")
     }
+
+
+@router.post("/datasets/{dataset_id}/suggest-queries")
+async def suggest_query(
+    dataset_id: str,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Generate AI-powered query suggestions based on dataset context.
+    
+    Args:
+        dataset_id: Dataset identifier
+    
+    Returns:
+        Dict with suggestions array
+    """
+    from ..services.agents import SuggestQueries
+    
+    # Initialize DSPy module locally
+    quick_lm = dspy.LM('openai/gpt-4o-mini', max_tokens=250, api_key=os.getenv('OPENAI_API_KEY'))
+    with dspy.context(lm=quick_lm):
+        program = dspy.Predict(SuggestQueries)
+        
+        # Get dataset from memory
+        data_dict = dataset_service.get_dataset(current_user.id, dataset_id)
+        if not data_dict:
+            raise HTTPException(404, "Dataset not in memory; please re-upload")
+        
+        # Extract first sheet/dataframe
+        sheet_name, df = next(iter(data_dict.items()))
+        
+        # Create dataset context for DSPy
+        dataset_context = df.head(5).to_markdown()
+        
+        # Generate suggestions
+        result = program(dataset_context=dataset_context)
+        suggestion_list = json.loads(result.suggestions)
+        
+        return {"suggestions": suggestion_list}

@@ -726,6 +726,12 @@ class area_chart_plotly(dspy.Signature):
     plotly_code = dspy.OutputField(desc="Pure Python Plotly code - must end with 'fig'")
 
 
+class SuggestQueries(dspy.Signature):
+    """Generate contextual query suggestions for dataset visualization."""
+    dataset_context = dspy.InputField(desc="Column names, types, sample rows")
+    suggestions = dspy.OutputField(desc="JSON array of 1 concise and a creative question string that result in good visual dashboards, add instructions for visualization & data, strictly excluding conversational questions.(like what, how etc) and keep the questions concise.")
+
+
 # ============================================================================
 # UTILITY FUNCTIONS
 # ============================================================================
