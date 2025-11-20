@@ -98,7 +98,6 @@ app.include_router(data_router)
 # Export routes
 app.include_router(export_router)
 
-
 # Initialize DB
 if os.getenv("AUTO_MIGRATE", "1") == "1":
     Base.metadata.create_all(bind=engine)
