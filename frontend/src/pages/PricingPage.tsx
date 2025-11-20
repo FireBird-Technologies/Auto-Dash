@@ -29,11 +29,8 @@ export const PricingPage: React.FC = () => {
   const handlePlanSelection = (plan: 'free' | 'pro') => {
     if (isAuthenticated) {
       // User is already logged in
-      if (plan === 'pro') {
-        navigate('/payment');
-      } else {
-        navigate('/visualize');
-      }
+      // TODO: Implement Stripe checkout for Pro plan
+      navigate('/visualize');
     } else {
       // Store selected plan before auth redirect
       sessionStorage.setItem('selected_plan', plan);

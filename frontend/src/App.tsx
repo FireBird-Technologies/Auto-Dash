@@ -5,7 +5,6 @@ import { Landing } from './components/Landing';
 import { Account } from './components/Account';
 import { VisualizePage } from './pages/VisualizePage';
 import { PricingPage } from './pages/PricingPage';
-import { PaymentPage } from './pages/PaymentPage';
 
 function AuthHandler() {
   const navigate = useNavigate();
@@ -19,16 +18,9 @@ function AuthHandler() {
       localStorage.setItem('auth_token', token);
       sessionStorage.removeItem('auth_callback');
       
-      // Check if user selected a plan before auth
-      const selectedPlan = sessionStorage.getItem('selected_plan');
-      
-      if (selectedPlan === 'pro') {
-        sessionStorage.removeItem('selected_plan');
-        navigate('/payment', { replace: true });
-      } else {
-        sessionStorage.removeItem('selected_plan');
-        navigate('/visualize', { replace: true });
-      }
+      // After auth, always go to visualize page
+      sessionStorage.removeItem('selected_plan');
+      navigate('/visualize', { replace: true });
     }
   }, [navigate, location]);
 
@@ -40,8 +32,8 @@ function AppRoutes() {
   const location = useLocation();
   const isAuthenticated = !!localStorage.getItem('auth_token');
   
-  // Hide navbar on pricing and payment pages
-  const hideNavbar = location.pathname === '/pricing' || location.pathname === '/payment';
+  // Hide navbar on pricing page
+  const hideNavbar = location.pathname === '/pricing';
 
   return (
     <>
@@ -60,16 +52,6 @@ function AppRoutes() {
             } 
           />
           <Route path="/pricing" element={<PricingPage />} />
-          <Route 
-            path="/payment" 
-            element={
-              isAuthenticated ? (
-                <PaymentPage />
-              ) : (
-                <Navigate to="/pricing" replace />
-              )
-            } 
-          />
           <Route 
             path="/visualize" 
             element={
