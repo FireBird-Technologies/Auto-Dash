@@ -172,8 +172,10 @@ def execute_plotly_code(code: str, data: Dict[str, pd.DataFrame]) -> Dict[str, A
 async def generate_chart_spec(
     df: pd.DataFrame | Dict[str, pd.DataFrame], 
     query: str, 
-    dataset_context: str = None
-) -> Tuple[List[Dict[str, Any]], dict]:
+    dataset_context: str = None,
+    user_id: int = None,
+    dataset_id: str = None
+) -> Tuple[List[Dict[str, Any]], dict, str]:
     """
     Generate Plotly chart specifications based on the user's query.
     
@@ -181,9 +183,11 @@ async def generate_chart_spec(
         df: pandas DataFrame (CSV) or dict of DataFrames (multi-sheet Excel)
         query: Natural language query describing what visualization is needed
         dataset_context: Rich textual description of the dataset
+        user_id: User ID for accessing session data
+        dataset_id: Dataset ID for retrieving full dataset from session
         
     Returns:
-        tuple: (list of chart specs, full plan dict)
+        tuple: (list of chart specs, full plan dict, dashboard_title)
             Each chart spec contains:
             - chart_spec: Python code for generating the chart
             - chart_type: Type of chart (bar_chart, line_chart, etc.)
@@ -194,8 +198,9 @@ async def generate_chart_spec(
             - error: Error message (if execution failed)
     """
     # try:
-        # Get or initialize the visualization module
-    viz_module = PlotlyVisualizationModule()
+        # Get or initialize the visualization module with user_id and dataset_id
+        # This allows the module to access the full dataset for metric validation
+    viz_module = PlotlyVisualizationModule(user_id=user_id, dataset_id=dataset_id)
     
     # Data is always dict format now
     sheet_names = list(df.keys())
@@ -217,7 +222,7 @@ async def generate_chart_spec(
     dataset_context += execution_info
     
     # Generate the visualization with dataset context
-    result, full_plan = await viz_module.aforward(
+    result, full_plan, dashboard_title = await viz_module.aforward(
         query=query,
         dataset_context=dataset_context
     )
@@ -235,7 +240,7 @@ async def generate_chart_spec(
                 chart_spec['execution_error'] = execution_result.get('error')
                 logger.warning(f"Chart execution failed: {execution_result.get('error')}")
         
-        return result, full_plan or {}
+        return result, full_plan or {}, dashboard_title
     
     # Handle fail message (string)
     if isinstance(result, str):
@@ -254,9 +259,9 @@ async def generate_chart_spec(
             'figure': figure,
             'execution_success': success,
             'execution_error': error
-        }], full_plan or {}
+        }], full_plan or {}, dashboard_title
     
-    return result, full_plan or {}
+    return result, full_plan or {}, dashboard_title
         
 #     except Exception as e:
 #         logger.error(f"Failed to generate visualization: {e}")

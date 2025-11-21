@@ -6,6 +6,7 @@ import asyncio
 import re
 from typing import Dict, Optional, List, Tuple, Any
 import pandas as pd
+import numpy as np
 import dspy
 from sqlalchemy.orm import Session
 from datetime import datetime
@@ -311,6 +312,22 @@ class DatasetService:
         user_id: Optional[int] = None
     ) -> str:
         """Synchronous context generation using DSPy. Handles both single DataFrames and multi-sheet Excel."""
+        
+        # Helper function to convert pandas/numpy objects to JSON-serializable types
+        def make_json_serializable(obj):
+            """Convert pandas/numpy objects to JSON-serializable types"""
+            if isinstance(obj, (pd.Timestamp, datetime)):
+                return obj.isoformat()
+            elif isinstance(obj, (np.integer, np.floating)):
+                return float(obj)
+            elif pd.isna(obj):
+                return None
+            elif isinstance(obj, dict):
+                return {k: make_json_serializable(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [make_json_serializable(item) for item in obj]
+            return obj
+        
         db = SessionLocal()
         
         try:
@@ -325,19 +342,39 @@ class DatasetService:
             if user_id and user_id in self._store and dataset_id in self._store[user_id]:
                 self._store[user_id][dataset_id]["context_status"] = "generating"
             
-            # Data is always a dict now (normalized in store_dataset)
+            # Normalize df to dict format if it's a plain DataFrame
+            if isinstance(df, dict):
+                # Already a dict, use as-is
+                df_dict = df
+            else:
+                # Plain DataFrame - wrap it in a dict
+                # Use a generic name since we don't have the filename here
+                df_dict = {"data": df}
+            
+            # Data is always a dict now (normalized above)
             # Prepare dataframe info for all sheets
-            sheet_names_list = list(df.keys())
+            sheet_names_list = list(df_dict.keys())
             is_multisheet = len(sheet_names_list) > 1
             
             sheets_info = {}
-            for sheet_name, sheet_df in df.items():
+            for sheet_name, sheet_df in df_dict.items():
+                # Convert sample values to JSON-serializable format
+                sample_records = sheet_df.head(2).to_dict('records')
+                sample_records_clean = [
+                    {k: make_json_serializable(v) for k, v in record.items()}
+                    for record in sample_records
+                ]
+                
+                # Convert statistics to JSON-serializable format
+                stats = sheet_df.describe().to_dict() if len(sheet_df) > 0 else {}
+                stats_clean = {k: make_json_serializable(v) for k, v in stats.items()}
+                
                 sheets_info[sheet_name] = {
                     "columns": sheet_df.columns.tolist(),
                     "dtypes": sheet_df.dtypes.astype(str).to_dict(),
                     "shape": sheet_df.shape,
-                    "sample_values": sheet_df.head(2).to_dict('records'),
-                    "statistics": sheet_df.describe().to_dict() if len(sheet_df) > 0 else {}
+                    "sample_values": sample_records_clean,
+                    "statistics": stats_clean
                 }
             
             # Create DSPy input with available sheet names
@@ -348,7 +385,7 @@ class DatasetService:
                     name: {
                         "columns": info["columns"],
                         "shape": info["shape"],
-                        "sample": df[name].head(2).to_markdown()
+                        "sample": df_dict[name].head(2).to_markdown()
                     }
                     for name, info in sheets_info.items()
                 }

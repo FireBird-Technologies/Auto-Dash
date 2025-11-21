@@ -13,9 +13,10 @@ interface VisualizationProps {
     description: string;
     colorTheme?: string;
   };
+  onReupload?: () => void;
 }
 
-export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, context }) => {
+export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, context, onReupload }) => {
   const [query, setQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [chartSpecs, setChartSpecs] = useState<any[]>([]);  // Changed to array
@@ -44,6 +45,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   const [zoomedChartIndex, setZoomedChartIndex] = useState<number | null>(null);
   const [chartPreview, setChartPreview] = useState<{chartIndex: number, figure: any, code: string} | null>(null);
   const [isExecutingCode, setIsExecutingCode] = useState(false);
+  const [dashboardTitle, setDashboardTitle] = useState<string>('Dashboard');
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
 
   // Update local data when prop changes
   useEffect(() => {
@@ -357,6 +360,11 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
         // Remove the thinking message and update chart specs
         setChatHistory(prev => prev.slice(0, -1));
         
+        // Extract dashboard title if provided
+        if (result.dashboard_title) {
+          setDashboardTitle(result.dashboard_title);
+        }
+        
         // Handle both array (new format) and single chart (old format)
         if (result.charts && Array.isArray(result.charts)) {
           // New format: array of charts
@@ -443,6 +451,15 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
+    }
+  };
+
+  const handleReuploadClick = () => {
+    const confirmed = window.confirm(
+      'Are you sure you want to upload a new dataset? This will clear all current visualizations and chat history.'
+    );
+    if (confirmed && onReupload) {
+      onReupload();
     }
   };
 
@@ -963,6 +980,20 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
               <p className="step-description">Ask questions to generate visualizations</p>
             </div>
             <div className="dashboard-controls">
+              {/* Reupload Button */}
+              <button 
+                onClick={handleReuploadClick} 
+                className="control-button"
+                title="Upload New Dataset"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+                Change Data
+              </button>
+
               {/* Dataset Preview Button - Show after first query */}
               {chatHistory.length > 0 && (
                 <button 
@@ -1071,26 +1102,112 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
             {(!isLoading || chartSpecs.length > 0) && (
                     <div className="chart-display">
                       {chartSpecs.length > 0 ? (
-                        <div style={{
-                          display: 'grid',
-                          gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 1000px), 1fr))',
-                          gap: '24px',
-                          padding: '20px',
-                          alignItems: 'start'
-                        }}>
-                          {chartSpecs.map((spec, index) => (
-                            <PlotlyChartRenderer 
-                              key={`chart-${index}`}
-                              chartSpec={spec} 
-                              data={localData}
-                              chartIndex={index}
-                              datasetId={datasetId}
-                              onChartFixed={handleChartFixed}
-                              onFixingStatusChange={(isFixing) => setShowFixNotification(isFixing)}
-                              onZoom={handleChartZoom}
-                            />
-                          ))}
-                        </div>
+                        <>
+                          {/* Dashboard Title - Editable */}
+                          <div style={{ 
+                            padding: '24px 20px 0 20px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}>
+                            {isEditingTitle ? (
+                              <input
+                                type="text"
+                                value={dashboardTitle}
+                                onChange={(e) => setDashboardTitle(e.target.value)}
+                                onBlur={() => setIsEditingTitle(false)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') setIsEditingTitle(false);
+                                  if (e.key === 'Escape') setIsEditingTitle(false);
+                                }}
+                                autoFocus
+                                style={{
+                                  fontSize: '2rem',
+                                  fontWeight: 700,
+                                  padding: '12px 16px',
+                                  border: '2px solid #ef4444',
+                                  borderRadius: '12px',
+                                  outline: 'none',
+                                  width: '100%',
+                                  maxWidth: '800px',
+                                  fontFamily: 'inherit',
+                                  background: 'white',
+                                  transition: 'all 0.2s',
+                                  textAlign: 'center',
+                                  boxShadow: '0 0 0 4px rgba(239, 68, 68, 0.1)'
+                                }}
+                              />
+                            ) : (
+                              <h2
+                                onClick={() => setIsEditingTitle(true)}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.backgroundColor = '#f9fafb';
+                                  e.currentTarget.style.transform = 'translateY(-1px)';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.backgroundColor = 'transparent';
+                                  e.currentTarget.style.transform = 'translateY(0)';
+                                }}
+                                title="Click to edit dashboard title"
+                                style={{
+                                  fontSize: '2rem',
+                                  fontWeight: 700,
+                                  color: '#1f2937',
+                                  margin: 0,
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '12px',
+                                  padding: '12px 20px',
+                                  borderRadius: '12px',
+                                  transition: 'all 0.2s',
+                                  border: '2px solid transparent'
+                                }}
+                              >
+                                {dashboardTitle}
+                                <svg 
+                                  width="20" 
+                                  height="20" 
+                                  viewBox="0 0 24 24" 
+                                  fill="none" 
+                                  stroke="currentColor" 
+                                  strokeWidth="2"
+                                  style={{ 
+                                    opacity: 0.4,
+                                    transition: 'opacity 0.2s'
+                                  }}
+                                  onMouseEnter={(e) => e.currentTarget.style.opacity = '0.7'}
+                                  onMouseLeave={(e) => e.currentTarget.style.opacity = '0.4'}
+                                >
+                                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                </svg>
+                              </h2>
+                            )}
+                          </div>
+                          
+                          {/* Charts Grid */}
+                          <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 1000px), 1fr))',
+                            gap: '24px',
+                            padding: '20px',
+                            alignItems: 'start'
+                          }}>
+                            {chartSpecs.map((spec, index) => (
+                              <PlotlyChartRenderer 
+                                key={`chart-${index}`}
+                                chartSpec={spec} 
+                                data={localData}
+                                chartIndex={index}
+                                datasetId={datasetId}
+                                onChartFixed={handleChartFixed}
+                                onFixingStatusChange={(isFixing) => setShowFixNotification(isFixing)}
+                                onZoom={handleChartZoom}
+                              />
+                            ))}
+                          </div>
+                        </>
                       ) : (
                         <div className="empty-state">
                           <p>Ask a question about your data to generate a visualization</p>
