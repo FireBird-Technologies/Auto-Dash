@@ -31,7 +31,7 @@ from ..core.security import get_current_user
 from ..models import User, Dataset as DatasetModel
 from ..services.dataset_service import dataset_service
 from ..schemas.chat import FixVisualizationRequest
-from ..services.agents import fix_plotly, clean_plotly_code
+from ..services.agents import fix_plotly, clean_plotly_code, plotly_editor
 from ..services.chart_creator import execute_plotly_code
 import logging
 import re
@@ -195,6 +195,13 @@ class FirstQueryRequest(BaseModel):
 class ChatQueryRequest(BaseModel):
     query:str
     dataset_id:Optional[str] = None
+
+
+class EditChartRequest(BaseModel):
+    chart_index: int
+    edit_request: str
+    current_code: str
+    dataset_id: str
 
 
 class ChartResponse(BaseModel):
@@ -1457,6 +1464,67 @@ async def execute_code(
             }
     
     raise HTTPException(status_code=400, detail=f"Invalid code_type: {code_type}")
+
+
+@router.post("/edit-chart")
+async def edit_chart(
+    request: EditChartRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Edit a chart using natural language instructions.
+    Uses the plotly_editor DSPy module to generate edited code.
+    """
+    try:
+        # Get dataset context
+        data_context = dataset_service.get_context(current_user.id, request.dataset_id)
+        
+        if not data_context:
+            # Provide basic fallback context if not available
+            df = dataset_service.get_dataset(current_user.id, request.dataset_id)
+            if df is None:
+                raise HTTPException(status_code=404, detail="Dataset not found")
+            
+            if isinstance(df, dict):
+                sheet_names = list(df.keys())
+                first_sheet = df[sheet_names[0]]
+                columns = [str(col) for col in first_sheet.columns.tolist()]
+                data_context = f"Multi-sheet Excel with {len(df)} sheets: {', '.join(sheet_names)}. First sheet has {len(first_sheet)} rows and columns: {', '.join(columns)}"
+            else:
+                columns = [str(col) for col in df.columns.tolist()]
+                data_context = f"Dataset with {len(df)} rows and {len(df.columns)} columns. Columns: {', '.join(columns)}"
+        else:
+            # Get dataset for execution
+            df = dataset_service.get_dataset(current_user.id, request.dataset_id)
+            if df is None:
+                raise HTTPException(status_code=404, detail="Dataset not found")
+        
+        # Call plotly_editor module with session LM
+        with dspy.context(lm=dspy.LM("openai/gpt-4o-mini", max_tokens=1400)):
+            editor = dspy.Predict(plotly_editor)
+            result = editor(
+                user_query=request.edit_request,
+                plotly_code=request.current_code,
+                dataset_context=data_context
+            )
+        
+        # Clean the edited code
+        edited_code = clean_plotly_code(result.edited_code)
+        
+        # Execute edited code to get figure
+        execution_result = execute_plotly_code(edited_code, df)
+        
+        return {
+            "edited_code": edited_code,
+            "reasoning": getattr(result, 'reasoning', 'Chart edited successfully'),
+            "figure": execution_result.get('figure'),
+            "success": execution_result.get('success'),
+            "error": execution_result.get('error') if not execution_result.get('success') else None
+        }
+        
+    except Exception as e:
+        logger.error(f"Error editing chart: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to edit chart: {str(e)}")
 
 
 @router.get("/datasets/{dataset_id}/charts/{chart_index}")

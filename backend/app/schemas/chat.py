@@ -23,3 +23,11 @@ class FixVisualizationRequest(BaseModel):
     dataset_id: Optional[str] = None
 
 
+class RetryCodeRequest(BaseModel):
+    user_query: str
+    dataset_id: str
+    code_type: str  # 'plotly_edit' or 'analysis'
+    plotly_code: Optional[str] = None  # Only for plotly_edit
+    data_context: str
+
+

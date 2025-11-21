@@ -26,7 +26,10 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     message: string, 
     matchedChart?: {index: number, type: string, title: string},
     codeType?: 'plotly_edit' | 'analysis',
-    executableCode?: string
+    executableCode?: string,
+    failed?: boolean,
+    retryable?: boolean,
+    originalQuery?: string
   }>>([]);
   const [contextPrepared, setContextPrepared] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -212,17 +215,47 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
           message: `**Analysis Result:**\n\n${result.result}`
         }]);
       } else {
-        setChatHistory(prev => [...prev, {
-          type: 'assistant',
-          message: `**Error:**\n\n${result.error}`
-        }]);
+        // Mark the last assistant message with analysis code as failed
+        setChatHistory(prev => {
+          const updated = [...prev];
+          for (let i = updated.length - 1; i >= 0; i--) {
+            if (updated[i].type === 'assistant' && updated[i].codeType === 'analysis') {
+              updated[i] = {
+                ...updated[i],
+                failed: true,
+                retryable: true
+              };
+              break;
+            }
+          }
+          updated.push({
+            type: 'assistant',
+            message: `**Error:**\n\n${result.error}`
+          });
+          return updated;
+        });
       }
     } catch (error) {
       console.error('Error executing analysis:', error);
-      setChatHistory(prev => [...prev, {
-        type: 'assistant',
-        message: `**Error:** ${error instanceof Error ? error.message : 'Failed to execute analysis'}`
-      }]);
+      // Mark the last assistant message with analysis code as failed
+      setChatHistory(prev => {
+        const updated = [...prev];
+        for (let i = updated.length - 1; i >= 0; i--) {
+          if (updated[i].type === 'assistant' && updated[i].codeType === 'analysis') {
+            updated[i] = {
+              ...updated[i],
+              failed: true,
+              retryable: true
+            };
+            break;
+          }
+        }
+        updated.push({
+          type: 'assistant',
+          message: `**Error:** ${error instanceof Error ? error.message : 'Failed to execute analysis'}`
+        });
+        return updated;
+      });
     } finally {
       setIsExecutingCode(false);
     }
@@ -261,16 +294,96 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
           code: code
         });
       } else {
-        setChatHistory(prev => [...prev, {
-          type: 'assistant',
-          message: `**Error:** Failed to execute code`
-        }]);
+        // Mark the last assistant message with plotly_edit code as failed
+        setChatHistory(prev => {
+          const updated = [...prev];
+          for (let i = updated.length - 1; i >= 0; i--) {
+            if (updated[i].type === 'assistant' && updated[i].codeType === 'plotly_edit') {
+              updated[i] = {
+                ...updated[i],
+                failed: true,
+                retryable: true
+              };
+              break;
+            }
+          }
+          updated.push({
+            type: 'assistant',
+            message: `**Error:** Failed to execute code`
+          });
+          return updated;
+        });
       }
     } catch (error) {
       console.error('Error executing plotly edit:', error);
+      // Mark the last assistant message with plotly_edit code as failed
+      setChatHistory(prev => {
+        const updated = [...prev];
+        for (let i = updated.length - 1; i >= 0; i--) {
+          if (updated[i].type === 'assistant' && updated[i].codeType === 'plotly_edit') {
+            updated[i] = {
+              ...updated[i],
+              failed: true,
+              retryable: true
+            };
+            break;
+          }
+        }
+        updated.push({
+          type: 'assistant',
+          message: `**Error:** ${error instanceof Error ? error.message : 'Failed to execute code'}`
+        });
+        return updated;
+      });
+    } finally {
+      setIsExecutingCode(false);
+    }
+  };
+
+  // Retry failed code with improved AI
+  const handleRetry = async (message: any) => {
+    setIsExecutingCode(true);
+    try {
+      // Get data context (for now, we'll send empty string as backend will generate it)
+      const dataContext = ""; // Backend will generate context from dataset_id
+      
+      const response = await fetch(`${config.backendUrl}/api/chat/retry`, {
+        method: 'POST',
+        headers: getAuthHeaders({'Content-Type': 'application/json'}),
+        credentials: 'include',
+        body: JSON.stringify({
+          user_query: message.originalQuery || message.message,
+          dataset_id: datasetId,
+          code_type: message.codeType,
+          plotly_code: message.codeType === 'plotly_edit' && message.matchedChart 
+            ? chartSpecs[message.matchedChart.index]?.chart_spec 
+            : undefined,
+          data_context: dataContext
+        })
+      });
+
+      await checkAuthResponse(response);
+
+      if (!response.ok) {
+        throw new Error('Failed to retry code generation');
+      }
+      
+      const result = await response.json();
+      
+      // Add new message with improved code
       setChatHistory(prev => [...prev, {
         type: 'assistant',
-        message: `**Error:** ${error instanceof Error ? error.message : 'Failed to execute code'}`
+        message: result.reply,
+        codeType: result.code_type,
+        executableCode: result.executable_code,
+        matchedChart: message.matchedChart,
+        originalQuery: message.originalQuery || message.message
+      }]);
+    } catch (error) {
+      console.error('Error retrying code:', error);
+      setChatHistory(prev => [...prev, {
+        type: 'assistant',
+        message: `**Error:** ${error instanceof Error ? error.message : 'Failed to retry'}`
       }]);
     } finally {
       setIsExecutingCode(false);
@@ -406,7 +519,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
             message: result.reply,
             matchedChart: result.matched_chart,
             codeType: result.code_type,
-            executableCode: result.executable_code
+            executableCode: result.executable_code,
+            originalQuery: userQuery
           }];
         });
         
@@ -848,7 +962,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                         )}
                         <MarkdownMessage content={msg.message} />
                         {msg.codeType && msg.executableCode && (
-                          <div style={{ marginTop: '12px' }}>
+                          <div style={{ marginTop: '12px', display: 'flex', gap: '8px' }}>
                             <button
                               onClick={() => {
                                 if (msg.codeType === 'plotly_edit' && msg.matchedChart) {
@@ -893,6 +1007,46 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                 <span>{msg.codeType === 'plotly_edit' ? 'Run Code' : 'Run Analysis'}</span>
                               )}
                             </button>
+                            
+                            {msg.failed && msg.retryable && (
+                              <button
+                                onClick={() => handleRetry(msg)}
+                                disabled={isExecutingCode}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  padding: '8px 16px',
+                                  background: isExecutingCode ? '#6b7280' : 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '8px',
+                                  fontSize: '14px',
+                                  fontWeight: '500',
+                                  cursor: isExecutingCode ? 'not-allowed' : 'pointer',
+                                  transition: 'all 0.2s',
+                                  opacity: isExecutingCode ? 0.6 : 1,
+                                  boxShadow: isExecutingCode ? 'none' : '0 2px 8px rgba(245, 158, 11, 0.2)'
+                                }}
+                                onMouseEnter={(e) => {
+                                  if (!isExecutingCode) {
+                                    e.currentTarget.style.background = 'linear-gradient(135deg, #d97706 0%, #f59e0b 100%)';
+                                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(245, 158, 11, 0.3)';
+                                  }
+                                }}
+                                onMouseLeave={(e) => {
+                                  if (!isExecutingCode) {
+                                    e.currentTarget.style.background = 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)';
+                                    e.currentTarget.style.boxShadow = '0 2px 8px rgba(245, 158, 11, 0.2)';
+                                  }
+                                }}
+                              >
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+                                </svg>
+                                <span>Retry</span>
+                              </button>
+                            )}
                           </div>
                         )}
                       </>
