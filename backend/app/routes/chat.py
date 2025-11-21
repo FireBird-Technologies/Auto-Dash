@@ -68,10 +68,10 @@ async def chat(
                 def compress_chart(idx, c):
                     t = c.get("chart_type", "")[:30]
                     n = c.get("title", "")[:50]
-                    p = str(c.get("plan", {}))[:100]
+                    p = str(c.get("plan", {}))[:500]
                     return {"i": idx, "t": t, "n": n, "p": p}
                 
-                charts_json = json.dumps([compress_chart(idx, c) for idx, c in charts.items()], default=str)[:200]
+                charts_json = json.dumps([compress_chart(idx, c) for idx, c in charts.items()], default=str)
                 
                 # Define reward function for chart matching
                 def chart_match_reward(args, pred) -> float:
