@@ -50,7 +50,6 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   const [isExecutingCode, setIsExecutingCode] = useState(false);
   const [dashboardTitle, setDashboardTitle] = useState<string>('Dashboard');
   const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [suggestion, setSuggestion] = useState<string>('');
 
   // Update local data when prop changes
   useEffect(() => {
@@ -71,18 +70,13 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     hasGeneratedInitialChart.current = false;
   }, []);
 
-  // Load suggestion from sessionStorage when component mounts
-  useEffect(() => {
-    if (datasetId) {
-      const storedSuggestion = sessionStorage.getItem(`suggestion_${datasetId}`);
-      if (storedSuggestion) {
-        setSuggestion(storedSuggestion);
-      }
-    }
-  }, [datasetId]);
-
   // Function to fetch full dataset when needed (called after chart generation)
   const fetchFullDataset = async () => {
+    // Don't fetch if preview modal is open - wait until it's closed to avoid disrupting the UI
+    if (showDatasetPreview) {
+      return;
+    }
+    
     // Only fetch if we haven't already and we have preview data
     if (fullDataFetched || !datasetId || data.length >= 50) {
       return;
@@ -107,21 +101,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
         
         // Update local data with full dataset
         if (result.data && result.data.length > data.length) {
-          // Preserve preview state before updating
-          const wasPreviewOpen = showDatasetPreview;
-          const currentPreviewData = previewData;
-          
           setLocalData(result.data);
           setFullDataFetched(true);
-          
-          // Restore preview state if it was open
-          if (wasPreviewOpen && currentPreviewData) {
-            // Use setTimeout to ensure state updates happen after localData update
-            setTimeout(() => {
-              setShowDatasetPreview(true);
-              setPreviewData(currentPreviewData);
-            }, 0);
-          }
         }
       }
     } catch (err) {
@@ -155,6 +136,17 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
       setLoadingPreview(false);
     }
   };
+
+  // Fetch full dataset when preview modal closes (if not already fetched)
+  useEffect(() => {
+    if (!showDatasetPreview && !fullDataFetched && datasetId && data.length < 50) {
+      // Small delay to ensure modal close animation completes
+      const timer = setTimeout(() => {
+        fetchFullDataset();
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [showDatasetPreview, fullDataFetched, datasetId, data.length]);
 
   // Generate initial chart on load (only once)
   useEffect(() => {
@@ -493,8 +485,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
         // Fetch full dataset before rendering chart (if not already fetched)
         await fetchFullDataset();
         
-        // Remove the thinking message and update chart specs
-        setChatHistory(prev => prev.slice(0, -1));
+        // Keep user message in chat history - don't remove it
+        // The user message was already added above, so we just update chart specs
         
         // Extract dashboard title if provided
         if (result.dashboard_title) {
@@ -534,10 +526,9 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
 
         const result = await response.json();
         
-        // Remove the thinking message and add AI response
+        // Keep user message and add AI response
         setChatHistory(prev => {
-          const newHistory = prev.slice(0, -1);
-          return [...newHistory, { 
+          return [...prev, { 
             type: 'assistant', 
             message: result.reply,
             matchedChart: result.matched_chart,
@@ -556,10 +547,9 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
       const errorMessage = err instanceof Error ? err.message : 'Failed to generate chart';
       setError(errorMessage);
       
-      // Replace thinking message with error
+      // Keep user message and add error message
       setChatHistory(prev => {
-        const newHistory = prev.slice(0, -1);
-        return [...newHistory, { 
+        return [...prev, { 
           type: 'assistant', 
           message: `Error: ${errorMessage}` 
         }];
@@ -1080,6 +1070,22 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                 </div>
               ))
             )}
+            {isLoading && (
+              <div className="chat-message assistant-message">
+                <div className="chat-avatar assistant-avatar">AI</div>
+                <div className="chat-bubble assistant-bubble" style={{ background: 'transparent', boxShadow: 'none', padding: 0 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '8px' }}>
+                    <div className="magic-sparkles" style={{ marginBottom: 0, transform: 'scale(0.8)', justifyContent: 'flex-start' }}>
+                      <span className="sparkle">*</span>
+                      <span className="sparkle">*</span>
+                      <span className="sparkle">*</span>
+                      <span className="sparkle">*</span>
+                      <span className="sparkle">*</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
             {error && (
               <div className="chat-message error-message">
                 <div className="chat-avatar assistant-avatar">AI</div>
@@ -1261,8 +1267,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
           </div>
 
           <div className="visualization-container-large" ref={visualizationRef}>
-            {/* Star Loading Animation - Show when loading */}
-            {isLoading && (
+            {/* Star Loading Animation - Only show when loading AND no charts exist yet */}
+            {isLoading && chartSpecs.length === 0 && (
             <div className="magic-loading">
               <div className="magic-sparkles">
                 <span className="sparkle">*</span>
@@ -1275,11 +1281,11 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
             </div>
             )}
 
-            {/* Chart Display - Show when not loading */}
-            {!isLoading && (
-                    <div className="chart-display">
-                      {chartSpecs.length > 0 ? (
-                        <>
+            {/* Chart Display - Show when charts exist (even if loading) */}
+            {(chartSpecs.length > 0 || (!isLoading && chartSpecs.length === 0)) && (
+              <div className="chart-display">
+                {chartSpecs.length > 0 ? (
+                  <>
                           {/* Dashboard Title - Editable */}
                           <div style={{ 
                             padding: '24px 20px 0 20px',
@@ -1398,7 +1404,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                           )}
                         </div>
                       )}
-                    </div>
+              </div>
             )}
           </div>
         </main>

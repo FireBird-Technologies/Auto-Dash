@@ -1603,4 +1603,4 @@ async def suggest_query(
         result = program(dataset_context=dataset_context)
         suggestion = str(result.suggestion).strip()
         
-        return {"suggestion": suggestion}
+        return {"suggestion": suggestion+" - construct a dashboard showing this"}
