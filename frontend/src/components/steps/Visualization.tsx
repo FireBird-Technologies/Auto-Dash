@@ -50,6 +50,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   const [isExecutingCode, setIsExecutingCode] = useState(false);
   const [dashboardTitle, setDashboardTitle] = useState<string>('Dashboard');
   const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [suggestion, setSuggestion] = useState<string>('');
 
   // Update local data when prop changes
   useEffect(() => {
@@ -69,6 +70,16 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     setFullDataFetched(false);
     hasGeneratedInitialChart.current = false;
   }, []);
+
+  // Load suggestion from sessionStorage when component mounts
+  useEffect(() => {
+    if (datasetId) {
+      const storedSuggestion = sessionStorage.getItem(`suggestion_${datasetId}`);
+      if (storedSuggestion) {
+        setSuggestion(storedSuggestion);
+      }
+    }
+  }, [datasetId]);
 
   // Function to fetch full dataset when needed (called after chart generation)
   const fetchFullDataset = async () => {
@@ -96,8 +107,21 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
         
         // Update local data with full dataset
         if (result.data && result.data.length > data.length) {
+          // Preserve preview state before updating
+          const wasPreviewOpen = showDatasetPreview;
+          const currentPreviewData = previewData;
+          
           setLocalData(result.data);
           setFullDataFetched(true);
+          
+          // Restore preview state if it was open
+          if (wasPreviewOpen && currentPreviewData) {
+            // Use setTimeout to ensure state updates happen after localData update
+            setTimeout(() => {
+              setShowDatasetPreview(true);
+              setPreviewData(currentPreviewData);
+            }, 0);
+          }
         }
       }
     } catch (err) {
@@ -432,11 +456,10 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     setIsLoading(true);
     setError(null);
     
-    // Add user message and thinking message in one update to avoid duplication
+    // Add user message only - loading visualization shows in dashboard area
     setChatHistory(prev => [
       ...prev,
-      { type: 'user', message: userQuery },
-      { type: 'assistant', message: 'Crafting your visualization... Great insights take a moment!' }
+      { type: 'user', message: userQuery }
     ]);
 
     try {
@@ -1238,8 +1261,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
           </div>
 
           <div className="visualization-container-large" ref={visualizationRef}>
-            {/* Magic Loading Animation - Show when loading and no charts yet */}
-            {isLoading && chartSpecs.length === 0 && (
+            {/* Star Loading Animation - Show when loading */}
+            {isLoading && (
             <div className="magic-loading">
               <div className="magic-sparkles">
                 <span className="sparkle">*</span>
@@ -1252,8 +1275,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
             </div>
             )}
 
-            {/* Chart Display - Show when not loading OR when charts exist */}
-            {(!isLoading || chartSpecs.length > 0) && (
+            {/* Chart Display - Show when not loading */}
+            {!isLoading && (
                     <div className="chart-display">
                       {chartSpecs.length > 0 ? (
                         <>

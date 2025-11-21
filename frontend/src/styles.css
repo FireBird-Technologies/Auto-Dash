@@ -378,6 +378,28 @@ body {
   flex-direction: column;
   gap: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  max-height: 300px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Custom scrollbar styling for color picker */
+.custom-color-picker::-webkit-scrollbar {
+  width: 8px;
+}
+
+.custom-color-picker::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.custom-color-picker::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.custom-color-picker::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
 .color-input-group {
