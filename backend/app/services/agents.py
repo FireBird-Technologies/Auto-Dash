@@ -892,6 +892,66 @@ def plotly_chart_metric(example, pred, trace=None) -> float:
     except Exception as e:
         return 0.0 
 
+
+def analysis_code_metric(example, pred, trace=None) -> float:
+    """
+    Metric for pandas/numpy analysis code validation.
+    Validates code runs without errors and doesn't include forbidden visualization libraries.
+    Returns: float: Score (1.0=success, 0.0=failure)
+    """
+    try:
+        # Extract code from pred
+        code = None
+        if isinstance(pred, dict):
+            code = pred.get('code')
+        else:
+            code = getattr(pred, 'code', None)
+        
+        if not code:
+            return 0.0
+        
+        code = str(code)
+        
+        # Check for forbidden visualization libraries
+        forbidden = ['matplotlib', 'plotly', 'seaborn', 'bokeh', 'altair', 'holoviews', 'ggplot', 'pygal', 'dash', 'streamlit']
+        for lib in forbidden:
+            if re.search(rf'\bimport\s+{lib}\b|\bfrom\s+{lib}\b', code, re.IGNORECASE):
+                return 0.0
+        
+        # Prepare safe exec environment
+        exec_globals = {
+            'pd': pd,
+            'np': np,
+            'json': json,
+        }
+        
+        # Get dataset from context variable if available
+        dataset = _dataset_context.get()
+        if dataset:
+            # Use actual data from session
+            sheet_names = list(dataset.keys())
+            first_sheet_name = sheet_names[0]
+            exec_globals['df'] = dataset[first_sheet_name]
+            exec_globals['data'] = dataset
+            
+            # Make individual sheets accessible by name
+            for sheet_name, sheet_df in dataset.items():
+                safe_name = re.sub(r'[^a-zA-Z0-9_]', '_', sheet_name)
+                exec_globals[safe_name] = sheet_df
+        else:
+            # Fallback to sample data
+            exec_globals['df'] = pd.DataFrame({'a': [1, 2], 'b': [3, 4]})
+        
+        # Execute the code
+        exec(code, exec_globals)
+        
+        # If we got here, code ran successfully
+        return 1.0
+        
+    except Exception as e:
+        return 0.0
+
+
 # ============================================================================
 # MAIN PLOTLY MODULE
 # ============================================================================

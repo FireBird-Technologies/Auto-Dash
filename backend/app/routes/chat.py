@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
-from ..schemas.chat import ChatRequest, ChatResponse
+from ..schemas.chat import ChatRequest, ChatResponse, RetryCodeRequest
 from ..core.security import get_current_subject, get_current_user
 from ..core.db import get_db
 from ..models import User
 from sqlalchemy.orm import Session
-from ..services.agents import chat_function, chart_matcher
+from ..services.agents import chat_function, chart_matcher, plotly_editor, data_query_sig, plotly_chart_metric, analysis_code_metric, clean_plotly_code, _dataset_context
 from ..services.dataset_service import dataset_service
 import dspy
 import os
@@ -202,6 +202,93 @@ async def chat(
         raise HTTPException(
             status_code=500,
             detail=f"Error processing chat request: {str(e)}"
+        )
+
+
+@router.post("/retry")
+async def retry_code_generation(
+    request: RetryCodeRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Retry failed code generation using dspy.Refine with code validation metrics.
+    Used when initial code execution fails in chat.
+    """
+    try:
+        # Get dataset for validation
+        df = dataset_service.get_dataset(current_user.id, request.dataset_id)
+        if df is None:
+            raise HTTPException(status_code=404, detail="Dataset not found")
+        
+        # Set dataset in context variable for metric functions
+        _dataset_context.set(df)
+        
+        # Get dataset context if not provided
+        data_context = request.data_context
+        if not data_context or data_context.strip() == "":
+            data_context = dataset_service.get_context(current_user.id, request.dataset_id)
+            if not data_context:
+                data_context = "Dataset loaded"
+        
+        reply = ""
+        code_type = request.code_type
+        executable_code = None
+        
+        if request.code_type == 'plotly_edit':
+            # Use plotly_editor with Refine
+            with dspy.context(lm=dspy.LM("openai/gpt-4o-mini", max_tokens=1400)):
+                editor = dspy.Refine(
+                    dspy.Predict(plotly_editor),
+                    N=3,
+                    reward_fn=plotly_chart_metric,
+                    threshold=0.5
+                )
+                result = editor(
+                    user_query=request.user_query,
+                    plotly_code=request.plotly_code or "",
+                    dataset_context=data_context
+                )
+            
+            # Extract and clean the code
+            executable_code = clean_plotly_code(str(result.edited_code))
+            reply = f"**Retried with improved AI (3 iterations):**\n\n```python\n{executable_code}\n```"
+            if hasattr(result, 'reasoning'):
+                reply = f"{str(result.reasoning)}\n\n{reply}"
+                
+        elif request.code_type == 'analysis':
+            # Use data_query_sig with Refine
+            with dspy.context(lm=dspy.LM("openai/gpt-4o-mini", max_tokens=1400)):
+                analyzer = dspy.Refine(
+                    dspy.Predict(data_query_sig),
+                    N=3,
+                    reward_fn=analysis_code_metric,
+                    threshold=0.5
+                )
+                result = analyzer(
+                    user_query=request.user_query,
+                    dataset_context=data_context
+                )
+            
+            # Extract the code
+            executable_code = str(result.code)
+            reply = f"**Retried with improved AI (3 iterations):**\n\n```python\n{executable_code}\n```"
+            if hasattr(result, 'reasoning'):
+                reply = f"{str(result.reasoning)}\n\n{reply}"
+        else:
+            raise HTTPException(status_code=400, detail=f"Invalid code_type: {request.code_type}")
+        
+        return ChatResponse(
+            reply=reply,
+            user=str(current_user.id),
+            code_type=code_type,
+            executable_code=executable_code
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in retry endpoint: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error retrying code generation: {str(e)}"
         )
 
 
