@@ -920,7 +920,13 @@ async def analyze_data(
     query = request.query + "/n use these colors "+ str(request.color_theme)
     
     # try:
-    chart_specs, full_plan = await generate_chart_spec(df, query, dataset_context)
+    chart_specs, full_plan, dashboard_title = await generate_chart_spec(
+        df=df, 
+        query=query, 
+        dataset_context=dataset_context,
+        user_id=current_user.id,
+        dataset_id=dataset_id
+    )
     
     # Store chart metadata including plans
     if isinstance(chart_specs, list):
@@ -950,6 +956,7 @@ async def analyze_data(
             "message": f"{len(chart_specs)} chart(s) generated successfully",
             "query": request.query,
             "dataset_id": dataset_id,
+            "dashboard_title": dashboard_title,
             "charts": chart_specs  # Array of chart specs
         }
     else:

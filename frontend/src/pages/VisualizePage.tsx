@@ -22,6 +22,14 @@ export const VisualizePage: React.FC = () => {
     setVizContext({ description: '' });
   }, []);
 
+  // Function to reset and go back to upload
+  const handleReupload = () => {
+    setCurrentStep(0);
+    setData([]);
+    setDatasetId('');
+    setVizContext({ description: '' });
+  };
+
   const progress = ((currentStep + 1) / 3) * 100;
 
   const renderStep = () => {
@@ -51,6 +59,7 @@ export const VisualizePage: React.FC = () => {
             data={data}
             datasetId={datasetId}
             context={vizContext}
+            onReupload={handleReupload}
           />
         );
       default:
