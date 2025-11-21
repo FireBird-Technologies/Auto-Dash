@@ -73,7 +73,7 @@ export const VisualizePage: React.FC = () => {
       <div className="progress-indicator">
         <div className="progress-bar" style={{ width: `${progress}%` }} />
       </div>
-      <div style={{ flex: 1, overflow: 'hidden' }}>
+      <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
         {renderStep()}
       </div>
     </div>

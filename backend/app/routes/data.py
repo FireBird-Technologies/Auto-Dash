@@ -1573,18 +1573,18 @@ async def suggest_query(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Generate AI-powered query suggestions based on dataset context.
+    Generate a single AI-powered query suggestion based on dataset context.
     
     Args:
         dataset_id: Dataset identifier
     
     Returns:
-        Dict with suggestions array
+        Dict with a single suggestion string
     """
     from ..services.agents import SuggestQueries
     
     # Initialize DSPy module locally
-    quick_lm = dspy.LM('openai/gpt-4o-mini', max_tokens=250, api_key=os.getenv('OPENAI_API_KEY'))
+    quick_lm = dspy.LM('openai/gpt-4o-mini', max_tokens=100, api_key=os.getenv('OPENAI_API_KEY'))
     with dspy.context(lm=quick_lm):
         program = dspy.Predict(SuggestQueries)
         
@@ -1599,8 +1599,8 @@ async def suggest_query(
         # Create dataset context for DSPy
         dataset_context = df.head(5).to_markdown()
         
-        # Generate suggestions
+        # Generate single suggestion
         result = program(dataset_context=dataset_context)
-        suggestion_list = json.loads(result.suggestions)
+        suggestion = str(result.suggestion).strip()
         
-        return {"suggestions": suggestion_list}
+        return {"suggestion": suggestion+" - construct a dashboard showing this"}

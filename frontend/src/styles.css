@@ -380,6 +380,25 @@ body {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
+/* Custom scrollbar styling for color picker */
+.custom-color-picker::-webkit-scrollbar {
+  width: 8px;
+}
+
+.custom-color-picker::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.custom-color-picker::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.custom-color-picker::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
 .color-input-group {
   display: flex;
   flex-direction: column;
@@ -2542,4 +2561,12 @@ body {
 
 .chat-bubble table tbody tr {
   transition: background-color 0.15s ease;
+}
+
+/* Suggestion overlay styling */
+.suggestion-overlay {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
 }

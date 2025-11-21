@@ -33,6 +33,27 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded }) => {
     return response.json();
   };
 
+  const fetchSuggestions = async (datasetId: string): Promise<void> => {
+    try {
+      const response = await fetch(`${config.backendUrl}/api/data/datasets/${datasetId}/suggest-queries`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+      });
+
+      await checkAuthResponse(response);
+
+      if (response.ok) {
+        const data = await response.json();
+        // Store single suggestion in sessionStorage for Visualization component to access
+        sessionStorage.setItem(`suggestion_${datasetId}`, data.suggestion || '');
+      }
+    } catch (error) {
+      console.error('Error fetching suggestion:', error);
+      // Don't block the flow if suggestion fails
+    }
+  };
+
   const loadSampleData = async () => {
     setUploading(true);
     setError(null);
@@ -55,7 +76,12 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded }) => {
       const result = await response.json();
       setSuccess(`Sample data loaded: ${result.dataset_info.filename}`);
       
-      // Pass minimal data to proceed to visualization
+      // Fetch suggestions in the background without blocking
+      fetchSuggestions(result.dataset_id).catch(() => {
+        // Silently fail - suggestions are optional
+      });
+      
+      // Pass minimal data to proceed to visualization immediately
       onDataLoaded([], [], result.dataset_id);
     } catch (err) {
       console.error('Error loading sample data:', err);
@@ -77,7 +103,12 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded }) => {
       const result = await uploadToBackend(file);
       setSuccess(`File uploaded: ${result.file_info.filename}`);
       
-      // Pass minimal data to proceed to visualization
+      // Fetch suggestions in the background without blocking
+      fetchSuggestions(result.dataset_id).catch(() => {
+        // Silently fail - suggestions are optional
+      });
+      
+      // Pass minimal data to proceed to visualization immediately
       onDataLoaded([], [], result.dataset_id);
     } catch (err) {
       console.error('Error uploading file:', err);
