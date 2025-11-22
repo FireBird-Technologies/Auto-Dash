@@ -6,6 +6,7 @@ import { Account } from './components/Account';
 import { VisualizePage } from './pages/VisualizePage';
 import { PricingPage } from './pages/PricingPage';
 import { SubscriptionResult } from './pages/SubscriptionResult';
+import { PublicDashboard } from './pages/PublicDashboard';
 import { CreditsProvider } from './contexts/CreditsContext';
 import { NotificationProvider } from './contexts/NotificationContext';
 
@@ -65,6 +66,10 @@ function AppRoutes() {
           <Route 
             path="/subscription" 
             element={<SubscriptionResult />}
+          />
+          <Route 
+            path="/shared/:token" 
+            element={<PublicDashboard />}
           />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

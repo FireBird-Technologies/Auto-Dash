@@ -749,6 +749,61 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     setShowDownloadMenu(false);
   };
 
+  const handleShareDashboard = async () => {
+    if (chartSpecs.length === 0) {
+      notification.warning('No charts to share');
+      return;
+    }
+
+    try {
+      // Collect figures data from all charts
+      const figuresData = chartSpecs.map((spec, index) => ({
+        chart_index: spec.chart_index ?? index,
+        figure: spec.figure || spec.fig_data,
+        title: spec.title || `Chart ${index + 1}`,
+        chart_type: spec.chart_type || 'plotly'
+      }));
+
+      // Get dashboard title (if available from context or first chart)
+      const dashboardTitle = context?.description || chartSpecs[0]?.title || 'Dashboard';
+
+      // Call share endpoint
+      const response = await fetch(`${config.backendUrl}/api/data/datasets/${datasetId}/share`, {
+        method: 'POST',
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+        credentials: 'include',
+        body: JSON.stringify({
+          figures_data: figuresData,
+          dashboard_title: dashboardTitle
+        })
+      });
+
+      await checkAuthResponse(response);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: 'Failed to create share link' }));
+        throw new Error(errorData.detail || 'Failed to create share link');
+      }
+
+      const result = await response.json();
+      const publicUrl = result.public_url;
+
+      // Copy to clipboard
+      await navigator.clipboard.writeText(publicUrl);
+      notification.success(`Share link copied to clipboard! ${result.expires_at ? 'Link expires in 24 hours.' : ''}`);
+
+      // Optionally show modal with link
+      const showModal = window.confirm(`Share link copied!\n\n${publicUrl}\n\nOpen in new tab?`);
+      if (showModal) {
+        window.open(publicUrl, '_blank');
+      }
+
+    } catch (error) {
+      console.error('Error sharing dashboard:', error);
+      notification.error(`Failed to share dashboard: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
   // Close download menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -1358,6 +1413,21 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                   </div>
                 )}
               </div>
+              <button 
+                onClick={handleShareDashboard} 
+                className="control-button"
+                disabled={chartSpecs.length === 0}
+                title="Share Dashboard"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="18" cy="5" r="3" />
+                  <circle cx="6" cy="12" r="3" />
+                  <circle cx="18" cy="19" r="3" />
+                  <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                  <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+                </svg>
+                Share
+              </button>
               <button 
                 onClick={toggleFullscreen} 
                 className="control-button"

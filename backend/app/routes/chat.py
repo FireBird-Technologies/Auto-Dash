@@ -164,6 +164,20 @@ async def chat(
         route_info = result.get('route', {})
         response_obj = result.get('response', {})
         
+        # Map route query_type to DB query_type
+        route_query_type = getattr(route_info, 'query_type', '') if hasattr(route_info, 'query_type') else route_info.get('query_type', '')
+        db_query_type = None
+        if 'plotly_edit_query' in route_query_type:
+            db_query_type = "edit"
+        elif 'add_chart_query' in route_query_type:
+            db_query_type = "add"
+        elif 'data_query' in route_query_type:
+            db_query_type = "data_analysis"
+        elif 'general_query' in route_query_type:
+            db_query_type = "general_qa"
+        elif 'need_more_clarity' in route_query_type:
+            db_query_type = "need_clarity"
+        
         # Format the reply based on response type
         reply = ""
         code_type = None
@@ -195,6 +209,33 @@ async def chat(
         else:
             # Fallback: convert response to string
             reply = str(response_obj)
+        
+        # Save chat messages to DB if dataset_id provided
+        if payload.dataset_id:
+            try:
+                # Save user message
+                dataset_service.save_chat_message(
+                    db,
+                    current_user.id,
+                    payload.dataset_id,
+                    "user",
+                    payload.message,
+                    db_query_type
+                )
+                
+                # Save assistant response
+                dataset_service.save_chat_message(
+                    db,
+                    current_user.id,
+                    payload.dataset_id,
+                    "assistant",
+                    reply,
+                    db_query_type,
+                    executable_code,
+                    matched_chart_info.get("index") if matched_chart_info else None
+                )
+            except Exception as e:
+                logger.warning(f"Failed to save chat messages: {e}")
         
         return ChatResponse(
             reply=reply,
