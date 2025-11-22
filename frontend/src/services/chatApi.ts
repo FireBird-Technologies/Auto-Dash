@@ -22,7 +22,7 @@ export interface ChatResponse {
     type: string;
     title: string;
   };
-  code_type?: 'plotly_edit' | 'analysis';
+  code_type?: 'plotly_edit' | 'analysis' | 'add_chart_query';
   executable_code?: string;
 }
 

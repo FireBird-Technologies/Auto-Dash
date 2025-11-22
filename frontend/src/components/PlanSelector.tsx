@@ -206,8 +206,8 @@ export const PlanSelector: React.FC<PlanSelectorProps> = ({
                       className={`promo-input ${promoCodeValid === true ? 'valid' : promoCodeValid === false ? 'invalid' : ''}`}
                     />
                     {validatingPromo && <span className="validating-indicator">...</span>}
-                    {promoCodeValid === true && <span className="valid-indicator">✓</span>}
-                    {promoCodeValid === false && <span className="invalid-indicator">✗</span>}
+                    {promoCodeValid === true && <span className="valid-indicator">Valid</span>}
+                    {promoCodeValid === false && <span className="invalid-indicator">Invalid</span>}
                   </div>
                   <button
                     className="plan-button"
