@@ -83,7 +83,8 @@ def main():
             print(f"  Credits: {plan.credits_per_month}/month")
             print(f"  Per Dashboard: {plan.credits_per_analyze} credits")
             print(f"  Per Edit: {plan.credits_per_edit} credits")
-            print(f"  Stripe Price ID: {plan.stripe_price_id or 'Not set'}")
+            print(f"  Stripe Price ID (Monthly): {plan.stripe_price_id_monthly or plan.stripe_price_id or 'Not set'}")
+            print(f"  Stripe Price ID (Yearly): {plan.stripe_price_id_yearly or 'Not set'}")
             if plan.features:
                 print(f"  Features: {', '.join(str(k) + '=' + str(v) for k, v in plan.features.items())}")
         print("\n" + "="*60)

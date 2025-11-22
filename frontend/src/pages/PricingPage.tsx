@@ -9,11 +9,14 @@ interface Plan {
   id: number;
   name: string;
   price_monthly: number;
+  price_yearly: number | null;
   credits_per_month: number;
   credits_per_analyze: number;
   credits_per_edit: number;
   features: Record<string, any>;
-  stripe_price_id: string | null;
+  stripe_price_id: string | null;  // Legacy
+  stripe_price_id_monthly: string | null;
+  stripe_price_id_yearly: string | null;
   is_active: boolean;
 }
 
@@ -111,7 +114,10 @@ export const PricingPage: React.FC = () => {
           ...getAuthHeaders(),
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ plan_id: planId }),
+        body: JSON.stringify({ 
+          plan_id: planId,
+          billing_period: billingPeriod === 'annual' ? 'yearly' : 'monthly'
+        }),
       });
 
       await checkAuthResponse(response);
@@ -135,12 +141,17 @@ export const PricingPage: React.FC = () => {
     return credits?.plan_name?.toLowerCase() === planName.toLowerCase();
   };
 
-  const calculatePrice = (monthlyPrice: number) => {
+  const calculatePrice = (plan: Plan) => {
     if (billingPeriod === 'annual') {
-      const annualPrice = monthlyPrice * 12 * (1 - pricingConfig.annualDiscount / 100);
+      // Use price_yearly if available, otherwise calculate from monthly
+      if (plan.price_yearly !== null && plan.price_yearly !== undefined) {
+        return plan.price_yearly;
+      }
+      // Fallback: calculate from monthly with discount
+      const annualPrice = plan.price_monthly * 12 * (1 - pricingConfig.annualDiscount / 100);
       return Math.round(annualPrice);
     }
-    return monthlyPrice;
+    return plan.price_monthly;
   };
 
   const handleContactSales = () => {
@@ -187,7 +198,7 @@ export const PricingPage: React.FC = () => {
             const isCurrent = isCurrentPlan(plan.name);
             const isFree = plan.price_monthly === 0;
             const isPaid = !isFree;
-            const displayPrice = calculatePrice(plan.price_monthly);
+            const displayPrice = calculatePrice(plan);
 
             return (
               <div 

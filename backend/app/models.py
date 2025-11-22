@@ -88,9 +88,12 @@ class SubscriptionPlan(Base):
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(100), unique=True, index=True)
-    stripe_price_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    stripe_price_id: Mapped[str | None] = mapped_column(String(255), nullable=True)  # Legacy field, use stripe_price_id_monthly
+    stripe_price_id_monthly: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    stripe_price_id_yearly: Mapped[str | None] = mapped_column(String(255), nullable=True)
     stripe_product_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     price_monthly: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0.0)
+    price_yearly: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     
     # Credit configuration
     credits_per_month: Mapped[int] = mapped_column(Integer, default=0)

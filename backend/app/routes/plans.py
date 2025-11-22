@@ -28,11 +28,14 @@ class PlanResponse(BaseModel):
     id: int
     name: str
     price_monthly: float
+    price_yearly: float | None = None
     credits_per_month: int
     credits_per_analyze: int
     credits_per_edit: int
     features: Dict[str, Any]
-    stripe_price_id: str | None
+    stripe_price_id: str | None  # Legacy field
+    stripe_price_id_monthly: str | None = None
+    stripe_price_id_yearly: str | None = None
     is_active: bool
     sort_order: int
 
@@ -53,11 +56,14 @@ def get_all_plans(db: Session = Depends(get_db)):
                 "id": plan.id,
                 "name": plan.name,
                 "price_monthly": float(plan.price_monthly),
+                "price_yearly": float(plan.price_yearly) if plan.price_yearly else None,
                 "credits_per_month": plan.credits_per_month,
                 "credits_per_analyze": plan.credits_per_analyze,
                 "credits_per_edit": plan.credits_per_edit,
                 "features": plan.features or {},
-                "stripe_price_id": plan.stripe_price_id,
+                "stripe_price_id": plan.stripe_price_id,  # Legacy
+                "stripe_price_id_monthly": plan.stripe_price_id_monthly,
+                "stripe_price_id_yearly": plan.stripe_price_id_yearly,
                 "is_active": plan.is_active,
                 "sort_order": plan.sort_order
             }
@@ -88,11 +94,14 @@ def get_plan(plan_id: int, db: Session = Depends(get_db)):
             "id": plan.id,
             "name": plan.name,
             "price_monthly": float(plan.price_monthly),
+            "price_yearly": float(plan.price_yearly) if plan.price_yearly else None,
             "credits_per_month": plan.credits_per_month,
             "credits_per_analyze": plan.credits_per_analyze,
             "credits_per_edit": plan.credits_per_edit,
             "features": plan.features or {},
-            "stripe_price_id": plan.stripe_price_id,
+            "stripe_price_id": plan.stripe_price_id,  # Legacy
+            "stripe_price_id_monthly": plan.stripe_price_id_monthly,
+            "stripe_price_id_yearly": plan.stripe_price_id_yearly,
             "is_active": plan.is_active,
             "sort_order": plan.sort_order
         }

@@ -60,7 +60,7 @@ class PlanService:
     
     def get_plan_by_stripe_price_id(self, db: Session, stripe_price_id: str) -> Optional[SubscriptionPlan]:
         """
-        Get a plan by Stripe price ID
+        Get a plan by Stripe price ID (checks both monthly and yearly)
         
         Args:
             db: Database session
@@ -70,7 +70,9 @@ class PlanService:
             SubscriptionPlan object or None if not found
         """
         return db.query(SubscriptionPlan).filter(
-            SubscriptionPlan.stripe_price_id == stripe_price_id
+            (SubscriptionPlan.stripe_price_id == stripe_price_id) |
+            (SubscriptionPlan.stripe_price_id_monthly == stripe_price_id) |
+            (SubscriptionPlan.stripe_price_id_yearly == stripe_price_id)
         ).first()
     
     def create_plan(
@@ -82,6 +84,9 @@ class PlanService:
         credits_per_analyze: int = 5,
         credits_per_edit: int = 2,
         stripe_price_id: Optional[str] = None,
+        stripe_price_id_monthly: Optional[str] = None,
+        stripe_price_id_yearly: Optional[str] = None,
+        price_yearly: Optional[Decimal] = None,
         stripe_product_id: Optional[str] = None,
         features: Optional[Dict[str, Any]] = None,
         sort_order: int = 0
@@ -96,7 +101,10 @@ class PlanService:
             credits_per_month: Monthly credit allocation
             credits_per_analyze: Credits per dashboard creation
             credits_per_edit: Credits per edit operation
-            stripe_price_id: Stripe price ID
+            stripe_price_id: Legacy Stripe price ID (for backward compatibility)
+            stripe_price_id_monthly: Stripe monthly price ID
+            stripe_price_id_yearly: Stripe yearly price ID
+            price_yearly: Yearly price
             stripe_product_id: Stripe product ID
             features: Optional feature dictionary
             sort_order: Display order
@@ -104,13 +112,20 @@ class PlanService:
         Returns:
             Created SubscriptionPlan object
         """
+        # Use legacy stripe_price_id as monthly if monthly not provided
+        if stripe_price_id_monthly is None and stripe_price_id is not None:
+            stripe_price_id_monthly = stripe_price_id
+        
         plan = SubscriptionPlan(
             name=name,
             price_monthly=price_monthly,
+            price_yearly=price_yearly,
             credits_per_month=credits_per_month,
             credits_per_analyze=credits_per_analyze,
             credits_per_edit=credits_per_edit,
-            stripe_price_id=stripe_price_id,
+            stripe_price_id=stripe_price_id,  # Keep for backward compatibility
+            stripe_price_id_monthly=stripe_price_id_monthly,
+            stripe_price_id_yearly=stripe_price_id_yearly,
             stripe_product_id=stripe_product_id,
             features=features or {},
             sort_order=sort_order,
@@ -191,10 +206,13 @@ class PlanService:
             {
                 "name": "Free",
                 "price_monthly": Decimal("0.00"),
+                "price_yearly": Decimal("0.00"),
                 "credits_per_month": 25,
                 "credits_per_analyze": 5,
                 "credits_per_edit": 2,
-                "stripe_price_id": os.getenv("STRIPE_FREE_PRICE_ID"),
+                "stripe_price_id": os.getenv("STRIPE_FREE_PRICE_MONTHLY_ID"),  # Legacy support
+                "stripe_price_id_monthly": os.getenv("STRIPE_FREE_PRICE_MONTHLY_ID"),
+                "stripe_price_id_yearly": os.getenv("STRIPE_FREE_PRICE_YEARLY_ID"),
                 "stripe_product_id": os.getenv("STRIPE_FREE_PRODUCT_ID"),
                 "features": {
                     "max_datasets": 3,
@@ -206,10 +224,13 @@ class PlanService:
             {
                 "name": "Pro",
                 "price_monthly": Decimal("20.00"),
+                "price_yearly": Decimal("192.00"),  # $20 * 12 * 0.8 (20% discount)
                 "credits_per_month": 500,
                 "credits_per_analyze": 5,
                 "credits_per_edit": 2,
-                "stripe_price_id": os.getenv("STRIPE_PRO_PRICE_ID"),
+                "stripe_price_id": os.getenv("STRIPE_PRO_PRICE_MONTHLY_ID"),  # Legacy support
+                "stripe_price_id_monthly": os.getenv("STRIPE_PRO_PRICE_MONTHLY_ID"),
+                "stripe_price_id_yearly": os.getenv("STRIPE_PRO_PRICE_YEARLY_ID"),
                 "stripe_product_id": os.getenv("STRIPE_PRO_PRODUCT_ID"),
                 "features": {
                     "max_datasets": 50,
@@ -222,10 +243,13 @@ class PlanService:
             {
                 "name": "Ultra",
                 "price_monthly": Decimal("29.99"),
+                "price_yearly": Decimal("287.90"),  # $29.99 * 12 * 0.8 (20% discount)
                 "credits_per_month": 1000,
                 "credits_per_analyze": 5,
                 "credits_per_edit": 2,
-                "stripe_price_id": os.getenv("STRIPE_ULTRA_PRICE_ID"),
+                "stripe_price_id": os.getenv("STRIPE_ULTRA_PRICE_MONTHLY_ID"),  # Legacy support
+                "stripe_price_id_monthly": os.getenv("STRIPE_ULTRA_PRICE_MONTHLY_ID"),
+                "stripe_price_id_yearly": os.getenv("STRIPE_ULTRA_PRICE_YEARLY_ID"),
                 "stripe_product_id": os.getenv("STRIPE_ULTRA_PRODUCT_ID"),
                 "features": {
                     "max_datasets": -1,  # Unlimited
@@ -280,11 +304,14 @@ class PlanService:
             "id": plan.id,
             "name": plan.name,
             "price_monthly": float(plan.price_monthly),
+            "price_yearly": float(plan.price_yearly) if plan.price_yearly else None,
             "credits_per_month": plan.credits_per_month,
             "credits_per_analyze": plan.credits_per_analyze,
             "credits_per_edit": plan.credits_per_edit,
             "features": plan.features or {},
-            "stripe_price_id": plan.stripe_price_id,
+            "stripe_price_id": plan.stripe_price_id,  # Legacy
+            "stripe_price_id_monthly": plan.stripe_price_id_monthly,
+            "stripe_price_id_yearly": plan.stripe_price_id_yearly,
             "is_active": plan.is_active
         }
 
