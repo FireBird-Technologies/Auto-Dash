@@ -1878,8 +1878,16 @@ async def share_dashboard(
         
         # Check user's plan to determine expiry
         from ..services.subscription_service import subscription_service
-        user_plan = subscription_service.get_user_plan(db, current_user.id)
-        is_free = user_plan and user_plan.name.lower() == "free"
+        from ..services.plan_service import plan_service
+        
+        subscription = subscription_service.get_user_subscription(db, current_user.id)
+        is_free = True  # Default to free
+        
+        if subscription and subscription.plan_id:
+            plan = plan_service.get_plan_by_id(db, subscription.plan_id)
+            if plan:
+                is_free = plan.name.lower() == "free"
+        
         hours_valid = 24 if is_free else None
         
         # Create public dashboard
