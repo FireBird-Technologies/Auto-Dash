@@ -28,6 +28,7 @@ class CreateCheckoutRequest(BaseModel):
     """Request model for creating checkout session"""
     plan_id: int
     billing_period: str = "monthly"  # "monthly" or "yearly"
+    promo_code: str | None = None  # Optional promo code
 
 
 @router.post("/create-checkout-session")
@@ -80,23 +81,63 @@ def create_checkout_session(
             customer_id = customer.id
             logger.info(f"Created Stripe customer {customer_id} for user {current_user.id}")
         
+        # Validate promo code if provided
+        discounts = None
+        if request.promo_code:
+            # Get price object to find product ID
+            price = stripe.Price.retrieve(price_id)
+            product_id = price.product if isinstance(price.product, str) else price.product.id
+            
+            # Search for promotion code
+            promo_codes = stripe.PromotionCode.list(
+                active=True,
+                code=request.promo_code.upper(),
+                limit=1
+            )
+            
+            if promo_codes.data:
+                promo_code_obj = promo_codes.data[0]
+                coupon = promo_code_obj.coupon
+                
+                # Check if coupon applies to specific products
+                if coupon.applies_to and coupon.applies_to.products:
+                    if product_id not in coupon.applies_to.products:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Promo code does not apply to {plan.name} plan"
+                        )
+                
+                # Use the promotion code
+                discounts = [{"promotion_code": promo_code_obj.id}]
+            else:
+                raise HTTPException(status_code=400, detail="Invalid promo code")
+        
         # Create checkout session
         domain = os.getenv("FRONTEND_URL", "http://localhost:5173")
-        session = stripe.checkout.Session.create(
-            customer=customer_id,
-            mode="subscription",
-            line_items=[{
+        session_params = {
+            "customer": customer_id,
+            "mode": "subscription",
+            "line_items": [{
                 "price": price_id,
                 "quantity": 1
             }],
-            success_url=f"{domain}/subscription?success=true&session_id={{CHECKOUT_SESSION_ID}}",
-            cancel_url=f"{domain}/subscription?canceled=true",
-            metadata={
-                "user_id": current_user.id,
-                "plan_id": plan.id,
+            "success_url": f"{domain}/subscription?success=true&session_id={{CHECKOUT_SESSION_ID}}",
+            "cancel_url": f"{domain}/subscription?canceled=true",
+            "metadata": {
+                "user_id": str(current_user.id),
+                "plan_id": str(plan.id),
                 "billing_period": billing_period
             }
-        )
+        }
+        
+        # Add discounts if promo code is valid
+        if discounts:
+            session_params["discounts"] = discounts
+        else:
+            # Allow users to enter promo codes in checkout
+            session_params["allow_promotion_codes"] = True
+        
+        session = stripe.checkout.Session.create(**session_params)
         
         logger.info(f"Created checkout session {session.id} for user {current_user.id}, plan {plan.name}")
         return {"checkoutUrl": session.url}
@@ -171,6 +212,247 @@ def get_subscription_status(
     except Exception as e:
         logger.error(f"Error getting subscription status: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class ChangePlanRequest(BaseModel):
+    """Request model for changing subscription plan"""
+    plan_id: int
+    billing_period: str = "monthly"  # "monthly" or "yearly"
+
+
+@router.post("/change-plan")
+def change_plan(
+    request: ChangePlanRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Change user's subscription plan immediately with proration
+    If user doesn't have a Stripe subscription (e.g., Free plan), creates checkout session instead
+    
+    Args:
+        request: Contains plan_id and billing_period
+        current_user: Authenticated user
+        db: Database session
+        
+    Returns:
+        Success message with updated subscription info, or checkout URL if no subscription exists
+    """
+    try:
+        # Check if user has an active Stripe subscription
+        user_subscription = subscription_service.get_user_subscription(db, current_user.id)
+        
+        if not user_subscription or not user_subscription.stripe_subscription_id:
+            # No Stripe subscription - redirect to checkout instead
+            logger.info(f"User {current_user.id} has no Stripe subscription, creating checkout session")
+            
+            # Get plan details
+            plan = plan_service.get_plan_by_id(db, request.plan_id)
+            if not plan:
+                raise HTTPException(status_code=404, detail="Plan not found")
+            
+            # Determine which price ID to use based on billing period
+            billing_period = request.billing_period.lower()
+            if billing_period == "yearly":
+                price_id = plan.stripe_price_id_yearly
+                if not price_id:
+                    raise HTTPException(status_code=400, detail="Plan does not have a yearly Stripe price ID")
+            else:
+                price_id = plan.stripe_price_id_monthly or plan.stripe_price_id
+                if not price_id:
+                    raise HTTPException(status_code=400, detail="Plan does not have a monthly Stripe price ID")
+            
+            # Get or create Stripe customer
+            customer_id = user_subscription.stripe_customer_id if user_subscription else None
+            
+            if not customer_id:
+                customer = stripe.Customer.create(
+                    email=current_user.email,
+                    name=current_user.name,
+                    metadata={"user_id": str(current_user.id)}
+                )
+                customer_id = customer.id
+                logger.info(f"Created Stripe customer {customer_id} for user {current_user.id}")
+            
+            # Create checkout session
+            domain = os.getenv("FRONTEND_URL", "http://localhost:5173")
+            session = stripe.checkout.Session.create(
+                customer=customer_id,
+                mode="subscription",
+                line_items=[{"price": price_id, "quantity": 1}],
+                success_url=f"{domain}/subscription?success=true&session_id={{CHECKOUT_SESSION_ID}}",
+                cancel_url=f"{domain}/subscription?canceled=true",
+                allow_promotion_codes=True,
+                metadata={
+                    "user_id": str(current_user.id),
+                    "plan_id": str(plan.id),
+                    "billing_period": billing_period
+                }
+            )
+            
+            return {
+                "checkout_required": True,
+                "checkoutUrl": session.url,
+                "message": "Please complete checkout to upgrade your plan"
+            }
+        
+        # User has Stripe subscription - proceed with plan change
+        subscription = subscription_service.change_plan(
+            db,
+            current_user.id,
+            request.plan_id,
+            request.billing_period
+        )
+        
+        # Get updated subscription info
+        subscription_info = subscription_service.get_subscription_info(db, current_user.id)
+        
+        logger.info(f"Changed plan for user {current_user.id} to plan {request.plan_id}")
+        return {
+            "message": "Plan changed successfully",
+            "subscription": subscription_info
+        }
+        
+    except ValueError as e:
+        logger.error(f"Invalid plan change request: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except stripe.error.StripeError as e:
+        logger.error(f"Stripe error changing plan: {e}")
+        raise HTTPException(status_code=500, detail=f"Stripe error: {str(e)}")
+    except Exception as e:
+        logger.error(f"Error changing plan: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/reactivate-subscription")
+def reactivate_subscription(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Reactivate a canceled subscription
+    
+    Args:
+        current_user: Authenticated user
+        db: Database session
+        
+    Returns:
+        Success message
+    """
+    try:
+        subscription = subscription_service.reactivate_subscription(db, current_user.id)
+        
+        if not subscription:
+            raise HTTPException(status_code=404, detail="No subscription found to reactivate")
+        
+        logger.info(f"Reactivated subscription for user {current_user.id}")
+        return {"message": "Subscription reactivated successfully"}
+        
+    except stripe.error.StripeError as e:
+        logger.error(f"Stripe error reactivating subscription: {e}")
+        raise HTTPException(status_code=500, detail=f"Stripe error: {str(e)}")
+    except Exception as e:
+        logger.error(f"Error reactivating subscription: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class ValidatePromoCodeRequest(BaseModel):
+    """Request model for validating promo code"""
+    promo_code: str
+    plan_id: int
+    billing_period: str = "monthly"  # "monthly" or "yearly"
+
+
+@router.post("/validate-promo-code")
+def validate_promo_code(
+    request: ValidatePromoCodeRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Validate a promo code for a specific plan/product
+    
+    Args:
+        request: Contains promo_code, plan_id, and billing_period
+        current_user: Authenticated user
+        db: Database session
+        
+    Returns:
+        Validation result with discount information
+    """
+    try:
+        # Get plan to find product/price ID
+        plan = plan_service.get_plan_by_id(db, request.plan_id)
+        if not plan:
+            raise HTTPException(status_code=404, detail="Plan not found")
+        
+        # Get price ID based on billing period
+        if request.billing_period.lower() == "yearly":
+            price_id = plan.stripe_price_id_yearly
+        else:
+            price_id = plan.stripe_price_id_monthly or plan.stripe_price_id
+        
+        if not price_id:
+            raise HTTPException(status_code=400, detail=f"Plan does not have a {request.billing_period} price ID")
+        
+        # Get price object to find product ID
+        price = stripe.Price.retrieve(price_id)
+        product_id = price.product if isinstance(price.product, str) else price.product.id
+        
+        # Search for promotion code
+        promo_codes = stripe.PromotionCode.list(
+            active=True,
+            code=request.promo_code.upper(),
+            limit=1
+        )
+        
+        if not promo_codes.data:
+            return {
+                "valid": False,
+                "error_message": "Promo code not found or inactive"
+            }
+        
+        promo_code_obj = promo_codes.data[0]
+        coupon = promo_code_obj.coupon
+        
+        # Check if coupon applies to specific products
+        if coupon.applies_to and coupon.applies_to.products:
+            # Coupon is product-specific
+            if product_id not in coupon.applies_to.products:
+                return {
+                    "valid": False,
+                    "error_message": f"Promo code does not apply to {plan.name} plan"
+                }
+        
+        # Check if coupon is valid (not expired, within usage limits)
+        if coupon.valid:
+            discount_percent = coupon.percent_off
+            discount_amount = coupon.amount_off / 100 if coupon.amount_off else None  # Convert from cents
+            
+            return {
+                "valid": True,
+                "discount_percent": discount_percent,
+                "discount_amount": discount_amount,
+                "promo_code_id": promo_code_obj.id
+            }
+        else:
+            return {
+                "valid": False,
+                "error_message": "Promo code is no longer valid"
+            }
+        
+    except stripe.error.StripeError as e:
+        logger.error(f"Stripe error validating promo code: {e}")
+        return {
+            "valid": False,
+            "error_message": f"Error validating promo code: {str(e)}"
+        }
+    except Exception as e:
+        logger.error(f"Error validating promo code: {e}")
+        return {
+            "valid": False,
+            "error_message": f"Error validating promo code: {str(e)}"
+        }
 
 
 @router.post("/webhook")

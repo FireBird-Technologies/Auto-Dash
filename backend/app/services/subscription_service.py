@@ -280,6 +280,124 @@ class SubscriptionService:
         
         logger.warning(f"Payment failed for user {user_id}, subscription marked as past_due")
     
+    def change_plan(
+        self,
+        db: Session,
+        user_id: int,
+        new_plan_id: int,
+        billing_period: str = "monthly"
+    ) -> Subscription:
+        """
+        Change user's subscription plan immediately with proration
+        
+        Args:
+            db: Database session
+            user_id: User ID
+            new_plan_id: New plan ID to switch to
+            billing_period: "monthly" or "yearly"
+            
+        Returns:
+            Updated Subscription object
+        """
+        import stripe
+        
+        subscription = self.get_user_subscription(db, user_id)
+        if not subscription or not subscription.stripe_subscription_id:
+            raise ValueError("No active Stripe subscription found")
+        
+        # Get new plan
+        new_plan = plan_service.get_plan_by_id(db, new_plan_id)
+        if not new_plan:
+            raise ValueError(f"Plan {new_plan_id} not found")
+        
+        # Get price ID based on billing period
+        if billing_period.lower() == "yearly":
+            new_price_id = new_plan.stripe_price_id_yearly
+        else:
+            new_price_id = new_plan.stripe_price_id_monthly or new_plan.stripe_price_id
+        
+        if not new_price_id:
+            raise ValueError(f"Plan {new_plan.name} does not have a {billing_period} price ID")
+        
+        # Get current Stripe subscription
+        stripe_sub = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
+        
+        # Get current subscription item ID
+        current_item_id = stripe_sub["items"]["data"][0]["id"]
+        
+        # Modify subscription in Stripe with immediate proration
+        updated_sub = stripe.Subscription.modify(
+            subscription.stripe_subscription_id,
+            items=[{
+                "id": current_item_id,
+                "price": new_price_id,
+            }],
+            proration_behavior="always_invoice",
+            metadata={
+                "user_id": str(user_id),
+                "plan_id": str(new_plan_id),
+                "billing_period": billing_period
+            }
+        )
+        
+        # Update database subscription
+        subscription.plan_id = new_plan_id
+        subscription.status = updated_sub["status"]
+        subscription.current_period_start = datetime.fromtimestamp(updated_sub["current_period_start"])
+        subscription.current_period_end = datetime.fromtimestamp(updated_sub["current_period_end"])
+        subscription.updated_at = datetime.utcnow()
+        
+        db.commit()
+        db.refresh(subscription)
+        
+        # Reset credits to new plan limit
+        credit_service.reset_credits(
+            db,
+            user_id,
+            new_plan_id,
+            description=f"Plan changed to {new_plan.name} ({billing_period})"
+        )
+        
+        logger.info(f"Changed plan for user {user_id} to {new_plan.name} ({billing_period})")
+        return subscription
+    
+    def reactivate_subscription(
+        self,
+        db: Session,
+        user_id: int
+    ) -> Optional[Subscription]:
+        """
+        Reactivate a canceled subscription
+        
+        Args:
+            db: Database session
+            user_id: User ID
+            
+        Returns:
+            Updated Subscription object or None if not found
+        """
+        import stripe
+        
+        subscription = self.get_user_subscription(db, user_id)
+        if not subscription or not subscription.stripe_subscription_id:
+            logger.warning(f"No subscription found for user {user_id}")
+            return None
+        
+        # Reactivate in Stripe
+        stripe.Subscription.modify(
+            subscription.stripe_subscription_id,
+            cancel_at_period_end=False
+        )
+        
+        # Update database
+        subscription.cancel_at_period_end = False
+        subscription.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(subscription)
+        
+        logger.info(f"Reactivated subscription for user {user_id}")
+        return subscription
+    
     def get_subscription_info(self, db: Session, user_id: int) -> Dict[str, Any]:
         """
         Get comprehensive subscription information for a user
@@ -292,12 +410,26 @@ class SubscriptionService:
             Dictionary with subscription details
         """
         subscription = self.get_user_subscription(db, user_id)
+        
+        # Get all available plans
+        all_plans = plan_service.get_all_active_plans(db)
+        available_plans = [
+            plan_service.get_plan_info(db, plan.id)
+            for plan in all_plans
+        ]
+        
         if not subscription:
             return {
                 "has_subscription": False,
                 "status": None,
                 "plan": None,
-                "credits": None
+                "credits": None,
+                "available_plans": available_plans,
+                "current_period_start": None,
+                "current_period_end": None,
+                "next_billing_amount": None,
+                "billing_period": None,
+                "cancel_at_period_end": False
             }
         
         # Get plan info
@@ -308,14 +440,43 @@ class SubscriptionService:
         # Get credit info
         credit_info = credit_service.get_balance_info(db, user_id)
         
+        # Add credits_per_month from plan if available
+        if plan_info and credit_info:
+            credit_info["credits_per_month"] = plan_info.get("credits_per_month", 0)
+        
+        # Determine billing period from Stripe if available
+        billing_period = None
+        next_billing_amount = None
+        
+        if subscription.stripe_subscription_id:
+            try:
+                import stripe
+                stripe_sub = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
+                
+                # Determine billing period from interval
+                if stripe_sub.get("items", {}).get("data", []):
+                    interval = stripe_sub["items"]["data"][0]["price"].get("recurring", {}).get("interval")
+                    billing_period = "yearly" if interval == "year" else "monthly"
+                    
+                    # Get next billing amount
+                    if stripe_sub.get("items", {}).get("data", []):
+                        price = stripe_sub["items"]["data"][0]["price"]
+                        next_billing_amount = price.get("unit_amount", 0) / 100  # Convert from cents
+            except Exception as e:
+                logger.warning(f"Could not fetch Stripe subscription details: {e}")
+        
         return {
             "has_subscription": True,
             "status": subscription.status,
             "plan": plan_info,
             "credits": credit_info,
             "stripe_subscription_id": subscription.stripe_subscription_id,
+            "current_period_start": subscription.current_period_start.isoformat() if subscription.current_period_start else None,
             "current_period_end": subscription.current_period_end.isoformat() if subscription.current_period_end else None,
-            "cancel_at_period_end": subscription.cancel_at_period_end
+            "cancel_at_period_end": subscription.cancel_at_period_end,
+            "available_plans": available_plans,
+            "billing_period": billing_period,
+            "next_billing_amount": next_billing_amount
         }
 
 

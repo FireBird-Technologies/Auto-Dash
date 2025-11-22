@@ -49,8 +49,8 @@ export const useCredits = () => {
   useEffect(() => {
     fetchCredits();
     
-    // Refresh credits every 30 seconds
-    const interval = setInterval(fetchCredits, 30000);
+    // Refresh credits every 2 minutes (reduced from 30 seconds to reduce API calls)
+    const interval = setInterval(fetchCredits, 120000);
     
     return () => clearInterval(interval);
   }, [fetchCredits]);

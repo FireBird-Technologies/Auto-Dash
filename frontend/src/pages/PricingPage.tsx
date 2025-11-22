@@ -116,7 +116,7 @@ export const PricingPage: React.FC = () => {
         },
         body: JSON.stringify({ 
           plan_id: planId,
-          billing_period: billingPeriod
+          billing_period: billingPeriod === 'annual' ? 'yearly' : 'monthly'
         }),
       });
 

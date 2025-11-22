@@ -5,6 +5,7 @@ import { Landing } from './components/Landing';
 import { Account } from './components/Account';
 import { VisualizePage } from './pages/VisualizePage';
 import { PricingPage } from './pages/PricingPage';
+import { SubscriptionResult } from './pages/SubscriptionResult';
 import { CreditsProvider } from './contexts/CreditsContext';
 import { NotificationProvider } from './contexts/NotificationContext';
 
@@ -60,6 +61,10 @@ function AppRoutes() {
           <Route 
             path="/pricing" 
             element={<PricingPage />}
+          />
+          <Route 
+            path="/subscription" 
+            element={<SubscriptionResult />}
           />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
