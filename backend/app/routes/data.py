@@ -31,7 +31,7 @@ from ..core.security import get_current_user
 from ..models import User, Dataset as DatasetModel
 from ..services.dataset_service import dataset_service
 from ..schemas.chat import FixVisualizationRequest
-from ..services.agents import fix_plotly, clean_plotly_code, plotly_editor
+from ..services.agents import fix_plotly, clean_plotly_code, plotly_editor, plotly_adder_sig
 from ..services.chart_creator import execute_plotly_code
 from ..services.credit_service import credit_service
 from ..middleware.credit_check import require_credits, CreditCheckResult
@@ -204,6 +204,11 @@ class EditChartRequest(BaseModel):
     edit_request: str
     current_code: str
     dataset_id: str
+
+class AddChartRequest(BaseModel):
+    query: str
+    dataset_id: str
+    color_theme: Optional[str] = None
 
 
 class ChartResponse(BaseModel):
@@ -1595,6 +1600,138 @@ async def edit_chart(
     except Exception as e:
         logger.error(f"Error editing chart: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to edit chart: {str(e)}")
+
+
+@router.post("/add-chart")
+async def add_chart(
+    request: AddChartRequest,
+    credits: CreditCheckResult = Depends(require_credits(int(os.getenv("CREDITS_PER_CHART_ADD", "2")))),
+    db: Session = Depends(get_db)
+):
+    """
+    Add a new chart to an existing dashboard using natural language instructions.
+    Uses the plotly_adder_sig DSPy module to generate new chart code.
+    
+    Costs: 2 credits per chart addition (configurable via CREDITS_PER_CHART_ADD env var)
+    """
+    current_user = credits.user
+    try:
+        # Get dataset
+        df = dataset_service.get_dataset(current_user.id, request.dataset_id)
+        if df is None:
+            raise HTTPException(status_code=404, detail="Dataset not found")
+        
+        # Get dataset context
+        data_context = dataset_service.get_context(current_user.id, request.dataset_id)
+        
+        if not data_context:
+            # Provide basic fallback context if not available
+            if isinstance(df, dict):
+                sheet_names = list(df.keys())
+                first_sheet = df[sheet_names[0]]
+                columns = [str(col) for col in first_sheet.columns.tolist()]
+                data_context = f"Multi-sheet Excel with {len(df)} sheets: {', '.join(sheet_names)}. First sheet has {len(first_sheet)} rows and columns: {', '.join(columns)}"
+            else:
+                columns = [str(col) for col in df.columns.tolist()]
+                data_context = f"Dataset with {len(df)} rows and {len(df.columns)} columns. Columns: {', '.join(columns)}"
+        
+        # Get next available chart_index
+        dataset_store = dataset_service._store.get(current_user.id, {}).get(request.dataset_id, {})
+        existing_charts = dataset_store.get("charts", {})
+        if existing_charts:
+            # Convert all keys to ints and find max
+            chart_indices = []
+            for k in existing_charts.keys():
+                try:
+                    chart_indices.append(int(k))
+                except (ValueError, TypeError):
+                    continue
+            next_chart_index = max(chart_indices) + 1 if chart_indices else 0
+        else:
+            next_chart_index = 0
+        
+        # Prepare query with color theme if provided
+        query = request.query
+        if request.color_theme:
+            query = query + "\n use these colors " + str(request.color_theme)
+        
+        # Call plotly_adder_sig module to generate chart code
+        with dspy.context(lm=dspy.LM("openai/gpt-4o-mini", max_tokens=1400)):
+            adder = dspy.Predict(plotly_adder_sig)
+            result = adder(
+                user_query=query,
+                dataset_context=data_context
+            )
+        
+        # Clean the chart code
+        chart_code = clean_plotly_code(result.chart_code)
+        
+        # Execute chart code to get figure
+        execution_result = execute_plotly_code(chart_code, df)
+        
+        if not execution_result.get('success'):
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to execute chart code: {execution_result.get('error', 'Unknown error')}"
+            )
+        
+        # Extract chart type and title from the code or use defaults
+        chart_type = "unknown"
+        title = "New Chart"
+        
+        # Try to infer chart type from code
+        if "px.bar" in chart_code or "go.Bar" in chart_code:
+            chart_type = "bar_chart"
+        elif "px.line" in chart_code or "go.Scatter" in chart_code and "mode='lines'" in chart_code:
+            chart_type = "line_chart"
+        elif "px.scatter" in chart_code or "go.Scatter" in chart_code:
+            chart_type = "scatter_plot"
+        elif "px.histogram" in chart_code or "go.Histogram" in chart_code:
+            chart_type = "histogram"
+        
+        # Try to extract title from figure layout if available
+        figure_data = execution_result.get('figure')
+        if figure_data and isinstance(figure_data, dict):
+            layout = figure_data.get('layout', {})
+            if layout and 'title' in layout:
+                title = layout.get('title', {}).get('text', 'New Chart') if isinstance(layout.get('title'), dict) else str(layout.get('title', 'New Chart'))
+        
+        # Store chart metadata
+        dataset_service.set_chart_metadata(
+            user_id=current_user.id,
+            dataset_id=request.dataset_id,
+            chart_index=next_chart_index,
+            chart_spec=chart_code,
+            plan={},  # Empty plan for added charts
+            figure_data=figure_data,
+            chart_type=chart_type,
+            title=title
+        )
+        
+        # Deduct credits after successful chart addition
+        credit_service.deduct_credits(
+            db,
+            current_user.id,
+            int(os.getenv("CREDITS_PER_CHART_ADD", "2")),
+            f"Add chart: {request.query[:100]}",
+            metadata={"dataset_id": request.dataset_id, "chart_index": next_chart_index}
+        )
+        
+        # Return chart spec in same format as analyze endpoint
+        return {
+            "chart_spec": chart_code,
+            "chart_type": chart_type,
+            "title": title,
+            "chart_index": next_chart_index,
+            "figure": figure_data,
+            "reasoning": getattr(result, 'reasoning', 'Chart added successfully')
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error adding chart: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to add chart: {str(e)}")
 
 
 @router.get("/datasets/{dataset_id}/charts/{chart_index}")
