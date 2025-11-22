@@ -27,6 +27,7 @@ WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
 class CreateCheckoutRequest(BaseModel):
     """Request model for creating checkout session"""
     plan_id: int
+    billing_period: str = "monthly"  # "monthly" or "yearly"
 
 
 @router.post("/create-checkout-session")
@@ -52,8 +53,16 @@ def create_checkout_session(
         if not plan:
             raise HTTPException(status_code=404, detail="Plan not found")
         
-        if not plan.stripe_price_id:
-            raise HTTPException(status_code=400, detail="Plan does not have a Stripe price ID")
+        # Determine which price ID to use based on billing period
+        billing_period = request.billing_period.lower()
+        if billing_period == "yearly":
+            price_id = plan.stripe_price_id_yearly
+            if not price_id:
+                raise HTTPException(status_code=400, detail="Plan does not have a yearly Stripe price ID")
+        else:  # Default to monthly
+            price_id = plan.stripe_price_id_monthly or plan.stripe_price_id  # Fallback to legacy field
+            if not price_id:
+                raise HTTPException(status_code=400, detail="Plan does not have a monthly Stripe price ID")
         
         # Get or create Stripe customer
         existing_subscription = subscription_service.get_user_subscription(db, current_user.id)
@@ -77,14 +86,15 @@ def create_checkout_session(
             customer=customer_id,
             mode="subscription",
             line_items=[{
-                "price": plan.stripe_price_id,
+                "price": price_id,
                 "quantity": 1
             }],
             success_url=f"{domain}/subscription?success=true&session_id={{CHECKOUT_SESSION_ID}}",
             cancel_url=f"{domain}/subscription?canceled=true",
             metadata={
                 "user_id": current_user.id,
-                "plan_id": plan.id
+                "plan_id": plan.id,
+                "billing_period": billing_period
             }
         )
         
