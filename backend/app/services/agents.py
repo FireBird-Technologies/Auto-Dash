@@ -41,6 +41,7 @@ class plotly_editor(dspy.Signature):
     4. The code must create the 'fig' object and populate it.
     5. The code must end with 'fig' on the last line.
     6. You MUST add data traces (fig.add_trace) or use px functions. Do NOT just update layout.
+    7. Always use the Plotly template 'plotly_white' when constructing the figure 
     """
     user_query = dspy.InputField(desc="edits the user needs to make")
     plotly_code = dspy.InputField(desc="The initial plotly code")
@@ -60,8 +61,9 @@ class plotly_adder_sig(dspy.Signature):
     2. Code must start with necessary imports (e.g. import plotly.graph_objects as go, or import plotly.express as px).
     3. Assume 'df' (and any relevant dataframes from dataset_context) are available and already loaded (do NOT load any files).
     4. Generate only the code for the NEW chart as requested by the user, *not* the full dashboard.
-    5. Output must end with the 'fig' variable as the final line.
-    6. The chart type, data, and features must be based on user_request and the dataset context.
+    5. Always use the Plotly template 'plotly_white' when constructing the figure (e.g., set template="plotly_white" in go.Figure/layout or px function).
+    6. Output must end with the 'fig' variable as the final line.
+    7. The chart type, data, and features must be based on user_request and the dataset context.
 
     INPUTS:
     - user_request: Instructions for the new chart to add to the dashboard.
