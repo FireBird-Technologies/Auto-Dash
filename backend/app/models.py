@@ -81,6 +81,60 @@ class Dataset(Base):
     # Values: "pending", "generating", "completed", "failed"
     
     user: Mapped[User] = relationship(back_populates="datasets")
+    dashboard_queries: Mapped[list["DashboardQuery"]] = relationship(back_populates="dataset", cascade="all, delete-orphan")
+    chat_messages: Mapped[list["ChatMessage"]] = relationship(back_populates="dataset", cascade="all, delete-orphan")
+    public_dashboards: Mapped[list["PublicDashboard"]] = relationship(back_populates="dataset", cascade="all, delete-orphan")
+
+
+class DashboardQuery(Base):
+    __tablename__ = "dashboard_queries"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    dataset_id: Mapped[int] = mapped_column(ForeignKey("datasets.id"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    
+    query: Mapped[str] = mapped_column(Text)  # User's request
+    query_type: Mapped[str] = mapped_column(String(50))  # "analyze", "edit", "add"
+    dashboard_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    charts_data: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)  # Array of chart objects with code, figure, etc.
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    
+    dataset: Mapped["Dataset"] = relationship(back_populates="dashboard_queries")
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    dataset_id: Mapped[int] = mapped_column(ForeignKey("datasets.id"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    
+    role: Mapped[str] = mapped_column(String(20))  # "user", "assistant"
+    content: Mapped[str] = mapped_column(Text)
+    query_type: Mapped[str | None] = mapped_column(String(50), nullable=True)  # "edit", "add", "data_analysis", "general_qa", "need_clarity", etc.
+    code: Mapped[str | None] = mapped_column(Text, nullable=True)  # Executable code if applicable
+    chart_index: Mapped[int | None] = mapped_column(Integer, nullable=True)  # If related to a chart
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    
+    dataset: Mapped["Dataset"] = relationship(back_populates="chat_messages")
+
+
+class PublicDashboard(Base):
+    __tablename__ = "public_dashboards"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    dataset_id: Mapped[int] = mapped_column(ForeignKey("datasets.id"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    
+    share_token: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    figures_data: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)  # Array of chart figures
+    dashboard_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    is_public: Mapped[bool] = mapped_column(Boolean, default=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    dataset: Mapped["Dataset"] = relationship(back_populates="public_dashboards")
 
 
 class SubscriptionPlan(Base):

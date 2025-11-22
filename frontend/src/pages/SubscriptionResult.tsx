@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useNotification } from '../contexts/NotificationContext';
 import { useCreditsContext } from '../contexts/CreditsContext';
@@ -10,13 +10,18 @@ export const SubscriptionResult: React.FC = () => {
   const { refetch: refetchCredits } = useCreditsContext();
   const [status, setStatus] = useState<'loading' | 'success' | 'canceled' | 'error'>('loading');
   const [waitingForWebhook, setWaitingForWebhook] = useState(false);
+  const hasProcessed = useRef(false); // Track if we've already processed the subscription result
 
   useEffect(() => {
+    // Prevent multiple executions
+    if (hasProcessed.current) return;
+    
     const success = searchParams.get('success');
     const canceled = searchParams.get('canceled');
     const sessionId = searchParams.get('session_id');
 
     if (canceled === 'true') {
+      hasProcessed.current = true; // Mark as processed
       setStatus('canceled');
       notification.warning('Subscription checkout was canceled');
       // Redirect to account page after 2 seconds
@@ -24,6 +29,7 @@ export const SubscriptionResult: React.FC = () => {
         navigate('/account');
       }, 2000);
     } else if (success === 'true' && sessionId) {
+      hasProcessed.current = true; // Mark as processed
       setStatus('success');
       setWaitingForWebhook(true);
       notification.success('Subscription activated successfully! Processing your subscription...');
@@ -89,6 +95,7 @@ export const SubscriptionResult: React.FC = () => {
       
       pollForUpdates();
     } else {
+      hasProcessed.current = true; // Mark as processed
       setStatus('error');
       notification.error('Unable to determine subscription status');
       // Redirect to account page after 2 seconds
@@ -97,6 +104,13 @@ export const SubscriptionResult: React.FC = () => {
       }, 2000);
     }
   }, [searchParams, navigate, notification, refetchCredits]);
+
+  // Reset the processed flag when component unmounts (allows re-processing if user navigates back)
+  useEffect(() => {
+    return () => {
+      hasProcessed.current = false;
+    };
+  }, []);
 
   return (
     <div className="subscription-result-page">

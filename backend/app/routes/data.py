@@ -890,7 +890,6 @@ async def prepare_dataset_context(
         "status": status
     }
 
-
 @router.post("/analyze")
 async def analyze_data(
     request: FirstQueryRequest,
@@ -946,6 +945,7 @@ async def analyze_data(
     )
     
     # Store chart metadata including plans
+    charts_data_for_db = []
     if isinstance(chart_specs, list):
         for chart in chart_specs:
             chart_index = chart.get('chart_index', 0)
@@ -954,6 +954,16 @@ async def analyze_data(
             figure_data = chart.get('figure')
             chart_type = chart.get('chart_type')
             title = chart.get('title', 'Visualization')
+            
+            # Prepare chart data for DB storage
+            charts_data_for_db.append({
+                "chart_index": chart_index,
+                "code": chart_spec,
+                "figure": figure_data,
+                "title": title,
+                "chart_type": chart_type,
+                "plan": chart_plan
+            })
             
             try:
                 dataset_service.set_chart_metadata(
@@ -968,6 +978,20 @@ async def analyze_data(
                 )
             except Exception as e:
                 logger.warning(f"Failed to store chart metadata for chart {chart_index}: {e}")
+        
+        # Save dashboard query to DB
+        try:
+            dataset_service.save_dashboard_query(
+                db,
+                current_user.id,
+                dataset_id,
+                request.query,
+                "analyze",
+                charts_data_for_db,
+                dashboard_title
+            )
+        except Exception as e:
+            logger.warning(f"Failed to save dashboard query: {e}")
         
         # Deduct credits after successful analysis
         credit_service.deduct_credits(
@@ -1586,8 +1610,41 @@ async def edit_chart(
                 current_user.id,
                 2,
                 f"Chart edit: {request.edit_request[:100]}",
-                metadata={"dataset_id": request.dataset_id}
+                metadata={"dataset_id": request.dataset_id, "chart_index": request.chart_index}
             )
+            
+            # Get chart metadata for DB storage
+            try:
+                chart_metadata = dataset_service.get_chart_metadata(
+                    current_user.id,
+                    request.dataset_id,
+                    request.chart_index
+                )
+                title = chart_metadata.get('title', 'Visualization') if chart_metadata else 'Visualization'
+                chart_type = chart_metadata.get('chart_type', 'plotly') if chart_metadata else 'plotly'
+            except:
+                title = 'Visualization'
+                chart_type = 'plotly'
+            
+            # Save dashboard query to DB
+            try:
+                charts_data = [{
+                    "chart_index": request.chart_index,
+                    "code": edited_code,
+                    "figure": execution_result.get('figure'),
+                    "title": title,
+                    "chart_type": chart_type
+                }]
+                dataset_service.save_dashboard_query(
+                    db,
+                    current_user.id,
+                    request.dataset_id,
+                    request.edit_request,
+                    "edit",
+                    charts_data
+                )
+            except Exception as e:
+                logger.warning(f"Failed to save dashboard query: {e}")
         
         return {
             "edited_code": edited_code,
@@ -1717,6 +1774,26 @@ async def add_chart(
             metadata={"dataset_id": request.dataset_id, "chart_index": next_chart_index}
         )
         
+        # Save dashboard query to DB
+        try:
+            charts_data = [{
+                "chart_index": next_chart_index,
+                "code": chart_code,
+                "figure": figure_data,
+                "title": title,
+                "chart_type": chart_type
+            }]
+            dataset_service.save_dashboard_query(
+                db,
+                current_user.id,
+                request.dataset_id,
+                request.query,
+                "add",
+                charts_data
+            )
+        except Exception as e:
+            logger.warning(f"Failed to save dashboard query: {e}")
+        
         # Return chart spec in same format as analyze endpoint
         return {
             "chart_spec": chart_code,
@@ -1774,6 +1851,95 @@ async def get_chart_info(
     }
 
 
+@router.post("/datasets/{dataset_id}/share")
+async def share_dashboard(
+    dataset_id: str,
+    request: dict,  # Expecting {"figures_data": [...], "dashboard_title": "..."}
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Create a public dashboard share link.
+    Only called when user clicks share button.
+    
+    Args:
+        dataset_id: Dataset identifier
+        request: Dict with "figures_data" (array of chart figures) and optional "dashboard_title"
+    
+    Returns:
+        Dict with share_token and public_url
+    """
+    try:
+        figures_data = request.get("figures_data", [])
+        dashboard_title = request.get("dashboard_title")
+        
+        if not figures_data:
+            raise HTTPException(status_code=400, detail="No figures data provided")
+        
+        # Check user's plan to determine expiry
+        from ..services.subscription_service import subscription_service
+        user_plan = subscription_service.get_user_plan(db, current_user.id)
+        is_free = user_plan and user_plan.name.lower() == "free"
+        hours_valid = 24 if is_free else None
+        
+        # Create public dashboard
+        public_dashboard = dataset_service.create_public_dashboard(
+            db,
+            current_user.id,
+            dataset_id,
+            figures_data,
+            dashboard_title,
+            hours_valid
+        )
+        
+        # Build public URL
+        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        public_url = f"{frontend_url}/shared/{public_dashboard.share_token}"
+        
+        return {
+            "share_token": public_dashboard.share_token,
+            "public_url": public_url,
+            "expires_at": public_dashboard.expires_at.isoformat() if public_dashboard.expires_at else None
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating public dashboard: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to create share link: {str(e)}")
+
+
+@router.get("/public/dashboard/{token}")
+async def get_public_dashboard(
+    token: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Get public dashboard by token.
+    No authentication required.
+    
+    Args:
+        token: Share token
+    
+    Returns:
+        Dict with dashboard data or error
+    """
+    try:
+        result = dataset_service.get_public_dashboard(db, token)
+        
+        if result is None:
+            raise HTTPException(status_code=404, detail="Dashboard not found")
+        
+        if isinstance(result, dict) and result.get("error") == "expired":
+            raise HTTPException(status_code=410, detail="Dashboard link has expired")
+        
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching public dashboard: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to fetch dashboard: {str(e)}")
+
+
 @router.post("/datasets/{dataset_id}/suggest-queries")
 async def suggest_query(
     dataset_id: str,
@@ -1781,6 +1947,7 @@ async def suggest_query(
 ):
     """
     Generate a single AI-powered query suggestion based on dataset context.
+    For sample housing data, returns a hardcoded query suggestion.
     
     Args:
         dataset_id: Dataset identifier
@@ -1788,6 +1955,13 @@ async def suggest_query(
     Returns:
         Dict with a single suggestion string
     """
+    # Check if this is sample housing data - return hardcoded query
+    if dataset_id.startswith("sample_housing_"):
+        return {
+            "suggestion": "give me a comprehensive view of housing prices and how it relates to each variable, build a dashboard. - construct a dashboard showing this"
+        }
+    
+    # Otherwise, generate AI suggestion
     from ..services.agents import SuggestQueries
     
     # Initialize DSPy module locally

@@ -9,10 +9,11 @@ import pandas as pd
 import numpy as np
 import dspy
 from sqlalchemy.orm import Session
-from datetime import datetime
-from ..models import Dataset
+from datetime import datetime, timedelta
+from ..models import Dataset, DashboardQuery, ChatMessage, PublicDashboard
 from ..core.db import SessionLocal
 from .agents import CreateDatasetContext
+import secrets
 
 
 def clean_sheet_name(name: str) -> str:
@@ -436,6 +437,267 @@ class DatasetService:
             raise e
         finally:
             db.close()
+    
+    # ==================== Dashboard Query Persistence ====================
+    
+    def save_dashboard_query(
+        self,
+        db: Session,
+        user_id: int,
+        dataset_id: str,
+        query: str,
+        query_type: str,
+        charts_data: List[Dict[str, Any]],
+        dashboard_title: Optional[str] = None
+    ) -> DashboardQuery:
+        """
+        Save a dashboard query (analyze/edit/add) with per-chart code breakdown.
+        
+        Args:
+            db: Database session
+            user_id: User ID
+            dataset_id: Dataset identifier (string)
+            query: User's request text
+            query_type: "analyze", "edit", or "add"
+            charts_data: List of chart objects with code, figure, title, chart_type, chart_index
+            dashboard_title: Optional dashboard title
+        """
+        # Find dataset by dataset_id string
+        dataset = db.query(Dataset).filter(
+            Dataset.user_id == user_id,
+            Dataset.dataset_id == dataset_id
+        ).first()
+        
+        if not dataset:
+            raise ValueError(f"Dataset {dataset_id} not found")
+        
+        dashboard_query = DashboardQuery(
+            dataset_id=dataset.id,
+            user_id=user_id,
+            query=query,
+            query_type=query_type,
+            dashboard_title=dashboard_title,
+            charts_data=charts_data
+        )
+        
+        db.add(dashboard_query)
+        db.commit()
+        db.refresh(dashboard_query)
+        
+        return dashboard_query
+    
+    def get_dashboard_history(
+        self,
+        db: Session,
+        user_id: int,
+        dataset_id: str
+    ) -> List[Dict[str, Any]]:
+        """Get all dashboard queries for a dataset."""
+        dataset = db.query(Dataset).filter(
+            Dataset.user_id == user_id,
+            Dataset.dataset_id == dataset_id
+        ).first()
+        
+        if not dataset:
+            return []
+        
+        queries = db.query(DashboardQuery).filter(
+            DashboardQuery.dataset_id == dataset.id
+        ).order_by(DashboardQuery.created_at).all()
+        
+        return [
+            {
+                "id": q.id,
+                "query": q.query,
+                "query_type": q.query_type,
+                "dashboard_title": q.dashboard_title,
+                "charts_data": q.charts_data,
+                "created_at": q.created_at.isoformat()
+            }
+            for q in queries
+        ]
+    
+    # ==================== Chat Message Persistence ====================
+    
+    def save_chat_message(
+        self,
+        db: Session,
+        user_id: int,
+        dataset_id: str,
+        role: str,
+        content: str,
+        query_type: Optional[str] = None,
+        code: Optional[str] = None,
+        chart_index: Optional[int] = None
+    ) -> ChatMessage:
+        """
+        Save a chat message (user or assistant).
+        
+        Args:
+            db: Database session
+            user_id: User ID
+            dataset_id: Dataset identifier (string)
+            role: "user" or "assistant"
+            content: Message content
+            query_type: Query type tag ("edit", "add", "data_analysis", etc.)
+            code: Executable code if applicable
+            chart_index: Chart index if related to a chart
+        """
+        dataset = db.query(Dataset).filter(
+            Dataset.user_id == user_id,
+            Dataset.dataset_id == dataset_id
+        ).first()
+        
+        if not dataset:
+            raise ValueError(f"Dataset {dataset_id} not found")
+        
+        chat_message = ChatMessage(
+            dataset_id=dataset.id,
+            user_id=user_id,
+            role=role,
+            content=content,
+            query_type=query_type,
+            code=code,
+            chart_index=chart_index
+        )
+        
+        db.add(chat_message)
+        db.commit()
+        db.refresh(chat_message)
+        
+        return chat_message
+    
+    def get_chat_history(
+        self,
+        db: Session,
+        user_id: int,
+        dataset_id: str
+    ) -> List[Dict[str, Any]]:
+        """Get chat history for a dataset."""
+        dataset = db.query(Dataset).filter(
+            Dataset.user_id == user_id,
+            Dataset.dataset_id == dataset_id
+        ).first()
+        
+        if not dataset:
+            return []
+        
+        messages = db.query(ChatMessage).filter(
+            ChatMessage.dataset_id == dataset.id
+        ).order_by(ChatMessage.created_at).all()
+        
+        return [
+            {
+                "id": msg.id,
+                "type": msg.role,
+                "message": msg.content,
+                "query_type": msg.query_type,
+                "code": msg.code,
+                "chart_index": msg.chart_index,
+                "created_at": msg.created_at.isoformat()
+            }
+            for msg in messages
+        ]
+    
+    # ==================== Public Dashboard Sharing ====================
+    
+    def create_public_dashboard(
+        self,
+        db: Session,
+        user_id: int,
+        dataset_id: str,
+        figures_data: List[Dict[str, Any]],
+        dashboard_title: Optional[str] = None,
+        hours_valid: Optional[int] = None
+    ) -> PublicDashboard:
+        """
+        Create a public dashboard entry.
+        Only called when user clicks share button.
+        
+        Args:
+            db: Database session
+            user_id: User ID
+            dataset_id: Dataset identifier (string)
+            figures_data: Array of chart figures [{chart_index, figure, title, chart_type}, ...]
+            dashboard_title: Dashboard title
+            hours_valid: Hours until expiry (None for no expiry)
+        """
+        dataset = db.query(Dataset).filter(
+            Dataset.user_id == user_id,
+            Dataset.dataset_id == dataset_id
+        ).first()
+        
+        if not dataset:
+            raise ValueError(f"Dataset {dataset_id} not found")
+        
+        # Generate unique token
+        share_token = secrets.token_urlsafe(32)
+        
+        # Check if public dashboard already exists for this dataset
+        existing = db.query(PublicDashboard).filter(
+            PublicDashboard.dataset_id == dataset.id,
+            PublicDashboard.is_public == True
+        ).first()
+        
+        if existing:
+            # Update existing
+            existing.share_token = share_token
+            existing.figures_data = figures_data
+            existing.dashboard_title = dashboard_title
+            existing.updated_at = datetime.utcnow()
+            if hours_valid:
+                existing.expires_at = datetime.utcnow() + timedelta(hours=hours_valid)
+            else:
+                existing.expires_at = None
+            db.commit()
+            db.refresh(existing)
+            return existing
+        else:
+            # Create new
+            public_dashboard = PublicDashboard(
+                dataset_id=dataset.id,
+                user_id=user_id,
+                share_token=share_token,
+                figures_data=figures_data,
+                dashboard_title=dashboard_title,
+                is_public=True,
+                expires_at=datetime.utcnow() + timedelta(hours=hours_valid) if hours_valid else None
+            )
+            db.add(public_dashboard)
+            db.commit()
+            db.refresh(public_dashboard)
+            return public_dashboard
+    
+    def get_public_dashboard(
+        self,
+        db: Session,
+        token: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get public dashboard by token.
+        Returns None if not found, expired, or not public.
+        """
+        public_dashboard = db.query(PublicDashboard).filter(
+            PublicDashboard.share_token == token
+        ).first()
+        
+        if not public_dashboard:
+            return None
+        
+        if not public_dashboard.is_public:
+            return None
+        
+        if public_dashboard.expires_at and datetime.utcnow() > public_dashboard.expires_at:
+            return {"error": "expired"}
+        
+        return {
+            "dataset_id": public_dashboard.dataset.dataset_id,
+            "filename": public_dashboard.dataset.filename,
+            "dashboard_title": public_dashboard.dashboard_title,
+            "figures_data": public_dashboard.figures_data,
+            "owner_name": public_dashboard.dataset.user.name if public_dashboard.dataset.user else "Anonymous",
+            "created_at": public_dashboard.created_at.isoformat()
+        }
     
     # ==================== Combined Operations ====================
     
