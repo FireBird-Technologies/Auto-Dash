@@ -950,6 +950,113 @@ def plotly_chart_metric(example, pred, trace=None) -> float:
     except Exception as e:
         return 0.0 
 
+def plotly_add_metric(example, pred, trace=None) -> float:
+    """
+    Simple code scorer that checks if Plotly code runs successfully.
+    Penalizes code that tries to modify data or includes fig.show().
+    Returns: float: Score (0.0=error, 1.0=success)
+    """
+    try:
+        import re
+        from .agents import clean_plotly_code  # safe import in context if needed
+
+        # Extract generated code from pred - works for both chart generation and fixing
+        # For chart generation: pred.plotly_code
+        # For fixing: pred.fix
+        generated_code = None
+        if isinstance(pred, dict):
+            generated_code = pred.get('chart_code') 
+        else:
+            generated_code = getattr(pred, "chart_code", None) 
+
+        if not generated_code:
+            return 0.0
+
+        # Clean generated code
+        generated_code = clean_plotly_code(str(generated_code))
+
+        # Remove remaining fig.show() and display calls before running
+        generated_code = re.sub(r'(fig\.show\s*\([^)]*\))', r'# \1  # Commented out', generated_code)
+        generated_code = re.sub(r'(\.show\s*\(\s*\))', r'# \1  # Commented out', generated_code)
+        generated_code = re.sub(r'(plotly\.io\.show\([^)]*\))', r'# \1  # Commented out', generated_code)
+        generated_code = re.sub(r'(pio\.show\([^)]*\))', r'# \1  # Commented out', generated_code)
+
+        # Basic validation - must have some content
+        if len(generated_code.strip()) < 10:
+            return 0.0
+
+        # Penalize any code that tries to read or modify dataframes/new data
+        data_modification_patterns = [
+            r'pd\.read_csv\s*\(',
+            r'pd\.read_excel\s*\(',
+            r'pd\.read_',
+            r'pd\.DataFrame\s*\(',
+            r'data\s*=\s*pd\.',
+            r'df\s*=\s*pd\.',
+            r'data\s*=\s*data\[', 
+            r'df\s*=\s*data\s*$',
+        ]
+        for pattern in data_modification_patterns:
+            if re.search(pattern, generated_code, re.MULTILINE | re.IGNORECASE):
+                return 0.0
+
+        # Prepare safe exec environment
+        def noop_show(*args, **kwargs): pass
+        def noop_display(*args, **kwargs): pass
+
+        exec_globals = {
+            'pd': pd,
+            'np': np,
+            'show': noop_show,
+            'display': noop_display,
+        }
+
+        # Only import and inject 'go', 'plotly', and optionally 'px' if available, for test execution
+        try:
+            import plotly.graph_objects as go
+            exec_globals['go'] = go
+        except Exception:
+            pass
+        try:
+            import plotly
+            exec_globals['plotly'] = plotly
+        except Exception:
+            pass
+        try:
+            import plotly.express as px
+            exec_globals['px'] = px
+        except Exception:
+            pass
+
+        # Get dataset from context variable (set by PlotlyVisualizationModule)
+        dataset = _dataset_context.get()
+        if dataset:
+            # Use actual data from session - inject all sheets and set 'df' to first sheet
+            sheet_names = list(dataset.keys())
+            first_sheet_name = sheet_names[0]
+            exec_globals['df'] = dataset[first_sheet_name]
+            
+            # Also make individual sheets accessible by name
+            for sheet_name, sheet_df in dataset.items():
+                # Use valid Python identifier (replace spaces, special chars)
+                safe_name = re.sub(r'[^a-zA-Z0-9_]', '_', sheet_name)
+                exec_globals[safe_name] = sheet_df
+        else:
+            # Fallback to sample data if no dataset available (shouldn't happen in normal flow)
+            exec_globals['df'] = pd.DataFrame({'a': [1, 2], 'b': [3, 4]})
+
+        # Run the code
+        exec(generated_code, exec_globals)
+
+        # Check if 'fig' was created
+        if 'fig' in exec_globals:
+            return 1.0
+        else:
+            return 0.0  # No figure created
+            
+    except Exception as e:
+        return 0.0 
+
 
 def analysis_code_metric(example, pred, trace=None) -> float:
     """

@@ -5,7 +5,7 @@
   <p><strong>Your AI Data Artist</strong></p>
   
   <p>
-    <img src="https://img.shields.io/badge/Open%20Source-♥-red?style=flat-square" alt="Open Source" />
+    <img src="https://img.shields.io/badge/Open%20Source-red?style=flat-square" alt="Open Source" />
     <img src="https://img.shields.io/badge/Plotly-Powered-orange?style=flat-square" alt="Plotly Powered" />
     <img src="https://img.shields.io/badge/AI-Enabled-blue?style=flat-square" alt="AI Enabled" />
   </p>
@@ -19,34 +19,34 @@
 
 ---
 
-## ✨ Features
+## Features
 
 <table>
   <tr>
     <td width="33%" valign="top">
-      <h3>📤 Instant Upload</h3>
+      <h3>Instant Upload</h3>
       <p>Upload CSV, Excel, or use sample datasets. Support for large files with automatic parsing and validation.</p>
     </td>
     <td width="33%" valign="top">
-      <h3>💬 Natural Language</h3>
+      <h3>Natural Language</h3>
       <p>Describe your insights in plain English. Our AI understands what you're looking for and generates the perfect visualization.</p>
     </td>
     <td width="33%" valign="top">
-      <h3>⚡ Real-time Updates</h3>
+      <h3>Real-time Updates</h3>
       <p>Iteratively refine your charts with feedback. Changes appear instantly as our backend generates new Plotly configurations.</p>
     </td>
   </tr>
   <tr>
     <td width="33%" valign="top">
-      <h3>📊 Smart Analytics</h3>
+      <h3>Smart Analytics</h3>
       <p>Automatic correlation detection, trend analysis, and anomaly identification powered by backend intelligence.</p>
     </td>
     <td width="33%" valign="top">
-      <h3>🎨 Plotly-Powered</h3>
+      <h3>Plotly-Powered</h3>
       <p>Beautiful, interactive charts built with Plotly. Hover, zoom, pan, and explore your data like never before.</p>
     </td>
     <td width="33%" valign="top">
-      <h3>👥 Collaborative</h3>
+      <h3>Collaborative</h3>
       <p>Share dashboards, export visualizations, and collaborate with your team in real-time.</p>
     </td>
   </tr>
@@ -54,7 +54,7 @@
 
 ---
 
-## 🚀 How It Works
+## How It Works
 
 ### Building visuals is as easy as 1, 2, 3
 
@@ -62,47 +62,47 @@
 
 #### **01. Connect Your Data**
 Start by uploading your dataset or choose from our sample data library.
-- ✅ Supports CSV, Excel (.xlsx, .xls)
-- ✅ Drag & drop or click to browse
-- ✅ Automatic data type detection
-- ✅ Sample datasets to get started instantly
+- Supports CSV, Excel (.xlsx, .xls)
+- Drag & drop or click to browse
+- Automatic data type detection
+- Sample datasets to get started instantly
 
 #### **02. Describe Your Insights**
 Tell us what you want to discover in plain language.
-- ✅ Natural language processing understands your intent
-- ✅ Examples: "Show sales trends", "Compare regions"
-- ✅ AI suggests relevant chart types
-- ✅ Context-aware recommendations
+- Natural language processing understands your intent
+- Examples: "Show sales trends", "Compare regions"
+- AI suggests relevant chart types
+- Context-aware recommendations
 
 #### **03. Visualize & Refine**
 Get instant visualizations and iterate with real-time feedback.
-- ✅ Plotly-powered interactive charts
-- ✅ Request changes in plain English
-- ✅ Real-time updates from backend
-- ✅ Export and share your dashboards
+- Plotly-powered interactive charts
+- Request changes in plain English
+- Real-time updates from backend
+- Export and share your dashboards
 
 ---
 
-## 🎯 Beautiful Plotly-powered Visualizations
+## Beautiful Plotly-powered Visualizations
 
 **Interactive charts that bring your data to life**
 
-- 📈 **Trend Analysis** - Line charts, area charts, time series
-- 📊 **Comparisons** - Bar charts, grouped bars, stacked bars
-- 🎯 **Distributions** - Histograms, box plots, violin plots
-- 🔗 **Relationships** - Scatter plots, bubble charts, correlation matrices
-- 🌳 **Hierarchies** - Treemaps, sunburst charts, dendrograms
-- 🌐 **Networks** - Sankey diagrams, chord diagrams, force layouts
+- **Trend Analysis** - Line charts, area charts, time series
+- **Comparisons** - Bar charts, grouped bars, stacked bars
+- **Distributions** - Histograms, box plots, violin plots
+- **Relationships** - Scatter plots, bubble charts, correlation matrices
+- **Hierarchies** - Treemaps, sunburst charts, dendrograms
+- **Networks** - Sankey diagrams, chord diagrams, force layouts
 
 ### Visualization Features
-- ✨ **Hover tooltips** - Detailed information on hover
-- 🔍 **Zoom & pan** - Explore large datasets interactively
-- 🎮 **Fully interactive** - Click, filter, sort, and drill down
-- 📱 **Responsive design** - Beautiful on any screen size
+- **Hover tooltips** - Detailed information on hover
+- **Zoom & pan** - Explore large datasets interactively
+- **Fully interactive** - Click, filter, sort, and drill down
+- **Responsive design** - Beautiful on any screen size
 
 ---
 
-## 💡 Why AutoDash?
+## Why AutoDash?
 
 <table>
   <tr>
@@ -123,7 +123,7 @@ Get instant visualizations and iterate with real-time feedback.
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 ### Frontend
 - **React** + **TypeScript** - Modern, type-safe UI
@@ -144,7 +144,7 @@ Get instant visualizations and iterate with real-time feedback.
 
 ---
 
-## 📦 Installation
+## Installation
 
 ### Prerequisites
 - **Node.js** 18+ and **npm**
@@ -185,7 +185,7 @@ The frontend will start on `http://localhost:5173`
 
 ---
 
-## 🎮 Usage
+## Usage
 
 1. **Start the Application**
    - Navigate to `http://localhost:5173`
@@ -209,7 +209,7 @@ The frontend will start on `http://localhost:5173`
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
 
@@ -222,13 +222,13 @@ We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-## 🌟 Acknowledgments
+## Acknowledgments
 
 - **Plotly** - For the incredible visualization library
 - **FastAPI** - For the blazing-fast Python framework
@@ -242,14 +242,14 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
   <p><strong>Join thousands of teams using AutoDash to make data-driven decisions faster.</strong></p>
   
   <p>
-    <a href="https://github.com/yourusername/autodash">⭐ Star on GitHub</a> •
-    <a href="#installation">🚀 Get Started</a> •
-    <a href="https://github.com/yourusername/autodash/issues">🐛 Report Bug</a> •
-    <a href="https://github.com/yourusername/autodash/issues">💡 Request Feature</a>
+    <a href="https://github.com/yourusername/autodash">Star on GitHub</a> •
+    <a href="#installation">Get Started</a> •
+    <a href="https://github.com/yourusername/autodash/issues">Report Bug</a> •
+    <a href="https://github.com/yourusername/autodash/issues">Request Feature</a>
   </p>
 
   <p>
-    <sub>Built with ❤️ by the AutoDash team</sub>
+    <sub>Built by the AutoDash team</sub>
   </p>
 </div>
 
