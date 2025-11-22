@@ -13,7 +13,7 @@ class ChatResponse(BaseModel):
     reply: str
     user: str | None = None
     matched_chart: Optional[Dict[str, Any]] = None
-    code_type: Optional[Literal['plotly_edit', 'analysis']] = None
+    code_type: Optional[Literal['plotly_edit', 'analysis', 'add_chart_query']] = None
     executable_code: Optional[str] = None
 
 

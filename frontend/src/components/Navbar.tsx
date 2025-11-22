@@ -182,8 +182,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onAccountClick }) => {
                       )}
                     </div>
                     <div className="credits-costs">
-                      <small>• Dashboard: {credits.credits_per_analyze} credits</small>
-                      <small>• Edit: {credits.credits_per_edit} credits</small>
+                      <small>Dashboard: {credits.credits_per_analyze} credits</small>
+                      <small>Edit: {credits.credits_per_edit} credits</small>
                     </div>
                   </div>
                 </>

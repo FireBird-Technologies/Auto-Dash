@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { PlotlyChartRenderer } from '../PlotlyChartRenderer';
 import { FixNotification } from '../FixNotification';
 import { MarkdownMessage } from '../MarkdownMessage';
+import { AddChartPopup } from '../AddChartPopup';
 import { config, getAuthHeaders, checkAuthResponse } from '../../config';
 import { useNotification } from '../../contexts/NotificationContext';
 
@@ -27,7 +28,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     type: 'user' | 'assistant', 
     message: string, 
     matchedChart?: {index: number, type: string, title: string},
-    codeType?: 'plotly_edit' | 'analysis',
+    codeType?: 'plotly_edit' | 'analysis' | 'add_chart_query',
     executableCode?: string,
     failed?: boolean,
     retryable?: boolean,
@@ -52,6 +53,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   const [isExecutingCode, setIsExecutingCode] = useState(false);
   const [dashboardTitle, setDashboardTitle] = useState<string>('Dashboard');
   const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [showAddChartPopup, setShowAddChartPopup] = useState(false);
+  const [addingChart, setAddingChart] = useState(false);
 
   // Update local data when prop changes
   useEffect(() => {
@@ -536,7 +539,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
             matchedChart: result.matched_chart,
             codeType: result.code_type,
             executableCode: result.executable_code,
-            originalQuery: userQuery
+            originalQuery: userQuery  // Store original query for add_chart_query button
           }];
         });
         
@@ -560,6 +563,64 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
       setIsLoading(false);
       setQuery('');
     }
+  };
+
+  const handleAddChart = async (query: string) => {
+    if (!query.trim()) {
+      notification.error('Please enter a chart description');
+      return;
+    }
+
+    setAddingChart(true);
+    try {
+      const response = await fetch(`${config.backendUrl}/api/data/add-chart`, {
+        method: 'POST',
+        headers: getAuthHeaders({
+          'Content-Type': 'application/json',
+        }),
+        credentials: 'include',
+        body: JSON.stringify({
+          query: query,
+          dataset_id: datasetId,
+          color_theme: context.colorTheme
+        })
+      });
+
+      await checkAuthResponse(response);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to add chart');
+      }
+
+      const result = await response.json();
+      
+      // Add new chart to chartSpecs
+      const newChartSpec = {
+        chart_spec: result.chart_spec,
+        chart_type: result.chart_type,
+        title: result.title,
+        chart_index: result.chart_index,
+        figure: result.figure
+      };
+      
+      setChartSpecs(prev => [...prev, newChartSpec]);
+      notification.success('Chart added successfully!');
+      
+      // Fetch full dataset if needed
+      await fetchFullDataset();
+      
+    } catch (err) {
+      console.error('Error adding chart:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to add chart';
+      notification.error(errorMessage);
+    } finally {
+      setAddingChart(false);
+    }
+  };
+
+  const handleAddChartFromChat = async (query: string) => {
+    await handleAddChart(query);
   };
 
   const handleQueryChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -975,56 +1036,101 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                             textTransform: 'uppercase',
                             letterSpacing: '0.5px'
                           }}>
-                            {msg.codeType === 'plotly_edit' ? 'Chart Editor' : 'Data Analysis'}
+                            {msg.codeType === 'plotly_edit' ? 'Chart Editor' : msg.codeType === 'add_chart_query' ? 'Add Chart' : 'Data Analysis'}
                           </div>
                         )}
                         <MarkdownMessage content={msg.message} />
                         {msg.codeType && msg.executableCode && (
                           <div style={{ marginTop: '12px', display: 'flex', gap: '8px' }}>
-                            <button
-                              onClick={() => {
-                                if (msg.codeType === 'plotly_edit' && msg.matchedChart) {
-                                  executePlotlyEdit(msg.executableCode!, msg.matchedChart.index);
-                                } else if (msg.codeType === 'analysis') {
-                                  executeAnalysisCode(msg.executableCode!);
-                                }
-                              }}
-                              disabled={isExecutingCode}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '8px',
-                                padding: '8px 16px',
-                                background: isExecutingCode ? '#6b7280' : 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '8px',
-                                fontSize: '14px',
-                                fontWeight: '500',
-                                cursor: isExecutingCode ? 'not-allowed' : 'pointer',
-                                transition: 'all 0.2s',
-                                opacity: isExecutingCode ? 0.6 : 1,
-                                boxShadow: isExecutingCode ? 'none' : '0 2px 8px rgba(239, 68, 68, 0.2)'
-                              }}
-                              onMouseEnter={(e) => {
-                                if (!isExecutingCode) {
-                                  e.currentTarget.style.background = 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)';
-                                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.3)';
-                                }
-                              }}
-                              onMouseLeave={(e) => {
-                                if (!isExecutingCode) {
-                                  e.currentTarget.style.background = 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)';
-                                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(239, 68, 68, 0.2)';
-                                }
-                              }}
-                            >
-                              {isExecutingCode ? (
-                                <span>Running...</span>
-                              ) : (
-                                <span>{msg.codeType === 'plotly_edit' ? 'Run Code' : 'Run Analysis'}</span>
-                              )}
-                            </button>
+                            {msg.codeType === 'add_chart_query' ? (
+                              <button
+                                onClick={() => {
+                                  if (msg.originalQuery) {
+                                    handleAddChartFromChat(msg.originalQuery);
+                                  }
+                                }}
+                                disabled={addingChart}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  padding: '8px 16px',
+                                  background: addingChart ? '#6b7280' : 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '8px',
+                                  fontSize: '14px',
+                                  fontWeight: '500',
+                                  cursor: addingChart ? 'not-allowed' : 'pointer',
+                                  transition: 'all 0.2s',
+                                  opacity: addingChart ? 0.6 : 1,
+                                  boxShadow: addingChart ? 'none' : '0 2px 8px rgba(239, 68, 68, 0.2)'
+                                }}
+                                onMouseEnter={(e) => {
+                                  if (!addingChart) {
+                                    e.currentTarget.style.background = 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)';
+                                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.3)';
+                                  }
+                                }}
+                                onMouseLeave={(e) => {
+                                  if (!addingChart) {
+                                    e.currentTarget.style.background = 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)';
+                                    e.currentTarget.style.boxShadow = '0 2px 8px rgba(239, 68, 68, 0.2)';
+                                  }
+                                }}
+                              >
+                                {addingChart ? (
+                                  <span>Adding Chart...</span>
+                                ) : (
+                                  <span>Add Chart</span>
+                                )}
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  if (msg.codeType === 'plotly_edit' && msg.matchedChart) {
+                                    executePlotlyEdit(msg.executableCode!, msg.matchedChart.index);
+                                  } else if (msg.codeType === 'analysis') {
+                                    executeAnalysisCode(msg.executableCode!);
+                                  }
+                                }}
+                                disabled={isExecutingCode}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  padding: '8px 16px',
+                                  background: isExecutingCode ? '#6b7280' : 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '8px',
+                                  fontSize: '14px',
+                                  fontWeight: '500',
+                                  cursor: isExecutingCode ? 'not-allowed' : 'pointer',
+                                  transition: 'all 0.2s',
+                                  opacity: isExecutingCode ? 0.6 : 1,
+                                  boxShadow: isExecutingCode ? 'none' : '0 2px 8px rgba(239, 68, 68, 0.2)'
+                                }}
+                                onMouseEnter={(e) => {
+                                  if (!isExecutingCode) {
+                                    e.currentTarget.style.background = 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)';
+                                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.3)';
+                                  }
+                                }}
+                                onMouseLeave={(e) => {
+                                  if (!isExecutingCode) {
+                                    e.currentTarget.style.background = 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)';
+                                    e.currentTarget.style.boxShadow = '0 2px 8px rgba(239, 68, 68, 0.2)';
+                                  }
+                                }}
+                              >
+                                {isExecutingCode ? (
+                                  <span>Running...</span>
+                                ) : (
+                                  <span>{msg.codeType === 'plotly_edit' ? 'Run Code' : 'Run Analysis'}</span>
+                                )}
+                              </button>
+                            )}
                             
                             {msg.failed && msg.retryable && (
                               <button
@@ -1394,6 +1500,49 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                 onZoom={handleChartZoom}
                               />
                             ))}
+                            
+                            {/* Add Chart Button */}
+                            <div style={{
+                              display: 'flex',
+                              justifyContent: 'center',
+                              alignItems: 'center',
+                              minHeight: '400px',
+                              width: '100%',
+                              gridColumn: '1 / -1'
+                            }}>
+                              <button
+                                onClick={() => setShowAddChartPopup(true)}
+                                className="add-chart-button"
+                                style={{
+                                  width: '60px',
+                                  height: '60px',
+                                  borderRadius: '50%',
+                                  border: '2px solid #ff6b6b',
+                                  backgroundColor: 'white',
+                                  color: '#ff6b6b',
+                                  fontSize: '32px',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  transition: 'all 0.2s',
+                                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.backgroundColor = '#ff6b6b';
+                                  e.currentTarget.style.color = 'white';
+                                  e.currentTarget.style.transform = 'scale(1.1)';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.backgroundColor = 'white';
+                                  e.currentTarget.style.color = '#ff6b6b';
+                                  e.currentTarget.style.transform = 'scale(1)';
+                                }}
+                                title="Add new chart to dashboard"
+                              >
+                                +
+                              </button>
+                            </div>
                           </div>
                         </>
                       ) : (
@@ -1415,6 +1564,15 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
         </main>
       </div>
       </div>
+
+      {/* Add Chart Popup */}
+      <AddChartPopup
+        isOpen={showAddChartPopup}
+        onClose={() => setShowAddChartPopup(false)}
+        onAddChart={handleAddChart}
+        datasetId={datasetId}
+        addingChart={addingChart}
+      />
 
       {/* Chart Preview Modal */}
       {chartPreview && (

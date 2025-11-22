@@ -171,7 +171,7 @@ export const PricingPage: React.FC = () => {
       <div className="pricing-container">
         <div className="pricing-header">
           <button className="back-button" onClick={() => navigate(-1)}>
-            ← Back
+            Back
           </button>
           <h1>Simple, Transparent Pricing</h1>
           <p className="subtitle">Choose the plan that fits your needs. Upgrade or downgrade anytime.</p>

@@ -178,6 +178,13 @@ async def chat(
             reply = f"```python\n{executable_code}\n```"
             if hasattr(response_obj, 'reasoning'):
                 reply = f"{str(response_obj.reasoning)}\n\n{reply}"
+        elif hasattr(response_obj, 'chart_code'):
+            # Add chart query - chart code for new chart
+            code_type = 'add_chart_query'
+            executable_code = str(response_obj.chart_code)
+            reply = f"```python\n{executable_code}\n```"
+            if hasattr(response_obj, 'reasoning'):
+                reply = f"{str(response_obj.reasoning)}\n\n{reply}"
         elif hasattr(response_obj, 'code'):
             # Analysis code
             code_type = 'analysis'

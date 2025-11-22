@@ -17,7 +17,7 @@ import logging
 import asyncio
 import re
 from contextvars import ContextVar
-
+import os
 # Set up logger for the module
 logger = logging.getLogger("dspy_vis")
 logger.setLevel(logging.INFO)
@@ -41,12 +41,45 @@ class plotly_editor(dspy.Signature):
     4. The code must create the 'fig' object and populate it.
     5. The code must end with 'fig' on the last line.
     6. You MUST add data traces (fig.add_trace) or use px functions. Do NOT just update layout.
+    7. Always use the Plotly template 'plotly_white' when constructing the figure 
     """
     user_query = dspy.InputField(desc="edits the user needs to make")
     plotly_code = dspy.InputField(desc="The initial plotly code")
     dataset_context = dspy.InputField(desc="Context of the dataset ")
     edited_code = dspy.OutputField(desc="Edited code", prefix="```python")
     reasoning = dspy.OutputField(desc="Why did you make these edits explain")
+
+class plotly_adder_sig(dspy.Signature):
+    """
+    You are an AI that generates code to add a NEW Plotly chart to an existing dashboard.
+
+    GOAL:
+    - Create full Plotly Python code to add a new chart, based on a user request, ready to be included in a dashboard.
+
+    RULES:
+    1. Output the complete, standalone Plotly code for this chart addition.
+    2. Code must start with necessary imports (e.g. import plotly.graph_objects as go, or import plotly.express as px).
+    3. Assume 'df' (and any relevant dataframes from dataset_context) are available and already loaded (do NOT load any files).
+    4. Generate only the code for the NEW chart as requested by the user, *not* the full dashboard.
+    5. Always use the Plotly template 'plotly_white' when constructing the figure (e.g., set template="plotly_white" in go.Figure/layout or px function).
+    6. Output must end with the 'fig' variable as the final line.
+    7. The chart type, data, and features must be based on user_request and the dataset context.
+
+    INPUTS:
+    - user_request: Instructions for the new chart to add to the dashboard.
+    - dataset_context: Information about available columns, sheets, and data context.
+
+    OUTPUTS:
+    - chart_code: The full, executable Python Plotly code to create the new chart (starts with ```python).
+    - reasoning: Explanation of how the chart matches the user request and dataset.
+
+    """
+    user_query = dspy.InputField(desc="The new chart user wants to add to the dashboard")
+    dataset_context = dspy.InputField(desc="Information about available data, sheets, columns, sample values")
+    chart_code = dspy.OutputField(desc="Executable Plotly Python code for the new chart", prefix="```python")
+    reasoning = dspy.OutputField(desc="Explanation of design choices and data mapping")
+
+
 
 class data_query_sig(dspy.Signature):
     """
@@ -90,24 +123,43 @@ class chart_matcher(dspy.Signature):
     charts = dspy.InputField(desc="JSON: [{'i':0,'t':'scatter_plot','n':'Title','p':{}},...]")
     chart_index = dspy.OutputField(type=int, desc="Matching chart index or -1")
 
+CLARITY_RESPONSE = (
+    "I'm sorry, I couldn't understand your request.\n\n"
+    "#### Here’s what I can help you with:\n"
+    "- **Edit** or **add** a chart to your dashboard\n"
+    "- **Analyze your data** or perform computations\n"
+    "- Answer **general questions** about your dataset\n\n"
+    "Please clarify what you'd like to do, or ask for help with one of the options above!"
+)
+
+
+
 class chat_function(dspy.Module):
     def __init__(self):
         self.plotly_editor_mod = dspy.Predict(plotly_editor)
         self.data_query_mod = dspy.Predict(data_query_sig)
+        self.plotly_add_mod = dspy.Predict(plotly_adder_sig)
         self.general_qa = dspy.Predict("user_query->answer")
+        self.CLARITY_RESPONSE = CLARITY_RESPONSE
 
   
-        self.router = dspy.Predict("user_query->query_type:Literal['data_query','general_query','need_more_clarity','plotly_edit_query'],reasoning")
+        self.router = dspy.Predict("user_query->query_type:Literal['data_query','general_query','need_more_clarity','plotly_edit_query','add_chart_query'],reasoning")
 
         
         
     async def aforward(self, user_query, fig_data, data_context,plotly_code):
-        route = self.router(user_query=user_query)
+        with dspy.context(lm= dspy.LM('openai/gpt-4o-mini', api_key=os.getenv('OPENAI_API_KEY'), max_tokens=600)):
+            route = self.router(user_query=user_query)
         
         if 'data_query' in route.query_type:
             response = self.data_query_mod(user_query=user_query, dataset_context=data_context)
         elif 'plotly_edit_query' in route.query_type:
             response =  self.plotly_editor_mod(user_query=user_query,dataset_context=data_context, plotly_code=plotly_code)
+        elif 'add_chart_query' in route.query_type:
+            response =  self.plotly_add_mod(user_query=user_query,dataset_context=data_context)
+        elif 'need_more_clarity' in route.query_type:
+            response = self.CLARITY_RESPONSE
+
         else:
             response = self.general_qa(user_query=user_query)
             
@@ -733,7 +785,7 @@ class area_chart_plotly(dspy.Signature):
 class SuggestQueries(dspy.Signature):
     """Generate a single contextual query suggestion for dataset visualization."""
     dataset_context = dspy.InputField(desc="Column names, types, sample rows")
-    suggestion = dspy.OutputField(desc="A single creative and insightful query that leads to visualization (5-10 words)")
+    suggestion = dspy.OutputField(desc="A single creative and insightful query that leads to multiple charts (5-10 words)")
 
 
 # ============================================================================
