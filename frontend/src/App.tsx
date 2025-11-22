@@ -4,6 +4,8 @@ import { Navbar } from './components/Navbar';
 import { Landing } from './components/Landing';
 import { Account } from './components/Account';
 import { VisualizePage } from './pages/VisualizePage';
+import { PricingPage } from './pages/PricingPage';
+import { CreditsProvider } from './contexts/CreditsContext';
 
 function AuthHandler() {
   const navigate = useNavigate();
@@ -54,6 +56,10 @@ function AppRoutes() {
               )
             } 
           />
+          <Route 
+            path="/pricing" 
+            element={<PricingPage />}
+          />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
@@ -64,9 +70,11 @@ function AppRoutes() {
 export default function App() {
   return (
     <Router>
-      <div className="app-container">
-        <AppRoutes />
-      </div>
+      <CreditsProvider>
+        <div className="app-container">
+          <AppRoutes />
+        </div>
+      </CreditsProvider>
     </Router>
   );
 }

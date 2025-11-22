@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from .db import get_db
 from .models import User
 from .security import create_access_token
+from .services.subscription_service import subscription_service
 
 
 router = APIRouter(prefix="/api/auth/google", tags=["auth"])
@@ -46,11 +47,23 @@ async def callback(request: Request, db: Session = Depends(get_db)):
     picture = userinfo.get("picture")
 
     user = db.query(User).filter(User.email == email).first()
+    is_new_user = False
     if not user:
         user = User(email=email, name=name, picture=picture, provider="google", provider_id=sub)
         db.add(user)
         db.commit()
         db.refresh(user)
+        is_new_user = True
+    
+    # Assign Free tier to new users
+    if is_new_user:
+        try:
+            subscription_service.assign_free_tier(db, user)
+        except Exception as e:
+            # Log error but don't block user login
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to assign free tier to user {user.id}: {e}")
 
     jwt_token = create_access_token(str(user.id), {"email": user.email})
     # redirect back to frontend with token in query for simplicity

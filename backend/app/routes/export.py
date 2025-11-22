@@ -401,14 +401,14 @@ async def export_dashboard_as_pdf(request: ChartExportRequest):
                         )
                         
                         # Center "Auto-Dash" text below logo
-                        c.setFont("Helvetica-Bold", 12)
-                        c.setFillColorRGB(0.2, 0.2, 0.2)
-                        c.drawCentredString(page_width / 2, logo_y - 15, "Auto-Dash")
+                        # c.setFont("Helvetica-Bold", 12)
+                        # c.setFillColorRGB(0.2, 0.2, 0.2)
+                        # c.drawCentredString(page_width / 2, logo_y - 15, "Auto-Dash")
                         
-                        # Center subtitle below
-                        c.setFont("Helvetica", 9)
-                        c.setFillColorRGB(0.5, 0.5, 0.5)
-                        c.drawCentredString(page_width / 2, logo_y - 28, "Analytics Dashboard")
+                        # # Center subtitle below
+                        # c.setFont("Helvetica", 9)
+                        # c.setFillColorRGB(0.5, 0.5, 0.5)
+                        # c.drawCentredString(page_width / 2, logo_y - 28, "Analytics Dashboard")
                     
                     # === ADD CHART ===
                     # Export chart to PNG bytes

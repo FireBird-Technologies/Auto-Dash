@@ -1,7 +1,17 @@
-from sqlalchemy import String, Integer, Boolean, ForeignKey, DateTime, Text, JSON
+from sqlalchemy import String, Integer, Boolean, ForeignKey, DateTime, Text, JSON, Numeric, Enum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import datetime
+from decimal import Decimal
+import enum
 from .db import Base
+
+
+class TransactionType(str, enum.Enum):
+    """Credit transaction types"""
+    RESET = "reset"
+    DEDUCT = "deduct"
+    REFUND = "refund"
+    ADJUSTMENT = "adjustment"
 
 
 class User(Base):
@@ -18,6 +28,8 @@ class User(Base):
 
     subscriptions: Mapped[list["Subscription"]] = relationship(back_populates="user")
     datasets: Mapped[list["Dataset"]] = relationship(back_populates="user")
+    credits: Mapped["UserCredits"] = relationship(back_populates="user", uselist=False)
+    credit_transactions: Mapped[list["CreditTransaction"]] = relationship(back_populates="user")
 
 
 class Subscription(Base):
@@ -25,12 +37,18 @@ class Subscription(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    plan_id: Mapped[int | None] = mapped_column(ForeignKey("subscription_plans.id"), nullable=True)
     status: Mapped[str] = mapped_column(String(50), default="inactive")
-    stripe_customer_id: Mapped[str | None] = mapped_column(String(255))
-    stripe_subscription_id: Mapped[str | None] = mapped_column(String(255))
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    stripe_subscription_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    current_period_start: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    current_period_end: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     user: Mapped[User] = relationship(back_populates="subscriptions")
+    plan: Mapped["SubscriptionPlan"] = relationship(back_populates="subscriptions")
 
 
 class Dataset(Base):
@@ -63,5 +81,65 @@ class Dataset(Base):
     # Values: "pending", "generating", "completed", "failed"
     
     user: Mapped[User] = relationship(back_populates="datasets")
+
+
+class SubscriptionPlan(Base):
+    __tablename__ = "subscription_plans"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    stripe_price_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    stripe_product_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    price_monthly: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0.0)
+    
+    # Credit configuration
+    credits_per_month: Mapped[int] = mapped_column(Integer, default=0)
+    credits_per_analyze: Mapped[int] = mapped_column(Integer, default=5)
+    credits_per_edit: Mapped[int] = mapped_column(Integer, default=2)
+    
+    # Extensible features as JSON
+    features: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    
+    # Plan management
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    subscriptions: Mapped[list["Subscription"]] = relationship(back_populates="plan")
+    user_credits: Mapped[list["UserCredits"]] = relationship(back_populates="plan")
+
+
+class UserCredits(Base):
+    __tablename__ = "user_credits"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), unique=True, index=True)
+    plan_id: Mapped[int | None] = mapped_column(ForeignKey("subscription_plans.id"), nullable=True)
+    balance: Mapped[int] = mapped_column(Integer, default=0)
+    last_reset_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    user: Mapped[User] = relationship(back_populates="credits")
+    plan: Mapped["SubscriptionPlan"] = relationship(back_populates="user_credits")
+
+
+class CreditTransaction(Base):
+    __tablename__ = "credit_transactions"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    amount: Mapped[int] = mapped_column(Integer)  # Can be negative for deductions
+    transaction_type: Mapped[TransactionType] = mapped_column(Enum(TransactionType), index=True)
+    description: Mapped[str] = mapped_column(Text)
+    transaction_metadata: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    
+    # Relationships
+    user: Mapped[User] = relationship(back_populates="credit_transactions")
 
 
