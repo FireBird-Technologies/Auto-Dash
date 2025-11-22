@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Plot from 'react-plotly.js';
 import { config, getAuthHeaders, checkAuthResponse } from '../config';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface PlotlyChartRendererProps {
   chartSpec: any;
@@ -58,6 +59,7 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
   onFixingStatusChange,
   onZoom
 }) => {
+  const notification = useNotification();
   const containerRef = useRef<HTMLDivElement>(null);
   const [figureData, setFigureData] = useState<any>(null);
   const [isFixing, setIsFixing] = useState<boolean>(false);
@@ -270,17 +272,17 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
         setEditPreview({
           code: result.edited_code,
           figure: result.figure,
-          reasoning: result.reasoning
-        });
-      } else {
-        alert(`Failed to edit chart: ${result.error || 'Unknown error'}`);
-      }
-    } catch (error) {
-      console.error('Error editing chart:', error);
-      alert(`Error editing chart: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setIsLoadingEdit(false);
-      setIsEditMode(false);
+        reasoning: result.reasoning
+      });
+    } else {
+      notification.error(`Failed to edit chart: ${result.error || 'Unknown error'}`);
+    }
+  } catch (error) {
+    console.error('Error editing chart:', error);
+    notification.error(`Error editing chart: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  } finally {
+    setIsLoadingEdit(false);
+    setIsEditMode(false);
       setEditInput('');
     }
   };

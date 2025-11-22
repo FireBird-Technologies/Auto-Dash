@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { config, getAuthHeaders, checkAuthResponse } from '../config';
 import { pricingConfig } from '../config/pricing';
 import { useCreditsContext } from '../contexts/CreditsContext';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface Plan {
   id: number;
@@ -58,7 +59,8 @@ const FAQS: FAQ[] = [
 
 export const PricingPage: React.FC = () => {
   const navigate = useNavigate();
-  const { credits, refetch: refetchCredits } = useCreditsContext();
+  const notification = useNotification();
+  const { credits } = useCreditsContext();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
   const [upgrading, setUpgrading] = useState<number | null>(null);
@@ -90,10 +92,13 @@ export const PricingPage: React.FC = () => {
   const handleUpgrade = async (planId: number) => {
     const token = localStorage.getItem('auth_token');
     if (!token) {
-      const shouldSignIn = window.confirm('Please sign in to upgrade your plan. Would you like to go to the sign in page?');
-      if (shouldSignIn) {
-        navigate('/');
-      }
+      notification.showConfirm({
+        title: 'Sign In Required',
+        message: 'Please sign in to upgrade your plan. Would you like to go to the sign in page?',
+        onConfirm: () => {
+          navigate('/');
+        }
+      });
       return;
     }
 
@@ -116,11 +121,11 @@ export const PricingPage: React.FC = () => {
         // Redirect to Stripe Checkout
         window.location.href = data.checkoutUrl;
       } else {
-        alert('Failed to create checkout session. Please try again.');
+        notification.error('Failed to create checkout session. Please try again.');
       }
     } catch (error) {
       console.error('Upgrade error:', error);
-      alert('Failed to start upgrade process. Please try again.');
+      notification.error('Failed to start upgrade process. Please try again.');
     } finally {
       setUpgrading(null);
     }
@@ -324,27 +329,7 @@ export const PricingPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="pricing-benefits">
-          <h3>All paid plans include:</h3>
-          <div className="benefits-grid">
-            <div className="benefit-item">
-              <h4>Latest AI Models</h4>
-              <p>Access to the newest and most powerful AI models as they're released</p>
-            </div>
-            <div className="benefit-item">
-              <h4>Advanced Analytics</h4>
-              <p>Deeper insights with sophisticated analysis capabilities</p>
-            </div>
-            <div className="benefit-item">
-              <h4>Priority Processing</h4>
-              <p>Faster analysis with priority queue access</p>
-            </div>
-            <div className="benefit-item">
-              <h4>Enhanced Security</h4>
-              <p>Additional security features and data protection</p>
-            </div>
-          </div>
-        </div>
+     
 
         <div className="faq-section">
           <h2>Frequently Asked Questions</h2>
@@ -381,30 +366,7 @@ export const PricingPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="pricing-footer">
-          <div className="footer-content">
-            <div className="footer-item">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                <polyline points="22 4 12 14.01 9 11.01" />
-              </svg>
-              <span>Cancel anytime</span>
-            </div>
-            <div className="footer-item">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-              </svg>
-              <span>Secure payments via Stripe</span>
-            </div>
-            <div className="footer-item">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-              </svg>
-              <span>24/7 customer support</span>
-            </div>
-          </div>
-        </div>
+
       </div>
     </div>
   );

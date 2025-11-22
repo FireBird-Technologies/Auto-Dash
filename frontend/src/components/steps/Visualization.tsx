@@ -3,6 +3,7 @@ import { PlotlyChartRenderer } from '../PlotlyChartRenderer';
 import { FixNotification } from '../FixNotification';
 import { MarkdownMessage } from '../MarkdownMessage';
 import { config, getAuthHeaders, checkAuthResponse } from '../../config';
+import { useNotification } from '../../contexts/NotificationContext';
 
 type Row = Record<string, number | string>;
 
@@ -17,6 +18,7 @@ interface VisualizationProps {
 }
 
 export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, context, onReupload }) => {
+  const notification = useNotification();
   const [query, setQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [chartSpecs, setChartSpecs] = useState<any[]>([]);  // Changed to array
@@ -582,12 +584,15 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   };
 
   const handleReuploadClick = () => {
-    const confirmed = window.confirm(
-      'Are you sure you want to upload a new dataset? This will clear all current visualizations and chat history.'
-    );
-    if (confirmed && onReupload) {
-      onReupload();
-    }
+    notification.showConfirm({
+      title: 'Upload New Dataset',
+      message: 'Are you sure you want to upload a new dataset? This will clear all current visualizations and chat history.',
+      onConfirm: () => {
+        if (onReupload) {
+          onReupload();
+        }
+      }
+    });
   };
 
   const toggleFullscreen = () => {
@@ -596,7 +601,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
 
   const downloadChart = async (format: 'png-zip' | 'pdf') => {
     if (chartSpecs.length === 0) {
-      alert('No charts to download');
+      notification.warning('No charts to download');
       return;
     }
 
@@ -677,7 +682,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
 
     } catch (error) {
       console.error('Error downloading:', error);
-      alert(`Failed to download: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      notification.error(`Failed to download: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 
     setShowDownloadMenu(false);

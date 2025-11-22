@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { config, getAuthHeaders, checkAuthResponse } from '../config';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface SubscriptionInfo {
   tier: string;
@@ -26,6 +28,8 @@ interface AccountProps {
 }
 
 export const Account: React.FC<AccountProps> = ({ onClose }) => {
+  const navigate = useNavigate();
+  const notification = useNotification();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -96,28 +100,31 @@ export const Account: React.FC<AccountProps> = ({ onClose }) => {
   };
 
   const handleDeactivateAccount = async () => {
-    if (!confirm('Are you sure you want to deactivate your account? This action cannot be easily undone.')) {
-      return;
-    }
+    notification.showConfirm({
+      title: 'Deactivate Account',
+      message: 'Are you sure you want to deactivate your account? This action cannot be easily undone.',
+      onConfirm: async () => {
+        try {
+          const response = await fetch(`${config.backendUrl}/api/auth/me`, {
+            method: 'DELETE',
+            headers: getAuthHeaders(),
+          });
 
-    try {
-      const response = await fetch(`${config.backendUrl}/api/auth/me`, {
-        method: 'DELETE',
-        headers: getAuthHeaders(),
-      });
+          await checkAuthResponse(response);
 
-      await checkAuthResponse(response);
+          if (!response.ok) {
+            throw new Error('Failed to deactivate account');
+          }
 
-      if (!response.ok) {
-        throw new Error('Failed to deactivate account');
+          // Clear token and redirect
+          localStorage.removeItem('auth_token');
+          window.location.href = '/';
+        } catch (err: any) {
+          setError(err.message || 'Failed to deactivate account');
+          notification.error(err.message || 'Failed to deactivate account');
+        }
       }
-
-      // Clear token and redirect
-      localStorage.removeItem('auth_token');
-      window.location.href = '/';
-    } catch (err: any) {
-      setError(err.message || 'Failed to deactivate account');
-    }
+    });
   };
 
   if (loading) {
@@ -273,8 +280,7 @@ export const Account: React.FC<AccountProps> = ({ onClose }) => {
                   </div>
                   <button
                     onClick={() => {
-                      // Navigate to subscription management or Stripe portal
-                      window.location.href = `${config.backendUrl}/api/payment/portal`;
+                      navigate('/pricing');
                     }}
                     className="cta-button-primary"
                   >

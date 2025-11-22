@@ -6,6 +6,7 @@ import { Account } from './components/Account';
 import { VisualizePage } from './pages/VisualizePage';
 import { PricingPage } from './pages/PricingPage';
 import { CreditsProvider } from './contexts/CreditsContext';
+import { NotificationProvider } from './contexts/NotificationContext';
 
 function AuthHandler() {
   const navigate = useNavigate();
@@ -70,11 +71,13 @@ function AppRoutes() {
 export default function App() {
   return (
     <Router>
-      <CreditsProvider>
-        <div className="app-container">
-          <AppRoutes />
-        </div>
-      </CreditsProvider>
+      <NotificationProvider>
+        <CreditsProvider>
+          <div className="app-container">
+            <AppRoutes />
+          </div>
+        </CreditsProvider>
+      </NotificationProvider>
     </Router>
   );
 }

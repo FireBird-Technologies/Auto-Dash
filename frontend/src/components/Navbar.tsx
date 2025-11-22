@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { config, getAuthHeaders, checkAuthResponse } from '../config';
 import { useCreditsContext } from '../contexts/CreditsContext';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface NavbarProps {
   onAccountClick?: () => void;
@@ -13,6 +15,8 @@ interface UserInfo {
 }
 
 export const Navbar: React.FC<NavbarProps> = ({ onAccountClick }) => {
+  const navigate = useNavigate();
+  const notification = useNotification();
   const [user, setUser] = useState<UserInfo | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -90,12 +94,15 @@ export const Navbar: React.FC<NavbarProps> = ({ onAccountClick }) => {
 
   const handleCreditsClick = () => {
     if (credits && credits.balance < 100) {
-      const shouldUpgrade = window.confirm(
-        `You have ${credits.balance} credits remaining.\n\nWould you like to upgrade your plan for more credits?`
-      );
-      if (shouldUpgrade) {
-        window.location.href = '/pricing'; // Update this to your actual pricing page route
-      }
+      notification.showConfirm({
+        title: 'Low Credits',
+        message: `You have ${credits.balance} credits remaining.\n\nWould you like to upgrade your plan for more credits?`,
+        onConfirm: () => {
+          navigate('/pricing');
+        }
+      });
+    } else {
+      navigate('/pricing');
     }
   };
 
