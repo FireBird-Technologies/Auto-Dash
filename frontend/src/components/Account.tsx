@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { config, getAuthHeaders, checkAuthResponse } from '../config';
 import { useNotification } from '../contexts/NotificationContext';
 import { useCreditsContext } from '../contexts/CreditsContext';
@@ -55,7 +55,6 @@ interface SubscriptionData {
 
 export const Account: React.FC<AccountProps> = ({ onClose }) => {
   const navigate = useNavigate();
-  const location = useLocation();
   const notification = useNotification();
   const { refetch: refetchCredits } = useCreditsContext();
   const [profile, setProfile] = useState<UserProfile | null>(null);

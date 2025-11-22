@@ -212,7 +212,7 @@ export const PlanSelector: React.FC<PlanSelectorProps> = ({
                   <button
                     className="plan-button"
                     onClick={() => handleSelectPlan(plan.id)}
-                    disabled={loading || (promoCode.trim() && promoCodeValid === false)}
+                    disabled={loading || (promoCode.trim() !== '' && promoCodeValid === false)}
                   >
                     {loading && selectedPlanId === plan.id ? 'Switching...' : 'Switch to this plan'}
                   </button>
