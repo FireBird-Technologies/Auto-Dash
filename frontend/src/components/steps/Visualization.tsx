@@ -3,6 +3,7 @@ import { PlotlyChartRenderer } from '../PlotlyChartRenderer';
 import { FixNotification } from '../FixNotification';
 import { MarkdownMessage } from '../MarkdownMessage';
 import { AddChartPopup } from '../AddChartPopup';
+import { SharePopup } from '../SharePopup';
 import { config, getAuthHeaders, checkAuthResponse } from '../../config';
 import { useNotification } from '../../contexts/NotificationContext';
 
@@ -55,6 +56,9 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [showAddChartPopup, setShowAddChartPopup] = useState(false);
   const [addingChart, setAddingChart] = useState(false);
+  const [showSharePopup, setShowSharePopup] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string>('');
+  const [shareExpiresAt, setShareExpiresAt] = useState<string | null>(null);
 
   // Update local data when prop changes
   useEffect(() => {
@@ -368,6 +372,13 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
       // Get data context (for now, we'll send empty string as backend will generate it)
       const dataContext = ""; // Backend will generate context from dataset_id
       
+      // For add_chart_query, retry by calling handleAddChart again
+      if (message.codeType === 'add_chart_query') {
+        await handleAddChart(message.originalQuery || message.message, true);
+        setIsExecutingCode(false);
+        return;
+      }
+      
       const response = await fetch(`${config.backendUrl}/api/chat/retry`, {
         method: 'POST',
         headers: getAuthHeaders({'Content-Type': 'application/json'}),
@@ -506,6 +517,12 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
           // Old format: single chart - wrap in array
           setChartSpecs([{ chart_spec: result.chart_spec, chart_type: 'unknown', title: 'Visualization', chart_index: 0 }]);
         }
+        
+        // Add success message to chat
+        setChatHistory(prev => [...prev, {
+          type: 'assistant',
+          message: `Dashboard created successfully! Generated ${result.charts?.length || 1} chart(s).`
+        }]);
       } else {
         // Subsequent queries: Use chat endpoint with chart context
         const response = await fetch(`${config.backendUrl}/api/chat`, {
@@ -565,7 +582,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     }
   };
 
-  const handleAddChart = async (query: string) => {
+  const handleAddChart = async (query: string, fromChat: boolean = false) => {
     if (!query.trim()) {
       notification.error('Please enter a chart description');
       return;
@@ -605,7 +622,16 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
       };
       
       setChartSpecs(prev => [...prev, newChartSpec]);
-      notification.success('Chart added successfully!');
+      
+      if (fromChat) {
+        // Add success message to chat
+        setChatHistory(prev => [...prev, {
+          type: 'assistant',
+          message: 'Chart added successfully!'
+        }]);
+      } else {
+        notification.success('Chart added successfully!');
+      }
       
       // Fetch full dataset if needed
       await fetchFullDataset();
@@ -613,14 +639,27 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     } catch (err) {
       console.error('Error adding chart:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to add chart';
-      notification.error(errorMessage);
+      
+      if (fromChat) {
+        // Add error message to chat instead of notification popup
+        setChatHistory(prev => [...prev, {
+          type: 'assistant',
+          message: 'unable to construct',
+          codeType: 'add_chart_query',
+          failed: true,
+          retryable: true,
+          originalQuery: query
+        }]);
+      } else {
+        notification.error(errorMessage);
+      }
     } finally {
       setAddingChart(false);
     }
   };
 
   const handleAddChartFromChat = async (query: string) => {
-    await handleAddChart(query);
+    await handleAddChart(query, true);
   };
 
   const handleQueryChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -650,8 +689,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
       message: 'Are you sure you want to upload a new dataset? This will clear all current visualizations and chat history.',
       onConfirm: () => {
         if (onReupload) {
-          onReupload();
-        }
+      onReupload();
+    }
       }
     });
   };
@@ -764,8 +803,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
         chart_type: spec.chart_type || 'plotly'
       }));
 
-      // Get dashboard title (if available from context or first chart)
-      const dashboardTitle = context?.description || chartSpecs[0]?.title || 'Dashboard';
+      // Use the actual dashboard title from state (what user sees/edits)
+      const titleToShare = dashboardTitle || 'Dashboard';
 
       // Call share endpoint
       const response = await fetch(`${config.backendUrl}/api/data/datasets/${datasetId}/share`, {
@@ -774,7 +813,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
         credentials: 'include',
         body: JSON.stringify({
           figures_data: figuresData,
-          dashboard_title: dashboardTitle
+          dashboard_title: titleToShare
         })
       });
 
@@ -788,15 +827,10 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
       const result = await response.json();
       const publicUrl = result.public_url;
 
-      // Copy to clipboard
-      await navigator.clipboard.writeText(publicUrl);
-      notification.success(`Share link copied to clipboard! ${result.expires_at ? 'Link expires in 24 hours.' : ''}`);
-
-      // Optionally show modal with link
-      const showModal = window.confirm(`Share link copied!\n\n${publicUrl}\n\nOpen in new tab?`);
-      if (showModal) {
-        window.open(publicUrl, '_blank');
-      }
+      // Show share popup
+      setShareUrl(publicUrl);
+      setShareExpiresAt(result.expires_at);
+      setShowSharePopup(true);
 
     } catch (error) {
       console.error('Error sharing dashboard:', error);
@@ -1095,52 +1129,53 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                           </div>
                         )}
                         <MarkdownMessage content={msg.message} />
-                        {msg.codeType && msg.executableCode && (
-                          <div style={{ marginTop: '12px', display: 'flex', gap: '8px' }}>
-                            {msg.codeType === 'add_chart_query' ? (
-                              <button
-                                onClick={() => {
-                                  if (msg.originalQuery) {
-                                    handleAddChartFromChat(msg.originalQuery);
-                                  }
-                                }}
-                                disabled={addingChart}
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '8px',
-                                  padding: '8px 16px',
-                                  background: addingChart ? '#6b7280' : 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)',
-                                  color: 'white',
-                                  border: 'none',
-                                  borderRadius: '8px',
-                                  fontSize: '14px',
-                                  fontWeight: '500',
-                                  cursor: addingChart ? 'not-allowed' : 'pointer',
-                                  transition: 'all 0.2s',
-                                  opacity: addingChart ? 0.6 : 1,
-                                  boxShadow: addingChart ? 'none' : '0 2px 8px rgba(239, 68, 68, 0.2)'
-                                }}
-                                onMouseEnter={(e) => {
-                                  if (!addingChart) {
-                                    e.currentTarget.style.background = 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)';
-                                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.3)';
-                                  }
-                                }}
-                                onMouseLeave={(e) => {
-                                  if (!addingChart) {
-                                    e.currentTarget.style.background = 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)';
-                                    e.currentTarget.style.boxShadow = '0 2px 8px rgba(239, 68, 68, 0.2)';
-                                  }
-                                }}
-                              >
-                                {addingChart ? (
-                                  <span>Adding Chart...</span>
-                                ) : (
-                                  <span>Add Chart</span>
-                                )}
-                              </button>
-                            ) : (
+                        <div style={{ marginTop: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                          {msg.codeType && msg.executableCode && (
+                            <>
+                              {msg.codeType === 'add_chart_query' ? (
+                                <button
+                                  onClick={() => {
+                                    if (msg.originalQuery) {
+                                      handleAddChartFromChat(msg.originalQuery);
+                                    }
+                                  }}
+                                  disabled={addingChart}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    padding: '8px 16px',
+                                    background: addingChart ? '#6b7280' : 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    fontSize: '14px',
+                                    fontWeight: '500',
+                                    cursor: addingChart ? 'not-allowed' : 'pointer',
+                                    transition: 'all 0.2s',
+                                    opacity: addingChart ? 0.6 : 1,
+                                    boxShadow: addingChart ? 'none' : '0 2px 8px rgba(239, 68, 68, 0.2)'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    if (!addingChart) {
+                                      e.currentTarget.style.background = 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)';
+                                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.3)';
+                                    }
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    if (!addingChart) {
+                                      e.currentTarget.style.background = 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)';
+                                      e.currentTarget.style.boxShadow = '0 2px 8px rgba(239, 68, 68, 0.2)';
+                                    }
+                                  }}
+                                >
+                                  {addingChart ? (
+                                    <span>Adding Chart...</span>
+                                  ) : (
+                                    <span>Add Chart</span>
+                                  )}
+                                </button>
+                              ) : (
                               <button
                                 onClick={() => {
                                   if (msg.codeType === 'plotly_edit' && msg.matchedChart) {
@@ -1185,36 +1220,38 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                   <span>{msg.codeType === 'plotly_edit' ? 'Run Code' : 'Run Analysis'}</span>
                                 )}
                               </button>
-                            )}
-                            
-                            {msg.failed && msg.retryable && (
+                              )}
+                            </>
+                          )}
+                          
+                          {msg.failed && msg.retryable && (
                               <button
                                 onClick={() => handleRetry(msg)}
-                                disabled={isExecutingCode}
+                                disabled={isExecutingCode || addingChart}
                                 style={{
                                   display: 'inline-flex',
                                   alignItems: 'center',
                                   gap: '8px',
                                   padding: '8px 16px',
-                                  background: isExecutingCode ? '#6b7280' : 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)',
+                                  background: (isExecutingCode || addingChart) ? '#6b7280' : 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)',
                                   color: 'white',
                                   border: 'none',
                                   borderRadius: '8px',
                                   fontSize: '14px',
                                   fontWeight: '500',
-                                  cursor: isExecutingCode ? 'not-allowed' : 'pointer',
+                                  cursor: (isExecutingCode || addingChart) ? 'not-allowed' : 'pointer',
                                   transition: 'all 0.2s',
-                                  opacity: isExecutingCode ? 0.6 : 1,
-                                  boxShadow: isExecutingCode ? 'none' : '0 2px 8px rgba(245, 158, 11, 0.2)'
+                                  opacity: (isExecutingCode || addingChart) ? 0.6 : 1,
+                                  boxShadow: (isExecutingCode || addingChart) ? 'none' : '0 2px 8px rgba(245, 158, 11, 0.2)'
                                 }}
                                 onMouseEnter={(e) => {
-                                  if (!isExecutingCode) {
+                                  if (!isExecutingCode && !addingChart) {
                                     e.currentTarget.style.background = 'linear-gradient(135deg, #d97706 0%, #f59e0b 100%)';
                                     e.currentTarget.style.boxShadow = '0 4px 12px rgba(245, 158, 11, 0.3)';
                                   }
                                 }}
                                 onMouseLeave={(e) => {
-                                  if (!isExecutingCode) {
+                                  if (!isExecutingCode && !addingChart) {
                                     e.currentTarget.style.background = 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)';
                                     e.currentTarget.style.boxShadow = '0 2px 8px rgba(245, 158, 11, 0.2)';
                                   }
@@ -1223,11 +1260,10 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                   <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
                                 </svg>
-                                <span>Retry</span>
+                                <span>{addingChart ? 'Retrying...' : 'Retry'}</span>
                               </button>
-                            )}
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </>
                     ) : (
                       msg.message
@@ -1642,6 +1678,13 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
         onAddChart={handleAddChart}
         datasetId={datasetId}
         addingChart={addingChart}
+      />
+      
+      <SharePopup
+        isOpen={showSharePopup}
+        onClose={() => setShowSharePopup(false)}
+        shareUrl={shareUrl}
+        expiresAt={shareExpiresAt}
       />
 
       {/* Chart Preview Modal */}

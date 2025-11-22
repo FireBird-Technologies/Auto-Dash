@@ -83,9 +83,9 @@ export default function App() {
     <Router>
       <NotificationProvider>
         <CreditsProvider>
-          <div className="app-container">
-            <AppRoutes />
-          </div>
+      <div className="app-container">
+        <AppRoutes />
+      </div>
         </CreditsProvider>
       </NotificationProvider>
     </Router>

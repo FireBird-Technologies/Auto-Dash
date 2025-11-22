@@ -127,79 +127,60 @@ export const PublicDashboard: React.FC = () => {
     <div style={{
       minHeight: '100vh',
       backgroundColor: '#f9fafb',
-      padding: '24px'
+      display: 'flex',
+      flexDirection: 'column'
     }}>
-      <div style={{
-        maxWidth: '1400px',
-        margin: '0 auto'
+      <div className="visualization-container-large" style={{
+        flex: 1,
+        overflow: 'auto'
       }}>
-        {/* Header */}
-        <div style={{
-          backgroundColor: 'white',
-          padding: '24px',
-          borderRadius: '8px',
-          marginBottom: '24px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-        }}>
-          <h1 style={{
-            margin: '0 0 8px 0',
-            fontSize: '28px',
-            color: '#111827'
+        <div className="chart-display">
+          {/* Dashboard Title */}
+          <div style={{ 
+            padding: '24px 20px 0 20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
           }}>
-            {dashboardData.dashboard_title || 'Public Dashboard'}
-          </h1>
-          <p style={{
-            margin: '0',
-            color: '#6b7280',
-            fontSize: '14px'
+            <h2 style={{
+              fontSize: '2rem',
+              fontWeight: 700,
+              color: '#1f2937',
+              margin: 0,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '12px',
+              padding: '12px 20px',
+              borderRadius: '12px',
+              border: '2px solid transparent'
+            }}>
+              {dashboardData.dashboard_title || 'Dashboard'}
+            </h2>
+          </div>
+          
+          {/* Charts Grid - Exact same layout as dashboard */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 1000px), 1fr))',
+            gap: '24px',
+            padding: '20px',
+            alignItems: 'start'
           }}>
-            Dataset: {dashboardData.filename} • Shared by {dashboardData.owner_name || 'Anonymous'}
-          </p>
-        </div>
-
-        {/* Charts Grid */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(600px, 1fr))',
-          gap: '24px'
-        }}>
-          {sortedFigures.map((chart, index) => (
-            <div
-              key={chart.chart_index}
-              style={{
-                backgroundColor: 'white',
-                padding: '24px',
-                borderRadius: '8px',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-              }}
-            >
-              <h3 style={{
-                margin: '0 0 16px 0',
-                fontSize: '18px',
-                color: '#111827'
-              }}>
-                {chart.title || `Chart ${index + 1}`}
-              </h3>
-              <div style={{ width: '100%', height: '500px' }}>
-                <PlotlyChartRenderer
-                  chartSpec={{ figure: chart.figure }}
-                  data={[]}
-                  chartIndex={chart.chart_index}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Footer */}
-        <div style={{
-          textAlign: 'center',
-          marginTop: '48px',
-          padding: '24px',
-          color: '#6b7280',
-          fontSize: '14px'
-        }}>
-          <p>Powered by AutoDash</p>
+            {sortedFigures.map((spec, index) => (
+              <PlotlyChartRenderer
+                key={spec.chart_index}
+                chartSpec={{
+                  chart_spec: '',
+                  chart_type: spec.chart_type,
+                  title: spec.title,
+                  chart_index: spec.chart_index,
+                  figure: spec.figure
+                }}
+                data={[]}
+                chartIndex={spec.chart_index}
+              />
+            ))}
+          </div>
         </div>
       </div>
     </div>
