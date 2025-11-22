@@ -33,6 +33,8 @@ from ..services.dataset_service import dataset_service
 from ..schemas.chat import FixVisualizationRequest
 from ..services.agents import fix_plotly, clean_plotly_code, plotly_editor
 from ..services.chart_creator import execute_plotly_code
+from ..services.credit_service import credit_service
+from ..middleware.credit_check import require_credits, CreditCheckResult
 import logging
 import re
 import dspy
@@ -887,13 +889,16 @@ async def prepare_dataset_context(
 @router.post("/analyze")
 async def analyze_data(
     request: FirstQueryRequest,
-    current_user: User = Depends(get_current_user),
+    credits: CreditCheckResult = Depends(require_credits(5)),
     db: Session = Depends(get_db)
 ):
     """
     Initial visualization generation endpoint - used for first chart after upload.
     Generates Plotly visualizations from natural language query.
+    
+    Costs: 5 credits per analysis
     """
+    current_user = credits.user
     # Get the dataset
     if request.dataset_id:
         df = dataset_service.get_dataset(current_user.id, request.dataset_id)
@@ -959,6 +964,15 @@ async def analyze_data(
             except Exception as e:
                 logger.warning(f"Failed to store chart metadata for chart {chart_index}: {e}")
         
+        # Deduct credits after successful analysis
+        credit_service.deduct_credits(
+            db, 
+            current_user.id, 
+            5, 
+            f"Data analysis: {request.query[:100]}",
+            metadata={"dataset_id": dataset_id, "chart_count": len(chart_specs)}
+        )
+        
         return {
             "message": f"{len(chart_specs)} chart(s) generated successfully",
             "query": request.query,
@@ -968,6 +982,15 @@ async def analyze_data(
         }
     else:
         # Backward compatibility for single chart
+        # Deduct credits after successful analysis
+        credit_service.deduct_credits(
+            db, 
+            current_user.id, 
+            5, 
+            f"Data analysis: {request.query[:100]}",
+            metadata={"dataset_id": dataset_id}
+        )
+        
         return {
             "message": "Chart generated successfully",
             "query": request.query,
@@ -1284,10 +1307,13 @@ async def get_dashboard_count(
 @router.post("/execute-code")
 async def execute_code(
     request: Dict[str, Any],
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     """
     Execute code from chat endpoint - either plotly edit or analysis code.
+    
+    Costs: 2 credits per execution (both plotly_edit and analysis)
     """
     code = request.get("code")
     dataset_id = request.get("dataset_id")
@@ -1295,6 +1321,19 @@ async def execute_code(
     
     if not code or not code_type or not dataset_id:
         raise HTTPException(status_code=400, detail="Missing required parameters")
+    
+    # Check credits before execution (2 credits for both types)
+    if not credit_service.check_sufficient_credits(db, current_user.id, 2):
+        credits_info = credit_service.get_balance_info(db, current_user.id)
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "error": "insufficient_credits",
+                "message": f"Insufficient credits. Required: 2, Available: {credits_info['balance']}",
+                "required": 2,
+                "balance": credits_info['balance']
+            }
+        )
     
     df = dataset_service.get_dataset(current_user.id, dataset_id)
     if df is None:
@@ -1308,6 +1347,14 @@ async def execute_code(
             result = execute_plotly_code(code, df)
             
             if result.get("success"):
+                # Deduct credits after successful execution
+                credit_service.deduct_credits(
+                    db,
+                    current_user.id,
+                    2,
+                    "Plotly code execution",
+                    metadata={"dataset_id": dataset_id, "code_type": "plotly_edit"}
+                )
                 return {
                     "success": True,
                     "code_type": "plotly_edit",
@@ -1448,6 +1495,15 @@ async def execute_code(
             
             logger.info(f"Analysis completed successfully. Output length: {len(final_result)}")
             
+            # Deduct credits after successful execution
+            credit_service.deduct_credits(
+                db,
+                current_user.id,
+                2,
+                "Data analysis code execution",
+                metadata={"dataset_id": dataset_id, "code_type": "analysis"}
+            )
+            
             return {
                 "success": True,
                 "code_type": "analysis",
@@ -1469,12 +1525,16 @@ async def execute_code(
 @router.post("/edit-chart")
 async def edit_chart(
     request: EditChartRequest,
-    current_user: User = Depends(get_current_user)
+    credits: CreditCheckResult = Depends(require_credits(2)),
+    db: Session = Depends(get_db)
 ):
     """
     Edit a chart using natural language instructions.
     Uses the plotly_editor DSPy module to generate edited code.
+    
+    Costs: 2 credits per edit
     """
+    current_user = credits.user
     try:
         # Get dataset context
         data_context = dataset_service.get_context(current_user.id, request.dataset_id)
@@ -1513,6 +1573,16 @@ async def edit_chart(
         
         # Execute edited code to get figure
         execution_result = execute_plotly_code(edited_code, df)
+        
+        # Deduct credits after successful edit
+        if execution_result.get('success'):
+            credit_service.deduct_credits(
+                db,
+                current_user.id,
+                2,
+                f"Chart edit: {request.edit_request[:100]}",
+                metadata={"dataset_id": request.dataset_id}
+            )
         
         return {
             "edited_code": edited_code,
@@ -1603,4 +1673,4 @@ async def suggest_query(
         result = program(dataset_context=dataset_context)
         suggestion = str(result.suggestion).strip()
         
-        return {"suggestion": suggestion+" - construct a dashboard showing this"}
+        return {"suggestion": suggestion +" - construct a dashboard showing this"}

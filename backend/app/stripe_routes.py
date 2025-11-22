@@ -1,35 +1,411 @@
+"""
+Stripe payment and webhook routes for subscription management
+"""
 import os
 import stripe
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, Header, HTTPException, Request, Depends
+from sqlalchemy.orm import Session
+import logging
 
+from .core.db import get_db
+from .core.security import get_current_user
+from .models import User
+from .services.subscription_service import subscription_service
+from .services.plan_service import plan_service
+from .services.credit_service import credit_service
+from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/payment", tags=["payment"])
 
+# Initialize Stripe
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "sk_test_123")
 WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
 
 
+class CreateCheckoutRequest(BaseModel):
+    """Request model for creating checkout session"""
+    plan_id: int
+
+
 @router.post("/create-checkout-session")
-def create_checkout_session():
-    domain = os.getenv("FRONTEND_URL", "http://localhost:5173")
-    session = stripe.checkout.Session.create(
-        mode="subscription",
-        line_items=[{"price": os.getenv("STRIPE_PRICE_ID", "price_test"), "quantity": 1}],
-        success_url=f"{domain}/?success=true",
-        cancel_url=f"{domain}/?canceled=true",
-    )
-    return {"checkoutUrl": session.url}
+def create_checkout_session(
+    request: CreateCheckoutRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Create a Stripe Checkout session for a subscription
+    
+    Args:
+        request: Contains plan_id
+        current_user: Authenticated user
+        db: Database session
+        
+    Returns:
+        Dictionary with checkoutUrl
+    """
+    try:
+        # Get plan details
+        plan = plan_service.get_plan_by_id(db, request.plan_id)
+        if not plan:
+            raise HTTPException(status_code=404, detail="Plan not found")
+        
+        if not plan.stripe_price_id:
+            raise HTTPException(status_code=400, detail="Plan does not have a Stripe price ID")
+        
+        # Get or create Stripe customer
+        existing_subscription = subscription_service.get_user_subscription(db, current_user.id)
+        customer_id = existing_subscription.stripe_customer_id if existing_subscription else None
+        
+        if not customer_id:
+            # Create new Stripe customer
+            customer = stripe.Customer.create(
+                email=current_user.email,
+                name=current_user.name,
+                metadata={
+                    "user_id": current_user.id
+                }
+            )
+            customer_id = customer.id
+            logger.info(f"Created Stripe customer {customer_id} for user {current_user.id}")
+        
+        # Create checkout session
+        domain = os.getenv("FRONTEND_URL", "http://localhost:5173")
+        session = stripe.checkout.Session.create(
+            customer=customer_id,
+            mode="subscription",
+            line_items=[{
+                "price": plan.stripe_price_id,
+                "quantity": 1
+            }],
+            success_url=f"{domain}/subscription?success=true&session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{domain}/subscription?canceled=true",
+            metadata={
+                "user_id": current_user.id,
+                "plan_id": plan.id
+            }
+        )
+        
+        logger.info(f"Created checkout session {session.id} for user {current_user.id}, plan {plan.name}")
+        return {"checkoutUrl": session.url}
+        
+    except stripe.error.StripeError as e:
+        logger.error(f"Stripe error creating checkout session: {e}")
+        raise HTTPException(status_code=500, detail=f"Stripe error: {str(e)}")
+    except Exception as e:
+        logger.error(f"Error creating checkout session: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/cancel-subscription")
+def cancel_subscription(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Cancel the current user's subscription at period end
+    
+    Args:
+        current_user: Authenticated user
+        db: Database session
+        
+    Returns:
+        Success message
+    """
+    try:
+        # Get user's subscription
+        user_subscription = subscription_service.get_user_subscription(db, current_user.id)
+        if not user_subscription or not user_subscription.stripe_subscription_id:
+            raise HTTPException(status_code=404, detail="No active subscription found")
+        
+        # Cancel in Stripe
+        stripe.Subscription.modify(
+            user_subscription.stripe_subscription_id,
+            cancel_at_period_end=True
+        )
+        
+        # Update in database
+        subscription_service.cancel_subscription(db, current_user.id, immediate=False)
+        
+        logger.info(f"Canceled subscription for user {current_user.id}")
+        return {"message": "Subscription will be canceled at the end of the billing period"}
+        
+    except stripe.error.StripeError as e:
+        logger.error(f"Stripe error canceling subscription: {e}")
+        raise HTTPException(status_code=500, detail=f"Stripe error: {str(e)}")
+    except Exception as e:
+        logger.error(f"Error canceling subscription: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/subscription-status")
+def get_subscription_status(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get current subscription status for the authenticated user
+    
+    Args:
+        current_user: Authenticated user
+        db: Database session
+        
+    Returns:
+        Subscription information
+    """
+    try:
+        subscription_info = subscription_service.get_subscription_info(db, current_user.id)
+        return subscription_info
+    except Exception as e:
+        logger.error(f"Error getting subscription status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/webhook")
-async def webhook(request: Request, stripe_signature: str | None = Header(default=None, alias="stripe-signature")):
+async def webhook(
+    request: Request,
+    stripe_signature: str | None = Header(default=None, alias="stripe-signature"),
+    db: Session = Depends(get_db)
+):
+    """
+    Handle Stripe webhook events
+    
+    Handles:
+    - checkout.session.completed: New subscription created
+    - customer.subscription.updated: Subscription changed
+    - customer.subscription.deleted: Subscription canceled
+    - invoice.payment_succeeded: Payment successful (reset credits)
+    - invoice.payment_failed: Payment failed
+    
+    Args:
+        request: FastAPI request object
+        stripe_signature: Stripe signature header
+        db: Database session
+        
+    Returns:
+        Success response
+    """
     payload = await request.body()
+    
     try:
-        event = stripe.Webhook.construct_event(payload=payload, sig_header=stripe_signature or "", secret=WEBHOOK_SECRET)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid webhook")
+        # Verify webhook signature
+        event = stripe.Webhook.construct_event(
+            payload=payload,
+            sig_header=stripe_signature or "",
+            secret=WEBHOOK_SECRET
+        )
+    except ValueError as e:
+        logger.error(f"Invalid payload: {e}")
+        raise HTTPException(status_code=400, detail="Invalid payload")
+    except stripe.error.SignatureVerificationError as e:
+        logger.error(f"Invalid signature: {e}")
+        raise HTTPException(status_code=400, detail="Invalid signature")
+    
+    event_type = event.get("type")
+    event_data = event.get("data", {}).get("object", {})
+    
+    logger.info(f"Received Stripe webhook: {event_type}")
+    
+    try:
+        # Handle checkout.session.completed
+        if event_type == "checkout.session.completed":
+            await handle_checkout_completed(db, event_data)
+        
+        # Handle customer.subscription.updated
+        elif event_type == "customer.subscription.updated":
+            await handle_subscription_updated(db, event_data)
+        
+        # Handle customer.subscription.deleted
+        elif event_type == "customer.subscription.deleted":
+            await handle_subscription_deleted(db, event_data)
+        
+        # Handle invoice.payment_succeeded
+        elif event_type == "invoice.payment_succeeded":
+            await handle_payment_succeeded(db, event_data)
+        
+        # Handle invoice.payment_failed
+        elif event_type == "invoice.payment_failed":
+            await handle_payment_failed(db, event_data)
+        
+        else:
+            logger.info(f"Unhandled event type: {event_type}")
+        
+        return {"received": True, "type": event_type}
+        
+    except Exception as e:
+        logger.error(f"Error processing webhook {event_type}: {e}")
+        import traceback
+        traceback.print_exc()
+        # Don't raise error - return 200 to prevent Stripe retries
+        return {"received": True, "error": str(e)}
 
-    # Handle events here if needed
-    return {"received": True, "type": event.get("type")}
+
+async def handle_checkout_completed(db: Session, session_data: dict):
+    """
+    Handle checkout.session.completed event
+    Creates subscription and assigns plan to user
+    """
+    user_id = session_data.get("metadata", {}).get("user_id")
+    plan_id = session_data.get("metadata", {}).get("plan_id")
+    
+    if not user_id or not plan_id:
+        logger.error(f"Missing user_id or plan_id in checkout session metadata")
+        return
+    
+    user_id = int(user_id)
+    plan_id = int(plan_id)
+    
+    # Get user
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        logger.error(f"User {user_id} not found")
+        return
+    
+    # Get subscription data from Stripe
+    subscription_id = session_data.get("subscription")
+    if subscription_id:
+        stripe_subscription = stripe.Subscription.retrieve(subscription_id)
+        
+        # Create or update subscription in database
+        subscription_service.create_or_update_subscription(
+            db, user, plan_id, stripe_subscription
+        )
+        
+        # Reset credits to new plan
+        credit_service.reset_credits(
+            db, user_id, plan_id,
+            description="Subscription created"
+        )
+        
+        logger.info(f"Completed checkout for user {user_id}, plan {plan_id}")
+    else:
+        logger.warning(f"No subscription ID in checkout session")
 
 
+async def handle_subscription_updated(db: Session, subscription_data: dict):
+    """
+    Handle customer.subscription.updated event
+    Updates subscription status and plan
+    """
+    # Get user from customer ID
+    customer_id = subscription_data.get("customer")
+    if not customer_id:
+        logger.error("No customer ID in subscription data")
+        return
+    
+    # Find user by stripe_customer_id
+    from .models import Subscription as SubscriptionModel
+    subscription = db.query(SubscriptionModel).filter(
+        SubscriptionModel.stripe_customer_id == customer_id
+    ).first()
+    
+    if not subscription:
+        logger.warning(f"No subscription found for customer {customer_id}")
+        return
+    
+    user_id = subscription.user_id
+    
+    # Get plan from price ID
+    price_id = subscription_data.get("items", {}).get("data", [{}])[0].get("price", {}).get("id")
+    if price_id:
+        plan = plan_service.get_plan_by_stripe_price_id(db, price_id)
+        if plan:
+            # Update subscription
+            user = db.query(User).filter(User.id == user_id).first()
+            if user:
+                subscription_service.create_or_update_subscription(
+                    db, user, plan.id, subscription_data
+                )
+                logger.info(f"Updated subscription for user {user_id}")
+
+
+async def handle_subscription_deleted(db: Session, subscription_data: dict):
+    """
+    Handle customer.subscription.deleted event
+    Downgrades user to free tier
+    """
+    # Get user from customer ID
+    customer_id = subscription_data.get("customer")
+    if not customer_id:
+        logger.error("No customer ID in subscription data")
+        return
+    
+    # Find user by stripe_customer_id
+    from .models import Subscription as SubscriptionModel
+    subscription = db.query(SubscriptionModel).filter(
+        SubscriptionModel.stripe_customer_id == customer_id
+    ).first()
+    
+    if not subscription:
+        logger.warning(f"No subscription found for customer {customer_id}")
+        return
+    
+    user_id = subscription.user_id
+    
+    # Downgrade to free tier
+    subscription_service.downgrade_to_free(db, user_id)
+    logger.info(f"Downgraded user {user_id} to free tier after subscription deletion")
+
+
+async def handle_payment_succeeded(db: Session, invoice_data: dict):
+    """
+    Handle invoice.payment_succeeded event
+    Resets user credits on successful monthly payment
+    """
+    # Get user from customer ID
+    customer_id = invoice_data.get("customer")
+    if not customer_id:
+        logger.error("No customer ID in invoice data")
+        return
+    
+    # Skip if this is the first payment (initial subscription)
+    billing_reason = invoice_data.get("billing_reason")
+    if billing_reason == "subscription_create":
+        logger.info("Skipping credit reset for initial subscription payment")
+        return
+    
+    # Find user by stripe_customer_id
+    from .models import Subscription as SubscriptionModel
+    subscription = db.query(SubscriptionModel).filter(
+        SubscriptionModel.stripe_customer_id == customer_id
+    ).first()
+    
+    if not subscription:
+        logger.warning(f"No subscription found for customer {customer_id}")
+        return
+    
+    user_id = subscription.user_id
+    
+    # Reset credits
+    subscription_service.handle_payment_succeeded(db, user_id, invoice_data)
+    logger.info(f"Reset credits for user {user_id} after successful payment")
+
+
+async def handle_payment_failed(db: Session, invoice_data: dict):
+    """
+    Handle invoice.payment_failed event
+    Marks subscription as past_due
+    """
+    # Get user from customer ID
+    customer_id = invoice_data.get("customer")
+    if not customer_id:
+        logger.error("No customer ID in invoice data")
+        return
+    
+    # Find user by stripe_customer_id
+    from .models import Subscription as SubscriptionModel
+    subscription = db.query(SubscriptionModel).filter(
+        SubscriptionModel.stripe_customer_id == customer_id
+    ).first()
+    
+    if not subscription:
+        logger.warning(f"No subscription found for customer {customer_id}")
+        return
+    
+    user_id = subscription.user_id
+    
+    # Handle failed payment
+    subscription_service.handle_payment_failed(db, user_id, invoice_data)
+    logger.warning(f"Payment failed for user {user_id}")

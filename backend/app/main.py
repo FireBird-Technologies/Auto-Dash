@@ -24,6 +24,8 @@ from .routes.google import router as google_router
 from .routes.payment import router as stripe_router
 from .routes.data import router as data_router
 from .routes.export import router as export_router
+from .routes.credits import router as credits_router
+from .routes.plans import router as plans_router
 
 app = FastAPI(title="AutoDash Backend", version="0.1.0")
 
@@ -98,8 +100,25 @@ app.include_router(data_router)
 # Export routes
 app.include_router(export_router)
 
+# Credits routes
+app.include_router(credits_router)
+
+# Plans routes
+app.include_router(plans_router)
+
 # Initialize DB
 if os.getenv("AUTO_MIGRATE", "1") == "1":
     Base.metadata.create_all(bind=engine)
+    
+    # Initialize default subscription plans
+    from .services.plan_service import plan_service
+    from .core.db import SessionLocal
+    try:
+        db = SessionLocal()
+        plan_service.initialize_default_plans(db, force=False)
+        db.close()
+        logging.info("Default subscription plans initialized")
+    except Exception as e:
+        logging.error(f"Failed to initialize subscription plans: {e}")
 
 

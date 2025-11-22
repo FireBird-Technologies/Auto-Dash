@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { config, getAuthHeaders, checkAuthResponse } from '../config';
+import { useCreditsContext } from '../contexts/CreditsContext';
 
 interface NavbarProps {
   onAccountClick?: () => void;
@@ -15,6 +16,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onAccountClick }) => {
   const [user, setUser] = useState<UserInfo | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const { credits, loading: creditsLoading } = useCreditsContext();
 
   useEffect(() => {
     // Check if user is logged in
@@ -86,6 +88,17 @@ export const Navbar: React.FC<NavbarProps> = ({ onAccountClick }) => {
     }
   };
 
+  const handleCreditsClick = () => {
+    if (credits && credits.balance < 100) {
+      const shouldUpgrade = window.confirm(
+        `You have ${credits.balance} credits remaining.\n\nWould you like to upgrade your plan for more credits?`
+      );
+      if (shouldUpgrade) {
+        window.location.href = '/pricing'; // Update this to your actual pricing page route
+      }
+    }
+  };
+
   return (
     <nav className="navbar">
       <div className="brand">
@@ -100,7 +113,26 @@ export const Navbar: React.FC<NavbarProps> = ({ onAccountClick }) => {
         />
       </div>
 
-      {user && (
+      <div className="navbar-right">
+        {!user && (
+          <a href="/pricing" className="navbar-pricing-link">
+            Pricing
+          </a>
+        )}
+
+        {user && credits && (
+          <button 
+            className={`credits-badge ${credits.balance < 10 ? 'low-credits' : ''}`}
+            onClick={handleCreditsClick}
+            title="Click to upgrade"
+          >
+            <span className="credits-count">
+              {creditsLoading ? '...' : credits.balance}
+            </span>
+          </button>
+        )}
+
+        {user && (
         <div className="user-menu" ref={menuRef}>
           <button
             className="user-menu-button"
@@ -132,6 +164,23 @@ export const Navbar: React.FC<NavbarProps> = ({ onAccountClick }) => {
                 <div className="user-menu-name">{user.name || 'User'}</div>
                 <div className="user-menu-email">{user.email}</div>
               </div>
+              {credits && (
+                <>
+                  <div className="user-menu-divider" />
+                  <div className="user-menu-credits">
+                    <div className="credits-info">
+                      <span className="credits-amount">{credits.balance} credits</span>
+                      {credits.plan_name && (
+                        <span className="credits-plan-badge">{credits.plan_name} Plan</span>
+                      )}
+                    </div>
+                    <div className="credits-costs">
+                      <small>• Dashboard: {credits.credits_per_analyze} credits</small>
+                      <small>• Edit: {credits.credits_per_edit} credits</small>
+                    </div>
+                  </div>
+                </>
+              )}
               <div className="user-menu-divider" />
               <button onClick={handleAccountClick} className="user-menu-item">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -152,7 +201,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onAccountClick }) => {
             </div>
           )}
         </div>
-      )}
+        )}
+      </div>
     </nav>
   );
 };
