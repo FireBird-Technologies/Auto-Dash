@@ -166,7 +166,7 @@ export const PublicDashboard: React.FC = () => {
             padding: '20px',
             alignItems: 'start'
           }}>
-            {sortedFigures.map((spec, index) => (
+            {sortedFigures.map((spec) => (
               <PlotlyChartRenderer
                 key={spec.chart_index}
                 chartSpec={{
