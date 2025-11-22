@@ -28,3 +28,5 @@ app/services/__pycache__/
 **/__pycache__/
 
 *.db
+STRIPE_SETUP.md
+SUBSCRIPTION_SYSTEM.md
