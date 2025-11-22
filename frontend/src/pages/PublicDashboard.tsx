@@ -182,7 +182,8 @@ export const PublicDashboard: React.FC = () => {
               </h3>
               <div style={{ width: '100%', height: '500px' }}>
                 <PlotlyChartRenderer
-                  figure={chart.figure}
+                  chartSpec={{ figure: chart.figure }}
+                  data={[]}
                   chartIndex={chart.chart_index}
                 />
               </div>
