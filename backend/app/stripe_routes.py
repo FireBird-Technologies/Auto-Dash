@@ -295,7 +295,7 @@ def change_plan(
                 "checkoutUrl": session.url,
                 "message": "Please complete checkout to upgrade your plan"
             }
-        
+            
         # User has Stripe subscription - proceed with plan change
         subscription = subscription_service.change_plan(
             db,

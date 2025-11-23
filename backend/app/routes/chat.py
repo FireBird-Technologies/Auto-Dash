@@ -4,7 +4,7 @@ from ..core.security import get_current_subject, get_current_user
 from ..core.db import get_db
 from ..models import User
 from sqlalchemy.orm import Session
-from ..services.agents import chat_function, chart_matcher, plotly_editor, data_query_sig, plotly_chart_metric, analysis_code_metric, clean_plotly_code, _dataset_context
+from ..services.agents import chat_function, chart_matcher, plotly_editor, data_query_sig, plotly_adder_sig,plotly_add_metric, plotly_chart_metric, analysis_code_metric, clean_plotly_code, _dataset_context
 from ..services.dataset_service import dataset_service
 import dspy
 import os
@@ -319,6 +319,26 @@ async def retry_code_generation(
             
             # Extract the code
             executable_code = str(result.code)
+            reply = f"**Retried with improved AI (3 iterations):**\n\n```python\n{executable_code}\n```"
+            if hasattr(result, 'reasoning'):
+                reply = f"{str(result.reasoning)}\n\n{reply}"
+                
+        elif request.code_type == 'add_chart_query':
+            # Use plotly_adder_sig with Refine
+            with dspy.context(lm=dspy.LM("openai/gpt-4o-mini", max_tokens=1400)):
+                adder = dspy.Refine(
+                    dspy.Predict(plotly_adder_sig),
+                    N=3,
+                    reward_fn=plotly_add_metric,
+                    threshold=0.5
+                )
+                result = adder(
+                    user_query=request.user_query,
+                    dataset_context=data_context
+                )
+            
+            # Extract and clean the code
+            executable_code = clean_plotly_code(str(result.chart_code))
             reply = f"**Retried with improved AI (3 iterations):**\n\n```python\n{executable_code}\n```"
             if hasattr(result, 'reasoning'):
                 reply = f"{str(result.reasoning)}\n\n{reply}"
