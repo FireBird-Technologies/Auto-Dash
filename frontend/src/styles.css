@@ -109,7 +109,7 @@ body {
   font-weight: 800;
   letter-spacing: -0.02em;
   margin: 0;
-  background: linear-gradient(135deg, var(--aa-text), var(--aa-primary));
+  background: var(--aa-primary);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -712,7 +712,7 @@ body {
   font-weight: 900;
   letter-spacing: -0.03em;
   margin: 0 0 16px;
-  background: linear-gradient(135deg, var(--aa-text), var(--aa-primary));
+  background: var(--aa-primary);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -2209,6 +2209,7 @@ body {
   flex: 1;
   overflow: hidden;
   height: 100%;
+  transition: all 0.3s ease;
 }
 
 /* Chat Sidebar - LEFT SIDE - Full Height - Resizable */

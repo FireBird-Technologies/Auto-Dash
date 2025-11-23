@@ -788,6 +788,12 @@ class SuggestQueries(dspy.Signature):
     suggestion = dspy.OutputField(desc="A single creative and insightful query that leads to multiple charts (5-10 words)")
 
 
+class ChartInsightsSignature(dspy.Signature):
+    """Generate insights and observations from a Plotly chart's metadata and statistics."""
+    figure_metadata = dspy.InputField(desc="Structured metadata about the chart including type, axes, data statistics, and layout information")
+    insights = dspy.OutputField(desc="Markdown-formatted insights describing key patterns, trends, observations, and notable data points from the chart")
+
+
 # ============================================================================
 # UTILITY FUNCTIONS
 # ============================================================================

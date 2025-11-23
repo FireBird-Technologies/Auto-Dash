@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { PlotlyChartRenderer } from '../components/PlotlyChartRenderer';
+import { MarkdownMessage } from '../components/MarkdownMessage';
 import { config } from '../config';
 
 export const PublicDashboard: React.FC = () => {
@@ -8,6 +9,7 @@ export const PublicDashboard: React.FC = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notesVisible, setNotesVisible] = useState<Record<number, boolean>>({});
   const [dashboardData, setDashboardData] = useState<{
     dataset_id: string;
     filename: string;
@@ -17,6 +19,7 @@ export const PublicDashboard: React.FC = () => {
       figure: any;
       title: string;
       chart_type: string;
+      notes?: string;
     }>;
     owner_name: string;
     created_at: string;
@@ -158,27 +161,178 @@ export const PublicDashboard: React.FC = () => {
             </h2>
           </div>
           
-          {/* Charts Grid - Exact same layout as dashboard */}
+          {/* Charts Grid - Same layout as dashboard with notes icon */}
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 1000px), 1fr))',
             gap: '24px',
             padding: '20px',
-            alignItems: 'start'
+            alignItems: 'start',
+            position: 'relative'
           }}>
             {sortedFigures.map((spec) => (
-              <PlotlyChartRenderer
-                key={spec.chart_index}
-                chartSpec={{
-                  chart_spec: '',
-                  chart_type: spec.chart_type,
-                  title: spec.title,
-                  chart_index: spec.chart_index,
-                  figure: spec.figure
+              <div
+                key={`chart-wrapper-${spec.chart_index}`}
+                style={{
+                  display: 'flex',
+                  gap: '12px',
+                  alignItems: 'flex-start'
                 }}
-                data={[]}
-                chartIndex={spec.chart_index}
-              />
+              >
+                {/* Chart */}
+                <div style={{
+                  flex: 1,
+                  backgroundColor: 'white',
+                  borderRadius: '12px',
+                  border: '1px solid #e5e7eb',
+                  overflow: 'hidden',
+                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+                  minHeight: '600px'
+                }}>
+                  <PlotlyChartRenderer
+                    chartSpec={{
+                      chart_spec: '',
+                      chart_type: spec.chart_type,
+                      title: spec.title,
+                      chart_index: spec.chart_index,
+                      figure: spec.figure
+                    }}
+                    data={[]}
+                    chartIndex={spec.chart_index}
+                  />
+                </div>
+                
+                {/* Notes Icon - Outside, to the right (same as dashboard) */}
+                {spec.notes && (
+                  <div style={{
+                    position: 'relative',
+                    flexShrink: 0
+                  }}>
+                    <button
+                      onClick={() => {
+                        setNotesVisible(prev => ({
+                          ...prev,
+                          [spec.chart_index]: !prev[spec.chart_index]
+                        }));
+                      }}
+                      style={{
+                        background: 'rgba(255, 255, 255, 0.9)',
+                        backdropFilter: 'blur(4px)',
+                        border: '1px solid rgba(0, 0, 0, 0.1)',
+                        borderRadius: '8px',
+                        padding: '8px 12px',
+                        fontSize: '12px',
+                        color: '#6b7280',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        transition: 'all 0.2s',
+                        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+                        whiteSpace: 'nowrap'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 1)';
+                        e.currentTarget.style.color = '#374151';
+                        e.currentTarget.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.15)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
+                        e.currentTarget.style.color = '#6b7280';
+                        e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.1)';
+                      }}
+                      title={notesVisible[spec.chart_index] ? "Hide notes" : "Show notes"}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="12" y1="18" x2="12" y2="12" />
+                        <line x1="9" y1="15" x2="15" y2="15" />
+                      </svg>
+                      {notesVisible[spec.chart_index] ? 'Hide notes' : 'Show notes'}
+                    </button>
+                    
+                    {/* Notes Panel - Subtle area on the right (same as dashboard) */}
+                    {notesVisible[spec.chart_index] && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '100%',
+                        right: 0,
+                        marginTop: '8px',
+                        width: '350px',
+                        maxHeight: '600px',
+                        backgroundColor: 'white',
+                        border: '1px solid rgba(0, 0, 0, 0.08)',
+                        borderRadius: '12px',
+                        boxShadow: '0 4px 16px rgba(0, 0, 0, 0.1)',
+                        zIndex: 100,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        overflow: 'hidden'
+                      }}>
+                        <div style={{
+                          padding: '12px 16px',
+                          borderBottom: '1px solid rgba(0, 0, 0, 0.06)',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          backgroundColor: 'white'
+                        }}>
+                          <span style={{
+                            fontSize: '13px',
+                            fontWeight: 500,
+                            color: '#374151'
+                          }}>
+                            Notes
+                          </span>
+                          <button
+                            onClick={() => {
+                              setNotesVisible(prev => ({
+                                ...prev,
+                                [spec.chart_index]: false
+                              }));
+                            }}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              cursor: 'pointer',
+                              padding: '4px',
+                              color: '#9ca3af',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              borderRadius: '4px',
+                              transition: 'all 0.2s'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = '#f3f4f6';
+                              e.currentTarget.style.color = '#6b7280';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = 'transparent';
+                              e.currentTarget.style.color = '#9ca3af';
+                            }}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <line x1="18" y1="6" x2="6" y2="18" />
+                              <line x1="6" y1="6" x2="18" y2="18" />
+                            </svg>
+                          </button>
+                        </div>
+                        <div style={{
+                          flex: 1,
+                          overflow: 'auto',
+                          padding: '16px',
+                          minHeight: '200px',
+                          backgroundColor: 'white'
+                        }}>
+                          <MarkdownMessage content={spec.notes} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             ))}
           </div>
         </div>

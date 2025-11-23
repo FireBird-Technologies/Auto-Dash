@@ -211,14 +211,56 @@ class DatasetService:
             dataset["charts"] = {}
         
         # Store chart metadata
+        # Preserve existing notes if updating other fields
+        existing_notes = ""
+        if chart_index in dataset.get("charts", {}):
+            existing_notes = dataset["charts"][chart_index].get("notes", "")
+        
         dataset["charts"][chart_index] = {
             "chart_spec": chart_spec,
             "plan": plan,
             "figure": figure_data,
             "chart_type": chart_type,
             "title": title,
+            "notes": existing_notes,
             "created_at": datetime.utcnow().isoformat()
         }
+    
+    def update_chart_notes(
+        self,
+        user_id: int,
+        dataset_id: str,
+        chart_index: int,
+        notes: str
+    ) -> None:
+        """
+        Update notes for a specific chart.
+        
+        Args:
+            user_id: User ID
+            dataset_id: Dataset identifier
+            chart_index: Chart index
+            notes: Notes content (markdown string)
+        """
+        if user_id not in self._store:
+            self._store[user_id] = {}
+        
+        if dataset_id not in self._store[user_id]:
+            raise ValueError(f"Dataset {dataset_id} not found. Upload dataset first.")
+        
+        dataset = self._store[user_id][dataset_id]
+        
+        # Initialize charts metadata if first time
+        if "charts" not in dataset:
+            dataset["charts"] = {}
+        
+        # Initialize chart if doesn't exist
+        if chart_index not in dataset["charts"]:
+            dataset["charts"][chart_index] = {}
+        
+        # Update notes
+        dataset["charts"][chart_index]["notes"] = notes
+        dataset["charts"][chart_index]["notes_updated_at"] = datetime.utcnow().isoformat()
     
     def get_chart_metadata(
         self,
@@ -690,11 +732,18 @@ class DatasetService:
         if public_dashboard.expires_at and datetime.utcnow() > public_dashboard.expires_at:
             return {"error": "expired"}
         
+        # Ensure figures_data includes notes if they exist
+        figures_data = public_dashboard.figures_data or []
+        for fig_data in figures_data:
+            # Notes should already be in figures_data from share request, but ensure it's present
+            if "notes" not in fig_data:
+                fig_data["notes"] = ""
+        
         return {
             "dataset_id": public_dashboard.dataset.dataset_id,
             "filename": public_dashboard.dataset.filename,
             "dashboard_title": public_dashboard.dashboard_title,
-            "figures_data": public_dashboard.figures_data,
+            "figures_data": figures_data,
             "owner_name": public_dashboard.dataset.user.name if public_dashboard.dataset.user else "Anonymous",
             "created_at": public_dashboard.created_at.isoformat()
         }
