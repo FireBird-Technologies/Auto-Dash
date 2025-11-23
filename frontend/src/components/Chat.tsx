@@ -7,6 +7,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { sendChatMessage, ChatRequest, ChatResponse } from '../services/chatApi';
+import { InsufficientBalancePopup } from './InsufficientBalancePopup';
 
 interface ChatProps {
   datasetId?: string;
@@ -31,6 +32,12 @@ export const Chat: React.FC<ChatProps> = ({
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [showInsufficientBalance, setShowInsufficientBalance] = useState(false);
+  const [insufficientBalanceData, setInsufficientBalanceData] = useState<{
+    required?: number;
+    balance?: number;
+    plan?: string;
+  }>({});
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -82,6 +89,29 @@ export const Chat: React.FC<ChatProps> = ({
 
     } catch (error) {
       console.error('Chat error:', error);
+      
+      // Check for insufficient credits (402)
+      const errorWithStatus = error as Error & { status?: number; detail?: any };
+      if (errorWithStatus.status === 402 && errorWithStatus.detail) {
+        const detail = typeof errorWithStatus.detail === 'string' 
+          ? JSON.parse(errorWithStatus.detail) 
+          : errorWithStatus.detail;
+        
+        if (detail.error === 'insufficient_credits') {
+          setInsufficientBalanceData({
+            required: detail.required,
+            balance: detail.balance,
+            plan: detail.plan
+          });
+          setShowInsufficientBalance(true);
+          
+          // Remove user message from chat history since action failed
+          setMessages(prev => prev.slice(0, -1));
+          setIsLoading(false);
+          return;
+        }
+      }
+      
       const errorMessage = error instanceof Error ? error.message : 'Failed to send message';
       
       setMessages(prev => [...prev, {
@@ -157,6 +187,15 @@ export const Chat: React.FC<ChatProps> = ({
           {isLoading ? '...' : '>'}
         </button>
       </div>
+
+      {/* Insufficient Balance Popup */}
+      <InsufficientBalancePopup
+        isOpen={showInsufficientBalance}
+        onClose={() => setShowInsufficientBalance(false)}
+        required={insufficientBalanceData.required}
+        balance={insufficientBalanceData.balance}
+        plan={insufficientBalanceData.plan}
+      />
     </div>
   );
 };

@@ -48,7 +48,18 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+      
+      // Create error with status code and detail for 402 handling
+      const error = new Error(
+        typeof errorData.detail === 'string' 
+          ? errorData.detail 
+          : errorData.detail?.message || `HTTP error! status: ${response.status}`
+      ) as Error & { status?: number; detail?: any };
+      
+      error.status = response.status;
+      error.detail = errorData.detail;
+      
+      throw error;
     }
 
     const data: ChatResponse = await response.json();

@@ -4,6 +4,7 @@ import { FixNotification } from '../FixNotification';
 import { MarkdownMessage } from '../MarkdownMessage';
 import { AddChartPopup } from '../AddChartPopup';
 import { SharePopup } from '../SharePopup';
+import { InsufficientBalancePopup } from '../InsufficientBalancePopup';
 import { config, getAuthHeaders, checkAuthResponse } from '../../config';
 import { useNotification } from '../../contexts/NotificationContext';
 
@@ -59,6 +60,12 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   const [showSharePopup, setShowSharePopup] = useState(false);
   const [shareUrl, setShareUrl] = useState<string>('');
   const [shareExpiresAt, setShareExpiresAt] = useState<string | null>(null);
+  const [showInsufficientBalance, setShowInsufficientBalance] = useState(false);
+  const [insufficientBalanceData, setInsufficientBalanceData] = useState<{
+    required?: number;
+    balance?: number;
+    plan?: string;
+  }>({});
 
   // Update local data when prop changes
   useEffect(() => {
@@ -228,7 +235,31 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
       await checkAuthResponse(response);
 
       if (!response.ok) {
-        throw new Error('Failed to execute analysis code');
+        const errorData = await response.json().catch(() => ({}));
+        
+        // Check for insufficient credits (402)
+        if (response.status === 402 && errorData.detail) {
+          const detail = typeof errorData.detail === 'string' 
+            ? JSON.parse(errorData.detail) 
+            : errorData.detail;
+          
+          if (detail.error === 'insufficient_credits') {
+            setInsufficientBalanceData({
+              required: detail.required,
+              balance: detail.balance,
+              plan: detail.plan
+            });
+            setShowInsufficientBalance(true);
+            setIsExecutingCode(false);
+            return;
+          }
+        }
+        
+        throw new Error(
+          typeof errorData.detail === 'string' 
+            ? errorData.detail 
+            : errorData.detail?.message || 'Failed to execute analysis code'
+        );
       }
 
       const result = await response.json();
@@ -306,7 +337,31 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
       await checkAuthResponse(response);
 
       if (!response.ok) {
-        throw new Error('Failed to execute plotly code');
+        const errorData = await response.json().catch(() => ({}));
+        
+        // Check for insufficient credits (402)
+        if (response.status === 402 && errorData.detail) {
+          const detail = typeof errorData.detail === 'string' 
+            ? JSON.parse(errorData.detail) 
+            : errorData.detail;
+          
+          if (detail.error === 'insufficient_credits') {
+            setInsufficientBalanceData({
+              required: detail.required,
+              balance: detail.balance,
+              plan: detail.plan
+            });
+            setShowInsufficientBalance(true);
+            setIsExecutingCode(false);
+            return;
+          }
+        }
+        
+        throw new Error(
+          typeof errorData.detail === 'string' 
+            ? errorData.detail 
+            : errorData.detail?.message || 'Failed to execute plotly code'
+        );
       }
 
       const result = await response.json();
@@ -390,7 +445,31 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
       await checkAuthResponse(response);
 
       if (!response.ok) {
-        throw new Error('Failed to retry code generation');
+        const errorData = await response.json().catch(() => ({}));
+        
+        // Check for insufficient credits (402)
+        if (response.status === 402 && errorData.detail) {
+          const detail = typeof errorData.detail === 'string' 
+            ? JSON.parse(errorData.detail) 
+            : errorData.detail;
+          
+          if (detail.error === 'insufficient_credits') {
+            setInsufficientBalanceData({
+              required: detail.required,
+              balance: detail.balance,
+              plan: detail.plan
+            });
+            setShowInsufficientBalance(true);
+            setIsExecutingCode(false);
+            return;
+          }
+        }
+        
+        throw new Error(
+          typeof errorData.detail === 'string' 
+            ? errorData.detail 
+            : errorData.detail?.message || 'Failed to retry code generation'
+        );
       }
       
       const result = await response.json();
@@ -486,7 +565,32 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
 
         if (!response.ok) {
           const errorData = await response.json();
-          throw new Error(errorData.detail || 'Failed to generate chart');
+          
+          // Check for insufficient credits (402)
+          if (response.status === 402 && errorData.detail) {
+            const detail = typeof errorData.detail === 'string' 
+              ? JSON.parse(errorData.detail) 
+              : errorData.detail;
+            
+            if (detail.error === 'insufficient_credits') {
+              setInsufficientBalanceData({
+                required: detail.required,
+                balance: detail.balance,
+                plan: detail.plan
+              });
+              setShowInsufficientBalance(true);
+              
+              // Remove user message from chat history since action failed
+              setChatHistory(prev => prev.slice(0, -1));
+              return;
+            }
+          }
+          
+          throw new Error(
+            typeof errorData.detail === 'string' 
+              ? errorData.detail 
+              : errorData.detail?.message || 'Failed to generate chart'
+          );
         }
 
         const result = await response.json();
@@ -536,7 +640,32 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
 
         if (!response.ok) {
           const errorData = await response.json();
-          throw new Error(errorData.detail || 'Failed to process chat request');
+          
+          // Check for insufficient credits (402)
+          if (response.status === 402 && errorData.detail) {
+            const detail = typeof errorData.detail === 'string' 
+              ? JSON.parse(errorData.detail) 
+              : errorData.detail;
+            
+            if (detail.error === 'insufficient_credits') {
+              setInsufficientBalanceData({
+                required: detail.required,
+                balance: detail.balance,
+                plan: detail.plan
+              });
+              setShowInsufficientBalance(true);
+              
+              // Remove user message from chat history since action failed
+              setChatHistory(prev => prev.slice(0, -1));
+              return;
+            }
+          }
+          
+          throw new Error(
+            typeof errorData.detail === 'string' 
+              ? errorData.detail 
+              : errorData.detail?.message || 'Failed to process chat request'
+          );
         }
 
         const result = await response.json();
@@ -600,7 +729,30 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to add chart');
+        
+        // Check for insufficient credits (402)
+        if (response.status === 402 && errorData.detail) {
+          const detail = typeof errorData.detail === 'string' 
+            ? JSON.parse(errorData.detail) 
+            : errorData.detail;
+          
+          if (detail.error === 'insufficient_credits') {
+            setInsufficientBalanceData({
+              required: detail.required,
+              balance: detail.balance,
+              plan: detail.plan
+            });
+            setShowInsufficientBalance(true);
+            setAddingChart(false);
+            return;
+          }
+        }
+        
+        throw new Error(
+          typeof errorData.detail === 'string' 
+            ? errorData.detail 
+            : errorData.detail?.message || 'Failed to add chart'
+        );
       }
 
       const result = await response.json();
@@ -1671,6 +1823,15 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
         onAddChart={handleAddChart}
         datasetId={datasetId}
         addingChart={addingChart}
+      />
+
+      {/* Insufficient Balance Popup */}
+      <InsufficientBalancePopup
+        isOpen={showInsufficientBalance}
+        onClose={() => setShowInsufficientBalance(false)}
+        required={insufficientBalanceData.required}
+        balance={insufficientBalanceData.balance}
+        plan={insufficientBalanceData.plan}
       />
       
       <SharePopup
