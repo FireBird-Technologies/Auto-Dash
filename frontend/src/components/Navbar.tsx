@@ -139,7 +139,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onAccountClick }) => {
           </button>
         )}
 
-        {user && (
+      {user && (
         <div className="user-menu" ref={menuRef}>
           <button
             className="user-menu-button"
@@ -208,7 +208,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onAccountClick }) => {
             </div>
           )}
         </div>
-        )}
+      )}
       </div>
     </nav>
   );

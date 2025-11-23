@@ -372,13 +372,6 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
       // Get data context (for now, we'll send empty string as backend will generate it)
       const dataContext = ""; // Backend will generate context from dataset_id
       
-      // For add_chart_query, retry by calling handleAddChart again
-      if (message.codeType === 'add_chart_query') {
-        await handleAddChart(message.originalQuery || message.message, true);
-        setIsExecutingCode(false);
-        return;
-      }
-      
       const response = await fetch(`${config.backendUrl}/api/chat/retry`, {
         method: 'POST',
         headers: getAuthHeaders({'Content-Type': 'application/json'}),
@@ -1130,7 +1123,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                         )}
                         <MarkdownMessage content={msg.message} />
                         <div style={{ marginTop: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                          {msg.codeType && msg.executableCode && (
+                        {msg.codeType && msg.executableCode && (
                             <>
                               {msg.codeType === 'add_chart_query' ? (
                                 <button
@@ -1176,55 +1169,55 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                   )}
                                 </button>
                               ) : (
-                              <button
-                                onClick={() => {
-                                  if (msg.codeType === 'plotly_edit' && msg.matchedChart) {
-                                    executePlotlyEdit(msg.executableCode!, msg.matchedChart.index);
-                                  } else if (msg.codeType === 'analysis') {
-                                    executeAnalysisCode(msg.executableCode!);
-                                  }
-                                }}
-                                disabled={isExecutingCode}
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '8px',
-                                  padding: '8px 16px',
-                                  background: isExecutingCode ? '#6b7280' : 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)',
-                                  color: 'white',
-                                  border: 'none',
-                                  borderRadius: '8px',
-                                  fontSize: '14px',
-                                  fontWeight: '500',
-                                  cursor: isExecutingCode ? 'not-allowed' : 'pointer',
-                                  transition: 'all 0.2s',
-                                  opacity: isExecutingCode ? 0.6 : 1,
-                                  boxShadow: isExecutingCode ? 'none' : '0 2px 8px rgba(239, 68, 68, 0.2)'
-                                }}
-                                onMouseEnter={(e) => {
-                                  if (!isExecutingCode) {
-                                    e.currentTarget.style.background = 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)';
-                                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.3)';
-                                  }
-                                }}
-                                onMouseLeave={(e) => {
-                                  if (!isExecutingCode) {
-                                    e.currentTarget.style.background = 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)';
-                                    e.currentTarget.style.boxShadow = '0 2px 8px rgba(239, 68, 68, 0.2)';
-                                  }
-                                }}
-                              >
-                                {isExecutingCode ? (
-                                  <span>Running...</span>
-                                ) : (
-                                  <span>{msg.codeType === 'plotly_edit' ? 'Run Code' : 'Run Analysis'}</span>
-                                )}
-                              </button>
+                            <button
+                              onClick={() => {
+                                if (msg.codeType === 'plotly_edit' && msg.matchedChart) {
+                                  executePlotlyEdit(msg.executableCode!, msg.matchedChart.index);
+                                } else if (msg.codeType === 'analysis') {
+                                  executeAnalysisCode(msg.executableCode!);
+                                }
+                              }}
+                              disabled={isExecutingCode}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                padding: '8px 16px',
+                                background: isExecutingCode ? '#6b7280' : 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '8px',
+                                fontSize: '14px',
+                                fontWeight: '500',
+                                cursor: isExecutingCode ? 'not-allowed' : 'pointer',
+                                transition: 'all 0.2s',
+                                opacity: isExecutingCode ? 0.6 : 1,
+                                boxShadow: isExecutingCode ? 'none' : '0 2px 8px rgba(239, 68, 68, 0.2)'
+                              }}
+                              onMouseEnter={(e) => {
+                                if (!isExecutingCode) {
+                                  e.currentTarget.style.background = 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)';
+                                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.3)';
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                if (!isExecutingCode) {
+                                  e.currentTarget.style.background = 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)';
+                                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(239, 68, 68, 0.2)';
+                                }
+                              }}
+                            >
+                              {isExecutingCode ? (
+                                <span>Running...</span>
+                              ) : (
+                                <span>{msg.codeType === 'plotly_edit' ? 'Run Code' : 'Run Analysis'}</span>
+                              )}
+                            </button>
                               )}
                             </>
                           )}
-                          
-                          {msg.failed && msg.retryable && (
+                            
+                            {msg.failed && msg.retryable && (
                               <button
                                 onClick={() => handleRetry(msg)}
                                 disabled={isExecutingCode || addingChart}
@@ -1262,8 +1255,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                 </svg>
                                 <span>{addingChart ? 'Retrying...' : 'Retry'}</span>
                               </button>
-                          )}
-                        </div>
+                            )}
+                          </div>
                       </>
                     ) : (
                       msg.message
