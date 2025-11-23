@@ -36,13 +36,14 @@ def clean_dataframe_for_json(df):
     return df.replace({np.nan: None, np.inf: None, -np.inf: None})
 from ..services.dataset_service import dataset_service
 from ..schemas.chat import FixVisualizationRequest
-from ..services.agents import fix_plotly, clean_plotly_code, plotly_editor, plotly_adder_sig
+from ..services.agents import fix_plotly, clean_plotly_code, plotly_editor, plotly_adder_sig, ChartInsightsSignature
 from ..services.chart_creator import execute_plotly_code
 from ..services.credit_service import credit_service
 from ..middleware.credit_check import require_credits, CreditCheckResult
+from ..services.chart_insights import extract_figure_metadata
+import dspy
 import logging
 import re
-import dspy
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -1818,6 +1819,33 @@ async def add_chart(
         raise HTTPException(status_code=500, detail=f"Failed to add chart: {str(e)}")
 
 
+@router.post("/datasets/{dataset_id}/charts/{chart_index}/notes")
+async def update_chart_notes(
+    dataset_id: str,
+    chart_index: int,
+    request: Dict[str, Any],
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Update notes for a specific chart.
+    """
+    notes = request.get("notes", "")
+    
+    try:
+        dataset_service.update_chart_notes(
+            current_user.id,
+            dataset_id,
+            chart_index,
+            notes
+        )
+        return {"success": True, "message": "Notes updated successfully"}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update notes: {str(e)}")
+
+
 @router.get("/datasets/{dataset_id}/charts/{chart_index}")
 async def get_chart_info(
     dataset_id: str,
@@ -1854,8 +1882,69 @@ async def get_chart_info(
         "chart_type": metadata.get("chart_type"),
         "title": metadata.get("title"),
         "figure": metadata.get("figure"),
+        "notes": metadata.get("notes", ""),
         "created_at": metadata.get("created_at")
     }
+
+
+@router.post("/datasets/{dataset_id}/charts/{chart_index}/insights")
+async def generate_chart_insights(
+    dataset_id: str,
+    chart_index: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Generate AI insights for a chart based on its figure metadata.
+    This is a free endpoint (no credits required).
+    """
+    try:
+        # Get chart metadata
+        metadata = dataset_service.get_chart_metadata(
+            current_user.id,
+            dataset_id,
+            chart_index
+        )
+        
+        if not metadata:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Chart {chart_index} not found for dataset {dataset_id}"
+            )
+        
+        figure_data = metadata.get("figure")
+        if not figure_data:
+            raise HTTPException(
+                status_code=400,
+                detail="Chart figure data not available"
+            )
+        
+        # Extract metadata from figure
+        figure_metadata = extract_figure_metadata(figure_data)
+        
+        # Format metadata as string for DSPy
+        metadata_str = json.dumps(figure_metadata, indent=2)
+        
+        # Generate insights using DSPy
+        with dspy.context(lm=dspy.LM("openai/gpt-4o-mini", max_tokens=500)):
+            insights_module = dspy.Predict(ChartInsightsSignature)
+            result = insights_module(figure_metadata=metadata_str)
+            insights = str(result.insights).strip()
+        
+        return {
+            "success": True,
+            "insights": insights,
+            "metadata": figure_metadata
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating insights: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate insights: {str(e)}"
+        )
 
 
 @router.post("/datasets/{dataset_id}/share")

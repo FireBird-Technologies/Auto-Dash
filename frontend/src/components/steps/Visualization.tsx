@@ -5,6 +5,7 @@ import { MarkdownMessage } from '../MarkdownMessage';
 import { AddChartPopup } from '../AddChartPopup';
 import { SharePopup } from '../SharePopup';
 import { InsufficientBalancePopup } from '../InsufficientBalancePopup';
+import { ChartNotes } from '../ChartNotes';
 import { config, getAuthHeaders, checkAuthResponse } from '../../config';
 import { useNotification } from '../../contexts/NotificationContext';
 
@@ -66,6 +67,17 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     balance?: number;
     plan?: string;
   }>({});
+  const [chatVisible, setChatVisible] = useState(() => {
+    const saved = localStorage.getItem('chatVisible');
+    return saved !== null ? saved === 'true' : true;
+  });
+  const [chartNotes, setChartNotes] = useState<Record<number, string>>({});
+  const [notesDropdownOpen, setNotesDropdownOpen] = useState<number | null>(null);
+  const [editingNotesIndex, setEditingNotesIndex] = useState<number | null>(null);
+  const [notesVisible, setNotesVisible] = useState<Record<number, boolean>>({});
+  const [generatingInsights, setGeneratingInsights] = useState<Record<number, boolean>>({});
+  const [savingNotes, setSavingNotes] = useState<Record<number, boolean>>({});
+  const [savedNotes, setSavedNotes] = useState<Record<number, boolean>>({});
 
   // Update local data when prop changes
   useEffect(() => {
@@ -85,6 +97,25 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     setFullDataFetched(false);
     hasGeneratedInitialChart.current = false;
   }, []);
+
+  // Save chat visibility preference
+  useEffect(() => {
+    localStorage.setItem('chatVisible', String(chatVisible));
+  }, [chatVisible]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (notesDropdownOpen !== null) {
+        const target = event.target as HTMLElement;
+        if (!target.closest('[data-notes-dropdown]')) {
+          setNotesDropdownOpen(null);
+        }
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [notesDropdownOpen]);
 
   // Function to fetch full dataset when needed (called after chart generation)
   const fetchFullDataset = async () => {
@@ -211,6 +242,40 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   };
 
   // Handler for chart zoom
+  const handleSaveNotes = async (chartIndex: number, notes: string) => {
+    if (!datasetId) return;
+    
+    setSavingNotes(prev => ({ ...prev, [chartIndex]: true }));
+    try {
+      const response = await fetch(
+        `${config.backendUrl}/api/data/datasets/${datasetId}/charts/${chartIndex}/notes`,
+        {
+          method: 'POST',
+          headers: getAuthHeaders({
+            'Content-Type': 'application/json',
+          }),
+          credentials: 'include',
+          body: JSON.stringify({ notes }),
+        }
+      );
+
+      await checkAuthResponse(response);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to save notes');
+      }
+      
+      // Mark as saved on success
+      setSavedNotes(prev => ({ ...prev, [chartIndex]: true }));
+    } catch (error) {
+      console.error('Error saving notes:', error);
+      notification.error('Failed to save notes');
+    } finally {
+      setSavingNotes(prev => ({ ...prev, [chartIndex]: false }));
+    }
+  };
+
   const handleChartZoom = (chartIndex: number) => {
     setZoomedChartIndex(chartIndex);
   };
@@ -940,12 +1005,13 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     }
 
     try {
-      // Collect figures data from all charts
+      // Collect figures data from all charts, including notes
       const figuresData = chartSpecs.map((spec, index) => ({
         chart_index: spec.chart_index ?? index,
         figure: spec.figure || spec.fig_data,
         title: spec.title || `Chart ${index + 1}`,
-        chart_type: spec.chart_type || 'plotly'
+        chart_type: spec.chart_type || 'plotly',
+        notes: chartNotes[index] || ''
       }));
 
       // Use the actual dashboard title from state (what user sees/edits)
@@ -1206,16 +1272,92 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
 
       <div className="visualization-page-wrapper">
         <div className="dashboard-layout" style={{ userSelect: isResizing ? 'none' : 'auto' }}>
+        {/* Show Chat Arrow - Appears when chat is hidden */}
+        {!chatVisible && (
+          <button
+            onClick={() => setChatVisible(true)}
+            style={{
+              position: 'fixed',
+              left: '0',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              background: 'white',
+              border: '1px solid #e5e7eb',
+              borderLeft: 'none',
+              borderTopRightRadius: '8px',
+              borderBottomRightRadius: '8px',
+              cursor: 'pointer',
+              padding: '12px 6px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#6b7280',
+              transition: 'all 0.2s',
+              zIndex: 1000,
+              boxShadow: '2px 0 4px rgba(0, 0, 0, 0.1)'
+            }}
+            title="Show chat"
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#f9fafb';
+              e.currentTarget.style.color = '#374151';
+              e.currentTarget.style.boxShadow = '2px 0 6px rgba(0, 0, 0, 0.15)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'white';
+              e.currentTarget.style.color = '#6b7280';
+              e.currentTarget.style.boxShadow = '2px 0 4px rgba(0, 0, 0, 0.1)';
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </button>
+        )}
+
         {/* Modern Chat Sidebar - LEFT SIDE */}
+        {chatVisible && (
         <aside className="chat-sidebar" style={{ width: `${sidebarWidth}px` }}>
           <div className="chat-header">
             <div className="chat-header-content">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <h3>AI Assistant</h3>
               </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <span className={`chat-status ${isLoading ? 'thinking' : 'online'}`}>
                 {isLoading ? 'Thinking...' : 'Online'}
               </span>
+                <button
+                  onClick={() => setChatVisible(false)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#6b7280',
+                    borderRadius: '4px',
+                    transition: 'all 0.2s',
+                    width: '24px',
+                    height: '24px'
+                  }}
+                  title="Hide chat"
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#f3f4f6';
+                    e.currentTarget.style.color = '#1f2937';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                    e.currentTarget.style.color = '#6b7280';
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -1490,8 +1632,10 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
             </button>
           </div>
         </aside>
+        )}
 
-        {/* Resize Handle */}
+        {/* Resize Handle - Only show when chat is visible */}
+        {chatVisible && (
         <div 
           className={`resize-handle ${isResizing ? 'resizing' : ''}`}
           onMouseDown={startResizing}
@@ -1501,6 +1645,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
             <span></span>
           </div>
         </div>
+        )}
 
         {/* Main Dashboard Area - RIGHT SIDE (Takes ALL remaining space) */}
         <main className="dashboard-main">
@@ -1647,7 +1792,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
             {(chartSpecs.length > 0 || (!isLoading && chartSpecs.length === 0)) && (
               <div className="chart-display">
                 {chartSpecs.length > 0 ? (
-                  <>
+                  <React.Fragment>
                           {/* Dashboard Title - Editable */}
                           <div style={{ 
                             padding: '24px 20px 0 20px',
@@ -1731,71 +1876,416 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                             )}
                           </div>
                           
-                          {/* Charts Grid */}
+                          {/* Charts Grid with Notes Icons */}
                           <div style={{
                             display: 'grid',
                             gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 1000px), 1fr))',
                             gap: '24px',
                             padding: '20px',
-                            alignItems: 'start'
+                            alignItems: 'start',
+                            position: 'relative'
                           }}>
                             {chartSpecs.map((spec, index) => (
-                              <PlotlyChartRenderer 
-                                key={`chart-${index}`}
-                                chartSpec={spec} 
-                                data={localData}
-                                chartIndex={index}
-                                datasetId={datasetId}
-                                onChartFixed={handleChartFixed}
-                                onFixingStatusChange={(isFixing) => setShowFixNotification(isFixing)}
-                                onZoom={handleChartZoom}
-                              />
-                            ))}
-                            
-                            {/* Add Chart Button */}
-                            <div style={{
-                              display: 'flex',
-                              justifyContent: 'center',
-                              alignItems: 'center',
-                              minHeight: '400px',
-                              width: '100%',
-                              gridColumn: '1 / -1'
-                            }}>
-                              <button
-                                onClick={() => setShowAddChartPopup(true)}
-                                className="add-chart-button"
+                              <div
+                                key={`chart-wrapper-${index}`}
                                 style={{
-                                  width: '60px',
-                                  height: '60px',
-                                  borderRadius: '50%',
-                                  border: '2px solid #ff6b6b',
-                                  backgroundColor: 'white',
-                                  color: '#ff6b6b',
-                                  fontSize: '32px',
-                                  cursor: 'pointer',
                                   display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  transition: 'all 0.2s',
-                                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+                                  gap: '12px',
+                                  alignItems: 'flex-start'
                                 }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.backgroundColor = '#ff6b6b';
-                                  e.currentTarget.style.color = 'white';
-                                  e.currentTarget.style.transform = 'scale(1.1)';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.backgroundColor = 'white';
-                                  e.currentTarget.style.color = '#ff6b6b';
-                                  e.currentTarget.style.transform = 'scale(1)';
-                                }}
-                                title="Add new chart to dashboard"
                               >
-                                +
-                              </button>
-                            </div>
+                                {/* Chart */}
+                                <div style={{
+                                  flex: 1,
+                                  backgroundColor: 'white',
+                                  borderRadius: '12px',
+                                  border: '1px solid #e5e7eb',
+                                  overflow: 'hidden',
+                                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+                                  minHeight: '600px'
+                                }}>
+                                  <PlotlyChartRenderer 
+                                    chartSpec={spec} 
+                                    data={localData}
+                                    chartIndex={index}
+                                    datasetId={datasetId}
+                                    onChartFixed={handleChartFixed}
+                                    onFixingStatusChange={(isFixing) => setShowFixNotification(isFixing)}
+                                    onZoom={handleChartZoom}
+                                  />
+                                </div>
+                                
+                                {/* Notes Icon - Outside, to the right */}
+                                <div 
+                                  data-notes-dropdown
+                                  style={{
+                                    position: 'relative',
+                                    flexShrink: 0
+                                  }}
+                                >
+                                  <button
+                                    onClick={() => {
+                                      // Toggle notes visibility
+                                      if (chartNotes[index] || editingNotesIndex === index) {
+                                        setNotesVisible(prev => ({
+                                          ...prev,
+                                          [index]: !prev[index]
+                                        }));
+                                        // If hiding and was editing, stop editing
+                                        if (notesVisible[index] && editingNotesIndex === index) {
+                                          setEditingNotesIndex(null);
+                                        }
+                                      } else {
+                                        // If no notes exist, start editing immediately
+                                        setEditingNotesIndex(index);
+                                        setNotesVisible(prev => ({
+                                          ...prev,
+                                          [index]: true
+                                        }));
+                                      }
+                                    }}
+                                    style={{
+                                      background: 'rgba(255, 255, 255, 0.9)',
+                                      backdropFilter: 'blur(4px)',
+                                      border: '1px solid rgba(0, 0, 0, 0.1)',
+                                      borderRadius: '8px',
+                                      padding: '8px 12px',
+                                      fontSize: '12px',
+                                      color: '#6b7280',
+                                      cursor: 'pointer',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '6px',
+                                      transition: 'all 0.2s',
+                                      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+                                      whiteSpace: 'nowrap'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 1)';
+                                      e.currentTarget.style.color = '#374151';
+                                      e.currentTarget.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.15)';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
+                                      e.currentTarget.style.color = '#6b7280';
+                                      e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.1)';
+                                    }}
+                                    title={chartNotes[index] ? (notesVisible[index] ? "Hide notes" : "Show notes") : "Add notes"}
+                                  >
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                      <polyline points="14 2 14 8 20 8" />
+                                      <line x1="12" y1="18" x2="12" y2="12" />
+                                      <line x1="9" y1="15" x2="15" y2="15" />
+                                    </svg>
+                                    {chartNotes[index] ? (notesVisible[index] ? 'Hide notes' : 'Show notes') : 'Add notes'}
+                                  </button>
+                                  
+                                  {/* Notes Panel - Subtle area on the right */}
+                                  {notesVisible[index] && (editingNotesIndex === index || chartNotes[index]) && (
+                                    <div style={{
+                                      position: 'absolute',
+                                      top: '100%',
+                                      right: 0,
+                                      marginTop: '8px',
+                                      width: '350px',
+                                      maxHeight: '600px',
+                                      backgroundColor: 'white',
+                                      border: '1px solid rgba(0, 0, 0, 0.08)',
+                                      borderRadius: '12px',
+                                      boxShadow: '0 4px 16px rgba(0, 0, 0, 0.1)',
+                                      zIndex: 100,
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      overflow: 'hidden'
+                                    }}>
+                                      <div style={{
+                                        padding: '12px 16px',
+                                        borderBottom: '1px solid rgba(0, 0, 0, 0.06)',
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        backgroundColor: 'white'
+                                      }}>
+                                        <div style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '12px'
+                                        }}>
+                                          <span style={{
+                                            fontSize: '13px',
+                                            fontWeight: 500,
+                                            color: '#374151'
+                                          }}>
+                                            Notes
+                                          </span>
+                                          {editingNotesIndex === index && (
+                                            <button
+                                              onClick={async () => {
+                                                if (!datasetId) return;
+                                                setGeneratingInsights(prev => ({ ...prev, [index]: true }));
+                                                try {
+                                                  const response = await fetch(
+                                                    `${config.backendUrl}/api/data/datasets/${datasetId}/charts/${index}/insights`,
+                                                    {
+                                                      method: 'POST',
+                                                      headers: getAuthHeaders({
+                                                        'Content-Type': 'application/json',
+                                                      }),
+                                                      credentials: 'include',
+                                                    }
+                                                  );
+                                                  await checkAuthResponse(response);
+                                                  if (!response.ok) throw new Error('Failed to generate insights');
+                                                  const result = await response.json();
+                                                  const newNotes = chartNotes[index] ? `${chartNotes[index]}\n\n${result.insights}` : result.insights;
+                                                  setChartNotes(prev => ({ ...prev, [index]: newNotes }));
+                                                } catch (error) {
+                                                  console.error('Error generating insights:', error);
+                                                  notification.error('Failed to generate insights');
+                                                } finally {
+                                                  setGeneratingInsights(prev => ({ ...prev, [index]: false }));
+                                                }
+                                              }}
+                                              disabled={generatingInsights[index]}
+                                              style={{
+                                                padding: '4px 10px',
+                                                background: 'rgba(220, 38, 38, 0.1)',
+                                                border: '1px solid rgba(220, 38, 38, 0.2)',
+                                                borderRadius: '6px',
+                                                fontSize: '11px',
+                                                color: '#dc2626',
+                                                cursor: generatingInsights[index] ? 'wait' : 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '4px',
+                                                transition: 'all 0.2s',
+                                                opacity: generatingInsights[index] ? 0.6 : 1
+                                              }}
+                                              onMouseEnter={(e) => {
+                                                if (!generatingInsights[index]) {
+                                                  e.currentTarget.style.background = 'rgba(220, 38, 38, 0.15)';
+                                                }
+                                              }}
+                                              onMouseLeave={(e) => {
+                                                e.currentTarget.style.background = 'rgba(220, 38, 38, 0.1)';
+                                              }}
+                                            >
+                                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                                              </svg>
+                                              {generatingInsights[index] ? 'Generating...' : 'Generate with AI'}
+                                            </button>
+                                          )}
+                                        </div>
+                                        <button
+                                          onClick={() => {
+                                            setEditingNotesIndex(null);
+                                            setNotesVisible(prev => ({
+                                              ...prev,
+                                              [index]: false
+                                            }));
+                                          }}
+                                          style={{
+                                            background: 'none',
+                                            border: 'none',
+                                            cursor: 'pointer',
+                                            padding: '4px',
+                                            color: '#9ca3af',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            borderRadius: '4px',
+                                            transition: 'all 0.2s'
+                                          }}
+                                          onMouseEnter={(e) => {
+                                            e.currentTarget.style.backgroundColor = '#f3f4f6';
+                                            e.currentTarget.style.color = '#6b7280';
+                                          }}
+                                          onMouseLeave={(e) => {
+                                            e.currentTarget.style.backgroundColor = 'transparent';
+                                            e.currentTarget.style.color = '#9ca3af';
+                                          }}
+                                        >
+                                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <line x1="18" y1="6" x2="6" y2="18" />
+                                            <line x1="6" y1="6" x2="18" y2="18" />
+                                          </svg>
+                                        </button>
+                                      </div>
+                                      <div style={{
+                                        flex: 1,
+                                        overflow: 'auto',
+                                        padding: '16px',
+                                        minHeight: '200px',
+                                        backgroundColor: 'white',
+                                        position: 'relative'
+                                      }}>
+                                        {editingNotesIndex === index ? (
+                                          <div style={{ position: 'relative', width: '100%', flex: 1 }}>
+                                            {generatingInsights[index] && (
+                                              <div className="magic-sparkles" style={{
+                                                position: 'absolute',
+                                                top: '12px',
+                                                left: '12px',
+                                                zIndex: 10,
+                                                pointerEvents: 'none'
+                                              }}>
+                                                <span className="sparkle">*</span>
+                                                <span className="sparkle">*</span>
+                                                <span className="sparkle">*</span>
+                                                <span className="sparkle">*</span>
+                                                <span className="sparkle">*</span>
+                                              </div>
+                                            )}
+                                            <textarea
+                                              value={chartNotes[index] || ''}
+                                              onChange={(e) => {
+                                                setChartNotes(prev => ({ ...prev, [index]: e.target.value }));
+                                                // Reset saved state when user edits
+                                                setSavedNotes(prev => ({ ...prev, [index]: false }));
+                                              }}
+                                              placeholder="Add your notes here... (Markdown supported)"
+                                              disabled={generatingInsights[index]}
+                                              style={{
+                                                width: '100%',
+                                                flex: 1,
+                                                minHeight: '200px',
+                                                padding: '12px',
+                                                border: '1px solid rgba(0, 0, 0, 0.1)',
+                                                borderRadius: '6px',
+                                                fontSize: '13px',
+                                                fontFamily: 'inherit',
+                                                lineHeight: '1.6',
+                                                resize: 'vertical',
+                                                outline: 'none',
+                                                backgroundColor: 'white',
+                                                opacity: generatingInsights[index] ? 0.7 : 1,
+                                                transition: 'opacity 0.2s'
+                                              }}
+                                              autoFocus
+                                            />
+                                          </div>
+                                        ) : (
+                                          <ChartNotes
+                                            chartIndex={index}
+                                            datasetId={datasetId}
+                                            initialNotes={chartNotes[index] || ''}
+                                            forceEdit={false}
+                                            onNotesChange={(notes) => {
+                                              setChartNotes(prev => ({ ...prev, [index]: notes }));
+                                            }}
+                                            onEditStart={() => {
+                                              setEditingNotesIndex(index);
+                                            }}
+                                          />
+                                        )}
+                                      </div>
+                                      {editingNotesIndex === index && (
+                                        <div style={{
+                                          padding: '12px 16px',
+                                          borderTop: '1px solid rgba(0, 0, 0, 0.06)',
+                                          backgroundColor: 'white',
+                                          display: 'flex',
+                                          justifyContent: 'flex-end'
+                                        }}>
+                                          <button
+                                            onClick={() => handleSaveNotes(index, chartNotes[index] || '')}
+                                            disabled={savingNotes[index] || savedNotes[index]}
+                                            style={{
+                                              padding: '6px 16px',
+                                              background: savedNotes[index] ? 'rgba(34, 197, 94, 0.15)' : 'rgba(34, 197, 94, 0.1)',
+                                              border: savedNotes[index] ? '1px solid rgba(34, 197, 94, 0.3)' : '1px solid rgba(34, 197, 94, 0.2)',
+                                              borderRadius: '6px',
+                                              fontSize: '12px',
+                                              fontWeight: 500,
+                                              color: '#22c55e',
+                                              cursor: savingNotes[index] || savedNotes[index] ? 'default' : 'pointer',
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              gap: '6px',
+                                              transition: 'all 0.2s',
+                                              opacity: savingNotes[index] ? 0.6 : 1
+                                            }}
+                                            onMouseEnter={(e) => {
+                                              if (!savingNotes[index] && !savedNotes[index]) {
+                                                e.currentTarget.style.background = 'rgba(34, 197, 94, 0.15)';
+                                              }
+                                            }}
+                                            onMouseLeave={(e) => {
+                                              e.currentTarget.style.background = savedNotes[index] ? 'rgba(34, 197, 94, 0.15)' : 'rgba(34, 197, 94, 0.1)';
+                                            }}
+                                          >
+                                            {savedNotes[index] ? (
+                                              <>
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                  <polyline points="20 6 9 17 4 12" />
+                                                </svg>
+                                                Saved
+                                              </>
+                                            ) : (
+                                              <>
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                                                  <polyline points="17 21 17 13 7 13 7 21" />
+                                                  <polyline points="7 3 7 8 15 8" />
+                                                </svg>
+                                                {savingNotes[index] ? 'Saving...' : 'Save Notes'}
+                                              </>
+                                            )}
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
                           </div>
-                        </>
+                          
+                          {/* Add Chart Button */}
+                          <div style={{
+                            display: 'flex',
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            minHeight: '400px',
+                            width: '100%',
+                            padding: '20px'
+                          }}>
+                            <button
+                              onClick={() => setShowAddChartPopup(true)}
+                              className="add-chart-button"
+                              style={{
+                                width: '60px',
+                                height: '60px',
+                                borderRadius: '50%',
+                                border: '2px solid #ff6b6b',
+                                backgroundColor: 'white',
+                                color: '#ff6b6b',
+                                fontSize: '32px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                transition: 'all 0.2s',
+                                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = '#ff6b6b';
+                                e.currentTarget.style.color = 'white';
+                                e.currentTarget.style.transform = 'scale(1.1)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = 'white';
+                                e.currentTarget.style.color = '#ff6b6b';
+                                e.currentTarget.style.transform = 'scale(1)';
+                              }}
+                              title="Add new chart to dashboard"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </React.Fragment>
                       ) : (
                         <div className="empty-state">
                           <p>Ask a question about your data to generate a visualization</p>

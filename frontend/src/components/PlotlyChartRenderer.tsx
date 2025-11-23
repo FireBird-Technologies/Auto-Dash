@@ -294,17 +294,13 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
       onClick={handleChartClick}
       style={{
         width: '100%',
-        maxWidth: '1000px',
         height: '100%',
         minHeight: '600px',
         position: 'relative',
-        border: '1px solid rgba(0, 0, 0, 0.1)',
-        borderRadius: '8px',
         padding: '12px',
         backgroundColor: '#ffffff',
         cursor: 'pointer',
         transition: 'all 0.2s ease',
-        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
         display: 'flex',
         flexDirection: 'column'
       }}
