@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { config, getAuthHeaders, checkAuthResponse } from '../config';
 import { useCreditsContext } from '../contexts/CreditsContext';
 import { useNotification } from '../contexts/NotificationContext';
@@ -16,11 +16,14 @@ interface UserInfo {
 
 export const Navbar: React.FC<NavbarProps> = ({ onAccountClick }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const notification = useNotification();
   const [user, setUser] = useState<UserInfo | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const { credits, loading: creditsLoading } = useCreditsContext();
+  
+  const isVisualizePage = location.pathname === '/visualize';
 
   useEffect(() => {
     // Check if user is logged in
@@ -125,6 +128,39 @@ export const Navbar: React.FC<NavbarProps> = ({ onAccountClick }) => {
           <a href="/pricing" className="navbar-pricing-link">
             Pricing
           </a>
+        )}
+
+        {user && (
+          <button
+            onClick={() => navigate('/visualize')}
+            className="navbar-analyze-link"
+            style={{
+              background: isVisualizePage ? '#fee2e2' : 'none',
+              border: 'none',
+              color: '#dc2626',
+              cursor: 'pointer',
+              fontSize: '16px',
+              fontWeight: isVisualizePage ? 600 : 500,
+              padding: '8px 16px',
+              borderRadius: '6px',
+              transition: 'background-color 0.2s',
+              marginRight: '12px'
+            }}
+            onMouseOver={(e) => {
+              if (!isVisualizePage) {
+                e.currentTarget.style.backgroundColor = '#fee2e2';
+              }
+            }}
+            onMouseOut={(e) => {
+              if (!isVisualizePage) {
+                e.currentTarget.style.backgroundColor = 'transparent';
+              } else {
+                e.currentTarget.style.backgroundColor = '#fee2e2';
+              }
+            }}
+          >
+            Visualize
+          </button>
         )}
 
         {user && credits && (

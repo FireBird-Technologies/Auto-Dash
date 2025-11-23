@@ -249,7 +249,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
   </p>
 
   <p>
-    <sub>Built by the AutoDash team</sub>
+    <sub>Built with ❤️ by FireBird Technologies</sub>
   </p>
 </div>
 

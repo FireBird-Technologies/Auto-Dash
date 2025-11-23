@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { FeatureCard } from './landing/FeatureCard';
 import { WorkflowStep } from './landing/WorkflowStep';
 import { GoogleAuthButton } from './GoogleAuthButton';
@@ -10,6 +11,15 @@ interface LandingProps {
 
 export const Landing: React.FC<LandingProps> = ({ onStart }) => {
   const landingRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
+
+  // Check if user is already logged in and redirect
+  useEffect(() => {
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      navigate('/visualize', { replace: true });
+    }
+  }, [navigate]);
 
   useEffect(() => {
     const observerOptions = {

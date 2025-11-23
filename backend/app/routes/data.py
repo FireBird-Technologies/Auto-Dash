@@ -29,6 +29,11 @@ from datetime import datetime
 from ..core.db import get_db
 from ..core.security import get_current_user
 from ..models import User, Dataset as DatasetModel
+
+
+def clean_dataframe_for_json(df):
+    """Replace NaN, inf, and -inf with None for JSON serialization"""
+    return df.replace({np.nan: None, np.inf: None, -np.inf: None})
 from ..services.dataset_service import dataset_service
 from ..schemas.chat import FixVisualizationRequest
 from ..services.agents import fix_plotly, clean_plotly_code, plotly_editor, plotly_adder_sig
@@ -334,7 +339,7 @@ async def get_sample_data():
         df = pd.read_csv(sample_file)
         
         # Replace NaN with None (which becomes null in JSON)
-        clean_df = df.replace({np.nan: None, np.inf: None, -np.inf: None})
+        clean_df = clean_dataframe_for_json(df)
         
         # Return data info
         return {
@@ -342,8 +347,8 @@ async def get_sample_data():
             "filename": "housing_sample.csv",
             "rows": len(df),
             "columns": df.columns.tolist(),
-            "data": df_clean.to_dict('records'),
-            "preview": df_clean.head(10).to_dict('records'),
+            "data": clean_df.to_dict('records'),
+            "preview": clean_df.head(10).to_dict('records'),
             "data_types": df.dtypes.astype(str).to_dict()
         }
     except Exception as e:
@@ -636,6 +641,7 @@ async def upload_data(
         if isinstance(df, dict):
             # Multi-sheet Excel
             first_sheet = list(df.values())[0]
+            first_sheet_clean = clean_dataframe_for_json(first_sheet)
             data_info = {
                 "dataset_id": dataset_id,
                 "filename": file.filename,
@@ -646,13 +652,14 @@ async def upload_data(
                 "columns": total_columns,
                 "column_names": first_sheet.columns.tolist(),
                 "data_types": first_sheet.dtypes.astype(str).to_dict(),
-                "preview": first_sheet.head(5).to_dict('records'),
+                "preview": first_sheet_clean.head(5).to_dict('records'),
                 "file_size_bytes": len(content),
                 "processing_method": "robust_parser",
                 "context_status": "pending"
             }
         else:
             # CSV or single-sheet Excel
+            df_clean = clean_dataframe_for_json(df)
             data_info = {
                 "dataset_id": dataset_id,
                 "filename": file.filename,
@@ -663,7 +670,7 @@ async def upload_data(
                 "columns": total_columns,
                 "column_names": df.columns.tolist(),
                 "data_types": df.dtypes.astype(str).to_dict(),
-                "preview": df.head(5).to_dict('records'),
+                "preview": df_clean.head(5).to_dict('records'),
                 "file_size_bytes": len(content),
                 "processing_method": "robust_parser",
                 "context_status": "pending"
@@ -780,7 +787,7 @@ async def get_dataset_preview(
     first_sheet = df[sheet_names[0]]
     
     # Replace NaN with None (which becomes null in JSON)
-    df_clean = first_sheet.replace({np.nan: None, np.inf: None, -np.inf: None})
+    df_clean = clean_dataframe_for_json(first_sheet)
     
     return {
         "dataset_id": dataset_id,
@@ -818,7 +825,7 @@ async def get_full_dataset(
     total_rows = len(first_sheet)
     
     # Replace NaN with None (which becomes null in JSON)
-    df_clean = first_sheet.replace({np.nan: None, np.inf: None, -np.inf: None})
+    df_clean = clean_dataframe_for_json(first_sheet)
     
     return {
         "dataset_id": dataset_id,
