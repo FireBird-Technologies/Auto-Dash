@@ -8,6 +8,7 @@ interface ChartNotesProps {
   initialNotes?: string;
   onNotesChange?: (notes: string) => void;
   forceEdit?: boolean;
+  onEditStart?: () => void;
 }
 
 export const ChartNotes: React.FC<ChartNotesProps> = ({
@@ -15,7 +16,8 @@ export const ChartNotes: React.FC<ChartNotesProps> = ({
   datasetId,
   initialNotes = '',
   onNotesChange,
-  forceEdit = false
+  forceEdit = false,
+  onEditStart
 }) => {
   const [notes, setNotes] = useState(initialNotes);
   const [isEditing, setIsEditing] = useState(forceEdit || !initialNotes);
@@ -161,7 +163,12 @@ export const ChartNotes: React.FC<ChartNotesProps> = ({
           minHeight: 0,
           backgroundColor: 'white'
         }}
-        onClick={() => setIsEditing(true)}
+        onClick={() => {
+          setIsEditing(true);
+          if (onEditStart) {
+            onEditStart();
+          }
+        }}
         >
           {notes ? (
             <MarkdownMessage content={notes} />

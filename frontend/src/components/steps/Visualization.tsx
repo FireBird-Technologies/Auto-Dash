@@ -77,6 +77,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   const [notesVisible, setNotesVisible] = useState<Record<number, boolean>>({});
   const [generatingInsights, setGeneratingInsights] = useState<Record<number, boolean>>({});
   const [savingNotes, setSavingNotes] = useState<Record<number, boolean>>({});
+  const [savedNotes, setSavedNotes] = useState<Record<number, boolean>>({});
 
   // Update local data when prop changes
   useEffect(() => {
@@ -264,6 +265,9 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
         const errorData = await response.json();
         throw new Error(errorData.detail || 'Failed to save notes');
       }
+      
+      // Mark as saved on success
+      setSavedNotes(prev => ({ ...prev, [chartIndex]: true }));
     } catch (error) {
       console.error('Error saving notes:', error);
       notification.error('Failed to save notes');
@@ -2138,6 +2142,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                               value={chartNotes[index] || ''}
                                               onChange={(e) => {
                                                 setChartNotes(prev => ({ ...prev, [index]: e.target.value }));
+                                                // Reset saved state when user edits
+                                                setSavedNotes(prev => ({ ...prev, [index]: false }));
                                               }}
                                               placeholder="Add your notes here... (Markdown supported)"
                                               disabled={generatingInsights[index]}
@@ -2169,6 +2175,9 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                             onNotesChange={(notes) => {
                                               setChartNotes(prev => ({ ...prev, [index]: notes }));
                                             }}
+                                            onEditStart={() => {
+                                              setEditingNotesIndex(index);
+                                            }}
                                           />
                                         )}
                                       </div>
@@ -2182,16 +2191,16 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                         }}>
                                           <button
                                             onClick={() => handleSaveNotes(index, chartNotes[index] || '')}
-                                            disabled={savingNotes[index]}
+                                            disabled={savingNotes[index] || savedNotes[index]}
                                             style={{
                                               padding: '6px 16px',
-                                              background: 'rgba(34, 197, 94, 0.1)',
-                                              border: '1px solid rgba(34, 197, 94, 0.2)',
+                                              background: savedNotes[index] ? 'rgba(34, 197, 94, 0.15)' : 'rgba(34, 197, 94, 0.1)',
+                                              border: savedNotes[index] ? '1px solid rgba(34, 197, 94, 0.3)' : '1px solid rgba(34, 197, 94, 0.2)',
                                               borderRadius: '6px',
                                               fontSize: '12px',
                                               fontWeight: 500,
                                               color: '#22c55e',
-                                              cursor: savingNotes[index] ? 'wait' : 'pointer',
+                                              cursor: savingNotes[index] || savedNotes[index] ? 'default' : 'pointer',
                                               display: 'flex',
                                               alignItems: 'center',
                                               gap: '6px',
@@ -2199,20 +2208,31 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                               opacity: savingNotes[index] ? 0.6 : 1
                                             }}
                                             onMouseEnter={(e) => {
-                                              if (!savingNotes[index]) {
+                                              if (!savingNotes[index] && !savedNotes[index]) {
                                                 e.currentTarget.style.background = 'rgba(34, 197, 94, 0.15)';
                                               }
                                             }}
                                             onMouseLeave={(e) => {
-                                              e.currentTarget.style.background = 'rgba(34, 197, 94, 0.1)';
+                                              e.currentTarget.style.background = savedNotes[index] ? 'rgba(34, 197, 94, 0.15)' : 'rgba(34, 197, 94, 0.1)';
                                             }}
                                           >
-                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-                                              <polyline points="17 21 17 13 7 13 7 21" />
-                                              <polyline points="7 3 7 8 15 8" />
-                                            </svg>
-                                            {savingNotes[index] ? 'Saving...' : 'Save Notes'}
+                                            {savedNotes[index] ? (
+                                              <>
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                  <polyline points="20 6 9 17 4 12" />
+                                                </svg>
+                                                Saved
+                                              </>
+                                            ) : (
+                                              <>
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                                                  <polyline points="17 21 17 13 7 13 7 21" />
+                                                  <polyline points="7 3 7 8 15 8" />
+                                                </svg>
+                                                {savingNotes[index] ? 'Saving...' : 'Save Notes'}
+                                              </>
+                                            )}
                                           </button>
                                         </div>
                                       )}
