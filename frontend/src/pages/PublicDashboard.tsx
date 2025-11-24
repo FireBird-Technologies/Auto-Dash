@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { PlotlyChartRenderer } from '../components/PlotlyChartRenderer';
 import { MarkdownMessage } from '../components/MarkdownMessage';
-import { GoogleAuthButton } from '../components/GoogleAuthButton';
 import { config } from '../config';
 
 export const PublicDashboard: React.FC = () => {
