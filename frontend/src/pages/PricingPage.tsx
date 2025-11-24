@@ -44,7 +44,7 @@ const FAQS: FAQ[] = [
   },
   {
     question: "What's the difference between Free and paid plans?",
-    answer: "Paid plans (Pro and Ultra) get access to the latest AI models, higher credit limits, priority support, and advanced features. Free plans use standard models with limited credits."
+    answer: "Paid plans (Pro and Ultra) get access to the latest AI models, higher credit limits, priority support, and advanced features. Free plans use standard models with limited credits. Additionally, shared dashboards on free plans expire after 24 hours, while paid plans have permanent dashboards."
   },
   {
     question: "Can I cancel anytime?",
@@ -257,6 +257,12 @@ export const PricingPage: React.FC = () => {
                     </svg>
                     <span>{isPaid ? 'Latest AI models' : 'Standard models'}</span>
                   </div>
+                  <div className="feature-item">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                    <span>{isPaid ? 'Dashboards never expire' : 'Dashboards expire in 24 hours'}</span>
+                  </div>
                   {plan.features?.priority_support && (
                     <div className="feature-item">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -307,6 +313,12 @@ export const PricingPage: React.FC = () => {
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
                 <span>Latest AI models</span>
+              </div>
+              <div className="feature-item">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                <span>Dashboards never expire</span>
               </div>
               <div className="feature-item">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
