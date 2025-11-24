@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import { config, getAuthHeaders, checkAuthResponse } from '../config';
+import { useNotification } from '../contexts/NotificationContext';
 
 type Row = Record<string, number | string>;
 
@@ -8,6 +9,7 @@ interface FileUploadProps {
 }
 
 export const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded }) => {
+  const notification = useNotification();
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -60,7 +62,16 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded }) => {
       onDataLoaded([], [], result.dataset_id);
     } catch (err) {
       console.error('Error loading sample data:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load sample data');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load sample data';
+      setError(errorMessage);
+      
+      // Show popup notification for sample data errors
+      notification.showNotification({
+        type: 'error',
+        title: 'Failed to Load Sample Data',
+        message: 'We\'re sorry, something went wrong. Currently only supports datasets that are in tabular form. Please try again later.',
+        duration: 6000
+      });
     } finally {
       setUploading(false);
     }
@@ -83,7 +94,16 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded }) => {
       onDataLoaded([], [], result.dataset_id);
     } catch (err) {
       console.error('Error uploading file:', err);
-      setError(err instanceof Error ? err.message : 'Upload failed');
+      const errorMessage = err instanceof Error ? err.message : 'Upload failed';
+      setError(errorMessage);
+      
+      // Show popup notification for upload errors
+      notification.showNotification({
+        type: 'error',
+        title: 'Upload Failed',
+        message: 'We\'re sorry, something went wrong. Currently only supports datasets that are in tabular form. Please try again later.',
+        duration: 6000
+      });
     } finally {
       setUploading(false);
     }

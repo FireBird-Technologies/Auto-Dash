@@ -12,7 +12,7 @@ _ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(dotenv_path=_ENV_PATH, override=False)
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.WARNING,  # Changed from INFO to WARNING to reduce logging
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
@@ -41,7 +41,7 @@ else:
 
 
 
-default_lm = dspy.LM(default_model, max_tokens=3500,api_key=os.getenv(provider+'_API_KEY'), temperature=1, cache=False)
+default_lm = dspy.LM(default_model, max_tokens=3200,api_key=os.getenv(provider+'_API_KEY'), temperature=1, cache=False)
 
 dspy.configure(lm=default_lm)
 

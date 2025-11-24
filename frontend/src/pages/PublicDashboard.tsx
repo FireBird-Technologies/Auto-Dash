@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { PlotlyChartRenderer } from '../components/PlotlyChartRenderer';
 import { MarkdownMessage } from '../components/MarkdownMessage';
+import { GoogleAuthButton } from '../components/GoogleAuthButton';
 import { config } from '../config';
 
 export const PublicDashboard: React.FC = () => {
@@ -10,6 +11,8 @@ export const PublicDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notesVisible, setNotesVisible] = useState<Record<number, boolean>>({});
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [showLoginPopup, setShowLoginPopup] = useState(false);
   const [dashboardData, setDashboardData] = useState<{
     dataset_id: string;
     filename: string;
@@ -26,6 +29,16 @@ export const PublicDashboard: React.FC = () => {
   } | null>(null);
 
   useEffect(() => {
+    // Check if user is logged in
+    const authToken = localStorage.getItem('auth_token');
+    const loggedIn = !!authToken;
+    setIsLoggedIn(loggedIn);
+
+    // Show login popup if not logged in and not dismissed
+    if (!loggedIn && !sessionStorage.getItem('login_popup_dismissed')) {
+      setShowLoginPopup(true);
+    }
+
     const fetchDashboard = async () => {
       if (!token) {
         setError('Invalid share token');
@@ -126,6 +139,17 @@ export const PublicDashboard: React.FC = () => {
   // Sort figures by chart_index
   const sortedFigures = [...dashboardData.figures_data].sort((a, b) => a.chart_index - b.chart_index);
 
+  const handleLogin = () => {
+    sessionStorage.setItem('auth_callback', 'true');
+    sessionStorage.setItem('auth_redirect_to', `/shared/${token}`);
+    window.location.href = `${config.backendUrl}/api/auth/google/login`;
+  };
+
+  const handleSeeWithoutLogin = () => {
+    setShowLoginPopup(false);
+    sessionStorage.setItem('login_popup_dismissed', 'true');
+  };
+
   return (
     <div style={{
       minHeight: '100vh',
@@ -133,6 +157,126 @@ export const PublicDashboard: React.FC = () => {
       display: 'flex',
       flexDirection: 'column'
     }}>
+      {/* Login Popup */}
+      {showLoginPopup && !isLoggedIn && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10000,
+            padding: '20px'
+          }}
+          onClick={handleSeeWithoutLogin}
+        >
+          <div
+            style={{
+              backgroundColor: 'white',
+              borderRadius: '16px',
+              padding: '32px',
+              maxWidth: '450px',
+              width: '100%',
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '24px'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div>
+              <h2 style={{
+                margin: 0,
+                fontSize: '24px',
+                fontWeight: 700,
+                color: '#1f2937',
+                marginBottom: '8px'
+              }}>
+                Welcome to AutoDash
+              </h2>
+              <p style={{
+                margin: 0,
+                fontSize: '15px',
+                color: '#6b7280',
+                lineHeight: '1.5'
+              }}>
+                Log in to create your own dashboards or continue viewing without logging in.
+              </p>
+            </div>
+
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px'
+            }}>
+              <button
+                onClick={handleLogin}
+                style={{
+                  padding: '14px 24px',
+                  fontSize: '16px',
+                  fontWeight: 600,
+                  color: 'white',
+                  background: 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  boxShadow: '0 2px 8px rgba(239, 68, 68, 0.2)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.3)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)';
+                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(239, 68, 68, 0.2)';
+                }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+                  <polyline points="10 17 15 12 10 7" />
+                  <line x1="15" y1="12" x2="3" y2="12" />
+                </svg>
+                Log in with Google
+              </button>
+
+              <button
+                onClick={handleSeeWithoutLogin}
+                style={{
+                  padding: '14px 24px',
+                  fontSize: '16px',
+                  fontWeight: 500,
+                  color: '#374151',
+                  background: 'white',
+                  border: '2px solid #e5e7eb',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#f9fafb';
+                  e.currentTarget.style.borderColor = '#d1d5db';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'white';
+                  e.currentTarget.style.borderColor = '#e5e7eb';
+                }}
+              >
+                See without login
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="visualization-container-large" style={{
         flex: 1,
         overflow: 'auto'
