@@ -1231,8 +1231,19 @@ class PlotlyVisualizationModule(dspy.Module):
                     dataset_context=dataset_context,
                     styling=style
                 ))
-            
-            results = await asyncio.gather(*tasks)
+            default_model = os.getenv("DEFAULT_MODEL", "").lower()
+            if "anthropic" in default_model:
+                provider = "ANTHROPIC"
+            elif "openai" in default_model:
+                provider = "OPENAI"
+            elif "gemini" in default_model:
+                provider = "GEMINI"
+            else:
+                provider = "UNKNOWN"
+            medium_lm = dspy.LM(default_model, max_tokens=2000,api_key=os.getenv(provider+'_API_KEY'), temperature=1, cache=False)
+
+            with dspy.context(lm=medium_lm):
+                results = await asyncio.gather(*tasks)
             
             # Process results into chart specifications
             chart_specs = []
