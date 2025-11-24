@@ -21,7 +21,15 @@ function AuthHandler() {
     if (token && sessionStorage.getItem('auth_callback')) {
       localStorage.setItem('auth_token', token);
       sessionStorage.removeItem('auth_callback');
-      navigate('/visualize', { replace: true });
+      
+      // Check if there's a redirect URL stored
+      const redirectTo = sessionStorage.getItem('auth_redirect_to');
+      if (redirectTo) {
+        sessionStorage.removeItem('auth_redirect_to');
+        navigate(redirectTo, { replace: true });
+      } else {
+        navigate('/visualize', { replace: true });
+      }
     }
   }, [navigate, location]);
 

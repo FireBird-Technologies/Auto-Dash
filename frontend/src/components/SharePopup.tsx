@@ -74,7 +74,7 @@ export const SharePopup: React.FC<SharePopupProps> = ({
             fontWeight: 700,
             color: '#1f2937'
           }}>
-            Share Dashboard
+            Publish Dashboard
           </h2>
           <button
             onClick={onClose}

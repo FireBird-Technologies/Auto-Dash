@@ -5,17 +5,24 @@ interface GoogleAuthButtonProps {
   onSuccess?: (token: string) => void;
   className?: string;
   children?: React.ReactNode;
+  redirectTo?: string; // URL to redirect to after login
 }
 
 export const GoogleAuthButton: React.FC<GoogleAuthButtonProps> = ({ 
   onSuccess, 
   className = 'cta-button-primary',
-  children = 'Get Started with Google'
+  children = 'Get Started with Google',
+  redirectTo
 }) => {
   const handleGoogleAuth = () => {
     // Store callback for after redirect
     if (onSuccess) {
       sessionStorage.setItem('auth_callback', 'true');
+    }
+    
+    // Store redirect URL if provided
+    if (redirectTo) {
+      sessionStorage.setItem('auth_redirect_to', redirectTo);
     }
     
     // Redirect to backend Google OAuth

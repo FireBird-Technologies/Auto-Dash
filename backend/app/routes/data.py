@@ -44,10 +44,12 @@ from ..services.chart_insights import extract_figure_metadata
 import dspy
 import logging
 import re
+import difflib
+import ast
 
 # Set up logging
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.WARNING)  # Changed from INFO to WARNING to reduce logging
 if not logger.hasHandlers():
     handler = logging.StreamHandler()
     formatter = logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s')
@@ -1125,11 +1127,211 @@ def plotly_fix_metric(example, pred, trace=None) -> float:
     except Exception as e:
         return 0.0  # Error during execution
 
+def find_error_region_in_code(original_code, error_context, error_message, approximate_error_line=None):
+    """
+    Find the error region in the original code using diff-based matching.
+    
+    Args:
+        original_code: The complete original code
+        error_context: The error context window extracted from original code
+        error_message: The error message (for additional context)
+        approximate_error_line: Approximate error line number if known (0-indexed)
+    
+    Returns:
+        tuple: (start_line, end_line) - Line indices of matched region (0-indexed, exclusive end)
+               Returns (None, None) if no match found
+    """
+    original_lines = original_code.split('\n')
+    context_lines = error_context.split('\n')
+    
+    # If we have an approximate error line, use it to narrow the search
+    if approximate_error_line is not None:
+        # Search within a window around the approximate error line
+        search_start = max(0, approximate_error_line - 20)
+        search_end = min(len(original_lines), approximate_error_line + 20)
+        search_region = original_lines[search_start:search_end]
+        
+        # Use SequenceMatcher to find best match
+        matcher = difflib.SequenceMatcher(None, context_lines, search_region)
+        match = matcher.find_longest_match(0, len(context_lines), 0, len(search_region))
+        
+        if match.size >= len(context_lines) * 0.7:  # At least 70% match
+            start_line = search_start + match.b
+            end_line = start_line + match.size
+            return start_line, end_line
+    
+    # Fallback: search entire code
+    matcher = difflib.SequenceMatcher(None, context_lines, original_lines)
+    match = matcher.find_longest_match(0, len(context_lines), 0, len(original_lines))
+    
+    if match.size >= len(context_lines) * 0.7:  # At least 70% match
+        return match.b, match.b + match.size
+    
+    # Try fuzzy matching with individual lines
+    best_match_start = None
+    best_match_score = 0.0
+    best_match_size = 0
+    
+    for i in range(len(original_lines) - len(context_lines) + 1):
+        candidate = original_lines[i:i + len(context_lines)]
+        matcher = difflib.SequenceMatcher(None, context_lines, candidate)
+        ratio = matcher.ratio()
+        
+        if ratio > best_match_score and ratio >= 0.7:
+            best_match_score = ratio
+            best_match_start = i
+            best_match_size = len(context_lines)
+    
+    if best_match_start is not None:
+        return best_match_start, best_match_start + best_match_size
+    
+    return None, None
+
+
+def integrate_fix_with_original(original_code, fix_code, start_line, end_line):
+    """
+    Integrate fixed code into the original code by replacing the matched region.
+    
+    Args:
+        original_code: The complete original code
+        fix_code: The fixed code snippet
+        start_line: Start line of region to replace (0-indexed)
+        end_line: End line of region to replace (0-indexed, exclusive)
+    
+    Returns:
+        str: The integrated code with fix applied
+    """
+    original_lines = original_code.split('\n')
+    fix_lines = fix_code.split('\n')
+    
+    # Determine base indentation from the first line of the replaced region
+    if start_line < len(original_lines) and original_lines[start_line].strip():
+        # Get base indentation from first non-empty line of original region
+        base_indent = len(original_lines[start_line]) - len(original_lines[start_line].lstrip())
+    else:
+        # Fallback: look for indentation in surrounding context
+        base_indent = 0
+        for i in range(max(0, start_line - 3), min(len(original_lines), start_line + 3)):
+            if original_lines[i].strip():
+                base_indent = len(original_lines[i]) - len(original_lines[i].lstrip())
+                break
+    
+    # Find minimum indentation in fix code (to normalize it)
+    fix_min_indent = float('inf')
+    for fix_line in fix_lines:
+        if fix_line.strip():
+            indent = len(fix_line) - len(fix_line.lstrip())
+            fix_min_indent = min(fix_min_indent, indent)
+    
+    if fix_min_indent == float('inf'):
+        fix_min_indent = 0
+    
+    # Adjust fix code indentation to match original
+    adjusted_fix_lines = []
+    for fix_line in fix_lines:
+        if fix_line.strip():  # Non-empty line
+            # Remove minimum indent from fix line
+            current_indent = len(fix_line) - len(fix_line.lstrip())
+            relative_indent = current_indent - fix_min_indent
+            # Apply base indent + relative indent
+            adjusted_line = ' ' * (base_indent + relative_indent) + fix_line.lstrip()
+            adjusted_fix_lines.append(adjusted_line)
+        else:
+            adjusted_fix_lines.append('')
+    
+    # Replace the region
+    integrated_lines = (
+        original_lines[:start_line] +
+        adjusted_fix_lines +
+        original_lines[end_line:]
+    )
+    
+    return '\n'.join(integrated_lines)
+
+
+def replace_code_block_ast(original_code, fix_code, error_line):
+    """
+    Use AST-based approach to replace code block containing error.
+    This is a fallback when diff matching fails.
+    
+    Args:
+        original_code: The complete original code
+        fix_code: The fixed code snippet
+        error_line: Approximate error line number (0-indexed)
+    
+    Returns:
+        str: The integrated code, or None if AST parsing fails
+    """
+    try:
+        # Parse original code to AST
+        original_ast = ast.parse(original_code)
+        
+        # Find the statement/node at the error line
+        original_lines = original_code.split('\n')
+        
+        # Walk AST to find node containing error line
+        class ErrorNodeVisitor(ast.NodeVisitor):
+            def __init__(self, target_line):
+                self.target_line = target_line
+                self.found_node = None
+                self.found_start = None
+                self.found_end = None
+            
+            def visit(self, node):
+                if hasattr(node, 'lineno'):
+                    # Check if node contains the error line
+                    node_start = node.lineno - 1  # Convert to 0-indexed
+                    
+                    # Handle end_lineno (Python 3.8+)
+                    if hasattr(node, 'end_lineno'):
+                        node_end = node.end_lineno  # Already 1-indexed, exclusive
+                    else:
+                        # Fallback: estimate end line (not perfect but better than nothing)
+                        node_end = node_start + 1
+                    
+                    if node_start <= self.target_line < node_end:
+                        if self.found_node is None or (
+                            node_start <= (self.found_start or 0) and
+                            node_end >= (self.found_end or len(original_lines))
+                        ):
+                            self.found_node = node
+                            self.found_start = node_start
+                            self.found_end = node_end
+                self.generic_visit(node)
+        
+        visitor = ErrorNodeVisitor(error_line)
+        visitor.visit(original_ast)
+        
+        if visitor.found_node and visitor.found_start is not None:
+            # Replace the found node's code with fix code
+            return integrate_fix_with_original(
+                original_code,
+                fix_code,
+                visitor.found_start,
+                visitor.found_end
+            )
+        
+    except SyntaxError:
+        # Original code has syntax errors, can't use AST
+        pass
+    except Exception as e:
+        logger.warning(f"AST-based replacement failed: {str(e)}")
+    
+    return None
+
+
 def extract_error_context(plotly_code, error_message):
     """
     Extract a broader error context around the suspected error location,
     but return ONLY raw code lines (no "Line X:" markers).
     Default: 15 lines before and 15 lines after. Falls back to a middle slice.
+    
+    Returns:
+        tuple: (context_window, error_line_number, start_line, end_line)
+        - context_window: The extracted code context as a string
+        - error_line_number: The approximate error line (0-indexed), or None
+        - start_line: Start line of context window (0-indexed)
+        - end_line: End line of context window (0-indexed, exclusive)
     """
     import re
     
@@ -1190,7 +1392,9 @@ def extract_error_context(plotly_code, error_message):
     
     # Build plain code context (no line labels)
     context_lines = [lines[i] if i < len(lines) else "" for i in range(start, end)]
-    return '\n'.join(context_lines)
+    context_window = '\n'.join(context_lines)
+    
+    return context_window, error_line, start, end
 
 
 @router.post("/fix-visualization")
@@ -1212,9 +1416,13 @@ async def fix_visualization_error(
         Fixed Plotly code AND executed figure data for immediate display
     """
     try:
-        # Extract error context (5 lines above/below error)
-        error_context = extract_error_context(request.plotly_code, request.error_message)
+        # Extract error context (15 lines above/below error)
+        error_context, error_line, context_start, context_end = extract_error_context(
+            request.plotly_code, 
+            request.error_message
+        )
         logger.info(f"Extracted error context:\n{error_context}")
+        logger.info(f"Error line: {error_line}, Context window: lines {context_start}-{context_end}")
 
         # Use Claude for code fixing
         lm = dspy.LM("anthropic/claude-3-7-sonnet-latest", api_key=os.getenv("ANTHROPIC_API_KEY"), max_tokens=8000)
@@ -1242,28 +1450,59 @@ async def fix_visualization_error(
         fix_code = clean_plotly_code(fix_code)
 
         # Stitch the fix to the original code at the error location
-        original_lines = request.plotly_code.splitlines()
-        error_lines = error_context.splitlines()
+        stitched_code = None
         
-        # Find the error line in the context (marked by >>> Line X:)
-        error_line_nums = [
-            int(line.split(':')[0].replace('>>> Line', '').strip())
-            for line in error_lines if line.startswith('>>> Line')
-        ]
+        # Step 1: Try diff-based matching to find error region
+        start_line, end_line = find_error_region_in_code(
+            request.plotly_code,
+            error_context,
+            request.error_message,
+            approximate_error_line=error_line
+        )
         
-        if error_line_nums:
-            fix_insertion_idx = error_line_nums[0] - 1  # 0-indexed
-            # Replace the error line with fix_code
-            stitched_lines = []
-            for i, line in enumerate(original_lines):
-                if i == fix_insertion_idx:
-                    stitched_lines.append(fix_code)
-                else:
-                    stitched_lines.append(line)
-            stitched_code = '\n'.join(stitched_lines)
+        if start_line is not None and end_line is not None:
+            logger.info(f"Found error region using diff matching: lines {start_line}-{end_line}")
+            stitched_code = integrate_fix_with_original(
+                request.plotly_code,
+                fix_code,
+                start_line,
+                end_line
+            )
+            logger.info("Successfully integrated fix using diff matching")
         else:
-            # If cannot localize, return the fix as whole
-            stitched_code = fix_code
+            # Step 2: Fallback to AST-based replacement
+            logger.info("Diff matching failed, trying AST-based approach")
+            if error_line is not None:
+                stitched_code = replace_code_block_ast(
+                    request.plotly_code,
+                    fix_code,
+                    error_line
+                )
+                if stitched_code:
+                    logger.info("Successfully integrated fix using AST-based approach")
+            
+            # Step 3: Final fallback - line-number-based replacement
+            if not stitched_code:
+                logger.info("AST-based approach failed, using line-number fallback")
+                original_lines = request.plotly_code.splitlines()
+                
+                if error_line is not None and error_line < len(original_lines):
+                    # Replace a window around the error line
+                    window_size = min(len(error_context.splitlines()), 10)
+                    replace_start = max(0, error_line - window_size // 2)
+                    replace_end = min(len(original_lines), error_line + window_size // 2 + 1)
+                    
+                    stitched_code = integrate_fix_with_original(
+                        request.plotly_code,
+                        fix_code,
+                        replace_start,
+                        replace_end
+                    )
+                    logger.info(f"Used line-number fallback: replaced lines {replace_start}-{replace_end}")
+                else:
+                    # Last resort: return fix code as-is (may be incomplete)
+                    logger.warning("Could not integrate fix, returning fix code as-is")
+                    stitched_code = fix_code
         
         # Clean the stitched code again to ensure no fig.show() calls remain
         stitched_code = clean_plotly_code(stitched_code)

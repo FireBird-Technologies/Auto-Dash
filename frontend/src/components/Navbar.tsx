@@ -111,7 +111,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onAccountClick }) => {
 
   return (
     <nav className="navbar">
-      <div className="brand">
+      <div className="brand" onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
         <img 
           src="/logo.svg" 
           alt="AutoDash" 
