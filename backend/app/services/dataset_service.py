@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 import dspy
 from sqlalchemy.orm import Session
+from sqlalchemy import and_
 from datetime import datetime, timedelta
 from ..models import Dataset, DashboardQuery, ChatMessage, PublicDashboard
 from ..core.db import SessionLocal
@@ -506,8 +507,10 @@ class DatasetService:
         """
         # Find dataset by dataset_id string
         dataset = db.query(Dataset).filter(
-            Dataset.user_id == user_id,
-            Dataset.dataset_id == dataset_id
+            and_(
+                Dataset.user_id == user_id,
+                Dataset.dataset_id == dataset_id
+            )
         ).first()
         
         if not dataset:
@@ -536,8 +539,10 @@ class DatasetService:
     ) -> List[Dict[str, Any]]:
         """Get all dashboard queries for a dataset."""
         dataset = db.query(Dataset).filter(
-            Dataset.user_id == user_id,
-            Dataset.dataset_id == dataset_id
+            and_(
+                Dataset.user_id == user_id,
+                Dataset.dataset_id == dataset_id
+            )
         ).first()
         
         if not dataset:
@@ -586,8 +591,10 @@ class DatasetService:
             chart_index: Chart index if related to a chart
         """
         dataset = db.query(Dataset).filter(
-            Dataset.user_id == user_id,
-            Dataset.dataset_id == dataset_id
+            and_(
+                Dataset.user_id == user_id,
+                Dataset.dataset_id == dataset_id
+            )
         ).first()
         
         if not dataset:
@@ -617,8 +624,10 @@ class DatasetService:
     ) -> List[Dict[str, Any]]:
         """Get chat history for a dataset."""
         dataset = db.query(Dataset).filter(
-            Dataset.user_id == user_id,
-            Dataset.dataset_id == dataset_id
+            and_(
+                Dataset.user_id == user_id,
+                Dataset.dataset_id == dataset_id
+            )
         ).first()
         
         if not dataset:
@@ -665,8 +674,10 @@ class DatasetService:
             hours_valid: Hours until expiry (None for no expiry)
         """
         dataset = db.query(Dataset).filter(
-            Dataset.user_id == user_id,
-            Dataset.dataset_id == dataset_id
+            and_(
+                Dataset.user_id == user_id,
+                Dataset.dataset_id == dataset_id
+            )
         ).first()
         
         if not dataset:
