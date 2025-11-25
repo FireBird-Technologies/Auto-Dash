@@ -268,9 +268,11 @@ class CreditService:
             return {
                 "balance": 0,
                 "plan_name": None,
+                "plan_id": None,
                 "credits_per_analyze": 0,
                 "credits_per_edit": 0,
-                "last_reset_at": None
+                "last_reset_at": None,
+                "updated_at": datetime.utcnow().isoformat()
             }
         
         plan = None
