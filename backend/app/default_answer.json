@@ -1,0 +1,373 @@
+[
+  {
+    "chart_index": 0,
+    "figure": {
+      "data": [
+        {
+          "type": "bar",
+          "x": [1, 2, 3, 4, 5],
+          "y": [808000, 1050000, 1120000, 1500000, 1430000],
+          "marker": {"color": "#99FABE"},
+          "text": ["808K", "1.1M", "1.1M", "1.5M", "1.4M"],
+          "textposition": "auto",
+          "hovertemplate": "Bedrooms: %{x}<br>Average Price: $%{y:,.0f}<extra></extra>"
+        }
+      ],
+      "layout": {
+        "template": "plotly_white",
+        "title": {"text": "<b>Average Price by Number of Bedrooms</b>", "x": 0.5, "xanchor": "center"},
+        "xaxis": {
+          "title": {"text": "Number of Bedrooms"},
+          "tickmode": "linear",
+          "dtick": 1,
+          "linewidth": 0.2,
+          "gridwidth": 1
+        },
+        "yaxis": {
+          "title": {"text": "Average Price ($)"},
+          "linewidth": 0.2,
+          "gridwidth": 1,
+          "tickformat": "$,.0f"
+        },
+        "height": 800,
+        "width": 1000,
+        "showlegend": false,
+        "barmode": "group"
+      }
+    },
+    "title": "Average Price by Number of Bedrooms",
+    "chart_type": "bar_chart",
+    "plan": {
+      "title": "Average Price by Number of Bedrooms",
+      "instructions": "Display average prices categorized by bedrooms; use #99FABE for bars."
+    }
+  },
+  {
+    "chart_index": 1,
+    "figure": {
+      "data": [
+        {
+          "type": "scatter",
+          "mode": "lines+markers",
+          "x": [1994, 1995, 1997, 1998, 1999, 2000, 2001, 2003, 2004, 2005, 2011],
+          "y": [1200000, 1430000, 1000000, 1217000, 1536500, 808000, 940000, 1263000, 1050000, 1160000, 808000],
+          "marker": {"size": 10, "symbol": "circle"},
+          "line": {"color": "#636efa", "width": 3, "dash": "solid"},
+          "hovertemplate": "yr_built=%{x}<br>price=%{y}<extra></extra>"
+        }
+      ],
+      "layout": {
+        "template": "plotly_white",
+        "title": {"text": "<b>Price Trends Over Years Built</b>", "x": 0.5, "xanchor": "center"},
+        "xaxis": {
+          "title": {"text": "Year Built"},
+          "dtick": 1,
+          "showgrid": True,
+          "gridwidth": 1,
+          "showline": True,
+          "linewidth": 0.2
+        },
+        "yaxis": {
+          "title": {"text": "Average Price"},
+          "tickformat": "$,.0f",
+          "showgrid": True,
+          "gridwidth": 1,
+          "showline": True,
+          "linewidth": 0.2
+        },
+        "width": 1000,
+        "height": 800,
+        "showlegend": True,
+        "hovermode": "x unified",
+        "annotations": [
+          {
+            "x": 2011,
+            "y": 808000,
+            "text": "Min: $808.00K",
+            "showarrow": True,
+            "arrowhead": 1,
+            "ax": 0,
+            "ay": -40
+          },
+          {
+            "x": 1999,
+            "y": 1536500,
+            "text": "Max: $1.54M",
+            "showarrow": True,
+            "arrowhead": 1,
+            "ax": 0,
+            "ay": -40
+          }
+        ]
+      }
+    },
+    "title": "Price Trends Over Years Built",
+    "chart_type": "line_chart",
+    "plan": {
+      "title": "Price Trends Over Years Built",
+      "instructions": "Line chart tracking average price against year built to observe trends."
+    }
+  },
+  {
+    "chart_index": 2,
+    "figure": {
+      "data": [
+        {
+          "type": "scatter",
+          "mode": "markers",
+          "x": [1180, 2570, 770, 1960, 1680, 5420, 1715, 1060, 1780, 1890, 3560, 1160, 1430, 1370, 1810, 2950, 2320, 1190, 1320, 1400],
+          "y": [221900, 538000, 180000, 604000, 510000, 1230000, 257500, 291850, 368000, 525000, 3880000, 250000, 477000, 499950, 475000, 499000, 510000, 1225000, 325000, 299000],
+          "marker": {
+            "color": "#FF516B",
+            "opacity": 0.7,
+            "symbol": "circle",
+            "size": 8
+          },
+          "hovertemplate": "sqft_living=%{x}<br>price=%{y}<extra></extra>"
+        },
+        {
+          "type": "scatter",
+          "mode": "lines",
+          "name": "Trend Line",
+          "x": [770, 1060, 1160, 1180, 1190, 1320, 1370, 1400, 1430, 1680, 1715, 1780, 1810, 1890, 1960, 2320, 2570, 2950, 3560, 5420],
+          "y": [180000, 291850, 250000, 221900, 1225000, 325000, 499950, 299000, 477000, 510000, 257500, 368000, 475000, 525000, 604000, 510000, 538000, 499000, 3880000, 1230000],
+          "line": {"color": "#99C3FA", "width": 2}
+        }
+      ],
+      "layout": {
+        "template": "plotly_white",
+        "title": {
+          "text": "<b>Price vs. Square Footage</b>",
+          "x": 0.5,
+          "xanchor": "center",
+          "y": 0.95,
+          "yanchor": "top"
+        },
+        "xaxis": {
+          "title": {"text": "Square Footage (sqft)"},
+          "showgrid": True,
+          "gridwidth": 1,
+          "zeroline": False,
+          "linewidth": 0.2
+        },
+        "yaxis": {
+          "title": {"text": "Price ($)"},
+          "showgrid": True,
+          "gridwidth": 1,
+          "zeroline": False,
+          "linewidth": 0.2,
+          "tickformat": "$,.0f"
+        },
+        "height": 800,
+        "width": 1000,
+        "showlegend": True,
+        "hovermode": "closest",
+        "annotations": [
+          {
+            "x": 0.98,
+            "y": 0.05,
+            "xref": "paper",
+            "yref": "paper",
+            "text": "Correlation: 0.97",
+            "showarrow": False,
+            "font": {"size": 14, "color": "black"},
+            "bgcolor": "rgba(255, 255, 255, 0.8)",
+            "bordercolor": "rgba(0, 0, 0, 0.2)",
+            "borderwidth": 1,
+            "borderpad": 4,
+            "align": "left"
+          }
+        ]
+      }
+    },
+    "title": "Price vs. Square Footage",
+    "chart_type": "scatter_plot",
+    "plan": {
+      "title": "Price vs. Square Footage",
+      "instructions": "Plot price on Y-axis and sqft_living on X-axis to assess price per square foot, using colors #FF516B and #99C3FA."
+    }
+  },
+  {
+    "chart_index": 3,
+    "figure": {
+      "data": [
+        {
+          "type": "heatmap",
+          "z": [
+            [1, 0.35, 0.43, 0.58, 0.01, 0.06, 0.21, 0.33, 0.03, 0.67, 0.05],
+            [0.35, 1, 0.54, 0.31, 0.06, 0.16, 0.01, 0.07, 0.08, 0.18, -0.31],
+            [0.43, 0.54, 1, 0.52, 0.05, 0.27, 0.01, 0.19, 0.03, 0.36, 0.05],
+            [0.58, 0.31, 0.52, 1, 0.02, 0.33, 0.18, 0.26, 0.05, 0.71, 0.14],
+            [0.01, 0.06, 0.05, 0.02, 1, 0.01, 0, 0.02, 0.03, 0.02, -0.04],
+            [0.06, 0.16, 0.27, 0.33, 0.01, 1, -0.02, 0.02, 0.03, 0.33, 0.02],
+            [0.21, 0.01, 0.01, 0.18, 0, -0.02, 1, 0.11, 0, 0.17, 0.01],
+            [0.33, 0.07, 0.19, 0.26, 0.02, 0.02, 0.11, 1, 0.01, 0.34, 0.02],
+            [0.03, 0.08, 0.03, 0.05, 0.03, 0.03, 0, 0.01, 1, 0.02, 0.08],
+            [0.67, 0.18, 0.36, 0.71, 0.02, 0.33, 0.17, 0.34, 0.02, 1, 0.1],
+            [0.05, -0.31, 0.05, 0.14, -0.04, 0.02, 0.01, 0.02, 0.08, 0.1, 1]
+          ],
+          "x": ["price", "bedrooms", "bathrooms", "sqft_living", "sqft_lot", "floors", "waterfront", "view", "condition", "grade", "yr_built"],
+          "y": ["price", "bedrooms", "bathrooms", "sqft_living", "sqft_lot", "floors", "waterfront", "view", "condition", "grade", "yr_built"],
+          "colorscale": "Viridis",
+          "zmin": -1,
+          "zmax": 1,
+          "showscale": true,
+          "colorbar": {
+            "title": "Correlation",
+            "thickness": 20,
+            "ticklen": 5,
+            "ticks": "outside"
+          },
+          "text": [
+            [1, 0.35, 0.43, 0.58, 0.01, 0.06, 0.21, 0.33, 0.03, 0.67, 0.05],
+            [0.35, 1, 0.54, 0.31, 0.06, 0.16, 0.01, 0.07, 0.08, 0.18, -0.31],
+            [0.43, 0.54, 1, 0.52, 0.05, 0.27, 0.01, 0.19, 0.03, 0.36, 0.05],
+            [0.58, 0.31, 0.52, 1, 0.02, 0.33, 0.18, 0.26, 0.05, 0.71, 0.14],
+            [0.01, 0.06, 0.05, 0.02, 1, 0.01, 0, 0.02, 0.03, 0.02, -0.04],
+            [0.06, 0.16, 0.27, 0.33, 0.01, 1, -0.02, 0.02, 0.03, 0.33, 0.02],
+            [0.21, 0.01, 0.01, 0.18, 0, -0.02, 1, 0.11, 0, 0.17, 0.01],
+            [0.33, 0.07, 0.19, 0.26, 0.02, 0.02, 0.11, 1, 0.01, 0.34, 0.02],
+            [0.03, 0.08, 0.03, 0.05, 0.03, 0.03, 0, 0.01, 1, 0.02, 0.08],
+            [0.67, 0.18, 0.36, 0.71, 0.02, 0.33, 0.17, 0.34, 0.02, 1, 0.1],
+            [0.05, -0.31, 0.05, 0.14, -0.04, 0.02, 0.01, 0.02, 0.08, 0.1, 1]
+          ],
+          "texttemplate": "%{text:.2f}"
+        }
+      ],
+      "layout": {
+        "template": "plotly_white",
+        "title": {"text": "<b>Correlation Heatmap of Housing Variables</b>", "x": 0.5, "xanchor": "center"},
+        "xaxis": {
+          "title": {"text": "Variables", "font": {"size": 14}},
+          "tickangle": -45,
+          "linecolor": "black",
+          "linewidth": 0.2
+        },
+        "yaxis": {
+          "title": {"text": "Variables", "font": {"size": 14}},
+          "linecolor": "black",
+          "linewidth": 0.2
+        },
+        "height": 800,
+        "width": 1000
+      }
+    },
+    "title": "Correlation Heatmap of Variables",
+    "chart_type": "heatmap",
+    "plan": {
+      "title": "Correlation Heatmap of Variables",
+      "instructions": "Visualize the correlation between price and other variables like sqft_living, bedrooms, bathrooms."
+    }
+  },
+  {
+    "chart_index": 4,
+    "figure": {
+      "data": [
+        {
+          "type": "box",
+          "y": [1000000, 1250000, 1300000, 1025000, 1260000, 800000],
+          "name": "Average",
+          "boxmean": true,
+          "boxpoints": "outliers",
+          "line": {"width": 1.5},
+          "marker": {"color": "rgba(96, 192, 32, 0.7)"}
+        },
+        {
+          "type": "box",
+          "y": [808000, 1170000],
+          "name": "Fair",
+          "boxmean": true,
+          "boxpoints": "outliers",
+          "line": {"width": 1.5},
+          "marker": {"color": "rgba(204, 152, 100, 0.7)"}
+        },
+        {
+          "type": "box",
+          "y": [1430000, 1200000, 1536500, 1160000, 477000, 499950],
+          "name": "Good",
+          "boxmean": true,
+          "boxpoints": "outliers",
+          "line": {"width": 1.5},
+          "marker": {"color": "rgba(241, 226, 211, 0.7)"}
+        }
+      ],
+      "layout": {
+        "template": "plotly_white",
+        "title": {"text": "<b>Price Distribution by Condition</b>", "x": 0.5, "xanchor": "center"},
+        "yaxis": {
+          "title": {"text": "Price"},
+          "tickformat": "$.2s",
+          "gridwidth": 1,
+          "zerolinewidth": 0.2
+        },
+        "xaxis": {
+          "title": {"text": "Condition"},
+          "linewidth": 0.2,
+          "gridwidth": 1
+        },
+        "boxmode": "group",
+        "height": 800,
+        "width": 1000,
+        "showlegend": False,
+        "annotations": [
+          {
+            "x": 0,
+            "y": 1025000,
+            "text": "Median: $1.0M",
+            "showarrow": True,
+            "arrowhead": 2,
+            "arrowsize": 1,
+            "arrowwidth": 1,
+            "arrowcolor": "rgba(0,0,0,0.5)",
+            "xanchor": "center",
+            "yanchor": "bottom",
+            "bgcolor": "rgba(255,255,255,0.8)",
+            "bordercolor": "rgba(0,0,0,0.2)",
+            "borderwidth": 1,
+            "borderpad": 4,
+            "font": {"size": 10}
+          },
+          {
+            "x": 1,
+            "y": 1170000,
+            "text": "Median: $1.2M",
+            "showarrow": True,
+            "arrowhead": 2,
+            "arrowsize": 1,
+            "arrowwidth": 1,
+            "arrowcolor": "rgba(0,0,0,0.5)",
+            "xanchor": "center",
+            "yanchor": "bottom",
+            "bgcolor": "rgba(255,255,255,0.8)",
+            "bordercolor": "rgba(0,0,0,0.2)",
+            "borderwidth": 1,
+            "borderpad": 4,
+            "font": {"size": 10}
+          },
+          {
+            "x": 2,
+            "y": 1263000,
+            "text": "Median: $1.3M",
+            "showarrow": True,
+            "arrowhead": 2,
+            "arrowsize": 1,
+            "arrowwidth": 1,
+            "arrowcolor": "rgba(0,0,0,0.5)",
+            "xanchor": "center",
+            "yanchor": "bottom",
+            "bgcolor": "rgba(255,255,255,0.8)",
+            "bordercolor": "rgba(0,0,0,0.2)",
+            "borderwidth": 1,
+            "borderpad": 4,
+            "font": {"size": 10}
+          }
+        ]
+      }
+    },
+    "title": "Price Distribution by Condition",
+    "chart_type": "box_plot",
+    "plan": {
+      "title": "Price Distribution by Condition",
+      "instructions": "Show the distribution of prices within different property conditions."
+    }
+  }

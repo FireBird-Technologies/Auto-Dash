@@ -965,27 +965,27 @@ async def analyze_data(
             chart_type = chart.get('chart_type')
             title = chart.get('title', 'Visualization')
             
-            # Prepare chart data for DB storage
-            charts_data_for_db.append({
-                "chart_index": chart_index,
-                "code": chart_spec,
-                "figure": figure_data,
-                "title": title,
-                "chart_type": chart_type,
-                "plan": chart_plan
-            })
-            
-            try:
-                dataset_service.set_chart_metadata(
-                    user_id=current_user.id,
-                    dataset_id=dataset_id,
-                    chart_index=chart_index,
-                    chart_spec=chart_spec,
-                    plan=chart_plan,
-                    figure_data=figure_data,
-                    chart_type=chart_type,
-                    title=title
-                )
+                # Prepare chart data for DB storage
+                charts_data_for_db.append({
+                    "chart_index": chart_index,
+                    "code": placeholder_code,
+                    "figure": figure_data,
+                    "title": title,
+                    "chart_type": chart_type,
+                    "plan": chart_plan
+                })
+                
+                try:
+                    dataset_service.set_chart_metadata(
+                        user_id=current_user.id,
+                        dataset_id=dataset_id,
+                        chart_index=chart_index,
+                        chart_spec=placeholder_code,
+                        plan=chart_plan,
+                        figure_data=figure_data,
+                        chart_type=chart_type,
+                        title=title
+                    )
             except Exception as e:
                 logger.warning(f"Failed to store chart metadata for chart {chart_index}: {e}")
         
