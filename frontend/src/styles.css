@@ -1018,11 +1018,12 @@ body::before {
 }
 
 .workflow-details li::before {
-  content: 'x';
+  content: '✓';
   position: absolute;
   left: 0;
   color: var(--aa-primary);
   font-weight: 600;
+  font-size: 16px;
 }
 
 /* Demo Section */
