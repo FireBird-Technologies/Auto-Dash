@@ -96,7 +96,7 @@ async def chat(
                 match_lm = dspy.LM(
                     "openai/gpt-4o-mini",
                     api_key=os.getenv("OPENAI_API_KEY"),
-                    max_tokens=1000
+                    max_tokens=500
                 )
                 
                 # Set up BestOfN with chart_matcher
@@ -153,6 +153,7 @@ async def chat(
         
         # Use default model from environment (configured in main.py) for main chat
         # No need to set up lm here, it uses dspy.configure(lm=default_lm) from main.py
+        
         result = await chat_fn.aforward(
             user_query=payload.message,
             fig_data=fig_data,

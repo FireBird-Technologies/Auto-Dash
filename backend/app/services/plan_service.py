@@ -242,8 +242,8 @@ class PlanService:
             },
             {
                 "name": "Ultra",
-                "price_monthly": Decimal("29.99"),
-                "price_yearly": Decimal("287.90"),  # $29.99 * 12 * 0.8 (20% discount)
+                "price_monthly": Decimal("30"),
+                "price_yearly": Decimal("288"),  # $29.99 * 12 * 0.8 (20% discount)
                 "credits_per_month": 1000,
                 "credits_per_analyze": 5,
                 "credits_per_edit": 2,

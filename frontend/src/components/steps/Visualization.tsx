@@ -9,6 +9,186 @@ import { ChartNotes } from '../ChartNotes';
 import { config, getAuthHeaders, checkAuthResponse } from '../../config';
 import { useNotification } from '../../contexts/NotificationContext';
 
+// Guide Tour Overlay Component
+interface GuideTourOverlayProps {
+  step: number; // 0=chat, 1=download, 2=publish
+  chatButtonRef: React.RefObject<HTMLButtonElement>;
+  downloadButtonRef: React.RefObject<HTMLButtonElement>;
+  publishButtonRef: React.RefObject<HTMLButtonElement>;
+  onNext: () => void;
+  onSkip: () => void;
+}
+
+const GuideTourOverlay: React.FC<GuideTourOverlayProps> = ({
+  step,
+  chatButtonRef,
+  downloadButtonRef,
+  publishButtonRef,
+  onNext,
+  onSkip
+}) => {
+  const [position, setPosition] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const updatePosition = () => {
+      let button: HTMLButtonElement | null = null;
+      if (step === 0) button = chatButtonRef.current;
+      else if (step === 1) button = downloadButtonRef.current;
+      else if (step === 2) button = publishButtonRef.current;
+
+      if (button) {
+        const rect = button.getBoundingClientRect();
+        setPosition({
+          top: rect.top,
+          left: rect.left,
+          width: rect.width,
+          height: rect.height
+        });
+      }
+    };
+
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [step, chatButtonRef, downloadButtonRef, publishButtonRef]);
+
+  if (!position) return null;
+
+  const guideContent = [
+    {
+      title: 'Chat',
+      description: 'Ask questions or request edits to your charts',
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        </svg>
+      )
+    },
+    {
+      title: 'Download',
+      description: 'Export charts as PNG or PDF',
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="7 10 12 15 17 10" />
+          <line x1="12" y1="15" x2="12" y2="3" />
+        </svg>
+      )
+    },
+    {
+      title: 'Publish',
+      description: 'Share your dashboard with a public link',
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="18" cy="5" r="3" />
+          <circle cx="6" cy="12" r="3" />
+          <circle cx="18" cy="19" r="3" />
+          <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+          <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+        </svg>
+      )
+    }
+  ];
+
+  const content = guideContent[step];
+  const tooltipRect = tooltipRef.current?.getBoundingClientRect();
+  const tooltipWidth = tooltipRect?.width || 280;
+  const tooltipHeight = tooltipRect?.height || 120;
+
+  // Calculate tooltip position (prefer above, but adjust if needed)
+  let tooltipTop = position.top - tooltipHeight - 16;
+  let tooltipLeft = position.left + (position.width / 2) - (tooltipWidth / 2);
+
+  // Adjust if tooltip would go off screen
+  if (tooltipTop < 20) {
+    tooltipTop = position.top + position.height + 16;
+  }
+  if (tooltipLeft < 20) {
+    tooltipLeft = 20;
+  }
+  if (tooltipLeft + tooltipWidth > window.innerWidth - 20) {
+    tooltipLeft = window.innerWidth - tooltipWidth - 20;
+  }
+
+  // Calculate arrow position
+  const arrowLeft = position.left + (position.width / 2) - tooltipLeft;
+
+  return (
+    <>
+      {/* Overlay backdrop */}
+      <div 
+        className="guide-overlay-backdrop"
+        onClick={onSkip}
+      />
+      
+      {/* Highlighted button area */}
+      <div
+        className="guide-highlight-box"
+        style={{
+          position: 'fixed',
+          top: position.top,
+          left: position.left,
+          width: position.width,
+          height: position.height,
+          zIndex: 10001,
+          pointerEvents: 'none'
+        }}
+      />
+
+      {/* Tooltip */}
+      <div
+        ref={tooltipRef}
+        className="guide-tooltip"
+        style={{
+          position: 'fixed',
+          top: tooltipTop,
+          left: tooltipLeft,
+          zIndex: 10002
+        }}
+      >
+        <div className="guide-tooltip-content">
+          <div className="guide-tooltip-header">
+            <div className="guide-tooltip-icon">{content.icon}</div>
+            <div>
+              <h3>{content.title}</h3>
+              <p>{content.description}</p>
+            </div>
+          </div>
+          <div className="guide-tooltip-footer">
+            <span className="guide-step-indicator">
+              {step + 1} of {guideContent.length}
+            </span>
+            <div className="guide-tooltip-actions">
+              {step < guideContent.length - 1 ? (
+                <>
+                  <button onClick={onSkip} className="guide-skip-btn">Skip</button>
+                  <button onClick={onNext} className="guide-next-btn">Next</button>
+                </>
+              ) : (
+                <button onClick={onSkip} className="guide-finish-btn">Got it!</button>
+              )}
+            </div>
+          </div>
+        </div>
+        {/* Arrow */}
+        <div
+          className="guide-tooltip-arrow"
+          style={{
+            [tooltipTop < position.top ? 'bottom' : 'top']: '-8px',
+            left: `${arrowLeft}px`
+          }}
+        />
+      </div>
+    </>
+  );
+};
+
 type Row = Record<string, number | string>;
 
 interface VisualizationProps {
@@ -25,7 +205,13 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   const notification = useNotification();
   const [query, setQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isFirstChartLoading, setIsFirstChartLoading] = useState(false);
+  const [guideStep, setGuideStep] = useState<number | null>(null); // 0=chat, 1=download, 2=publish
+  const [loadingMessage, setLoadingMessage] = useState('Crafting beautiful insights from your data...');
   const [chartSpecs, setChartSpecs] = useState<any[]>([]);  // Changed to array
+  const chatButtonRef = useRef<HTMLButtonElement>(null);
+  const downloadButtonRef = useRef<HTMLButtonElement>(null);
+  const publishButtonRef = useRef<HTMLButtonElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [chatHistory, setChatHistory] = useState<Array<{
     type: 'user' | 'assistant', 
@@ -601,6 +787,18 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     setIsLoading(true);
     setError(null);
     
+    // Use /analyze for first chart, /chat for subsequent queries
+    const isFirstChart = chartSpecs.length === 0;
+    
+    // Track if this is the first chart loading for tooltip display
+    if (isFirstChart) {
+      setIsFirstChartLoading(true);
+      // Start guided tour after a short delay
+      setTimeout(() => {
+        setGuideStep(0); // Start with chat button
+      }, 1000);
+    }
+    
     // Add user message only - loading visualization shows in dashboard area
     setChatHistory(prev => [
       ...prev,
@@ -608,9 +806,6 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     ]);
 
     try {
-      // Use /analyze for first chart, /chat for subsequent queries
-      const isFirstChart = chartSpecs.length === 0;
-      
       if (isFirstChart) {
         // First chart: Use analyze endpoint
         const response = await fetch(`${config.backendUrl}/api/data/analyze`, {
@@ -765,6 +960,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
       });
     } finally {
       setIsLoading(false);
+      setIsFirstChartLoading(false);
+      setGuideStep(null); // End tour when loading completes
       setQuery('');
     }
   };
@@ -1065,6 +1262,70 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showDownloadMenu]);
+
+  // Loading messages rotation
+  useEffect(() => {
+    if (!isFirstChartLoading) {
+      setLoadingMessage('Crafting beautiful insights from your data...');
+      return;
+    }
+
+    const loadingMessages = [
+      'Crafting beautiful insights from your data...',
+      'Wait as we craft stunning visuals for you...',
+      'Transforming your data into meaningful charts...',
+      'Creating visual narratives from your dataset...',
+      'Designing elegant visualizations...',
+      'Weaving data into compelling stories...',
+      'Polishing your dashboard to perfection...',
+      'Bringing your data to life...'
+    ];
+
+    let messageIndex = 0;
+    setLoadingMessage(loadingMessages[0]);
+    
+    const interval = setInterval(() => {
+      messageIndex = (messageIndex + 1) % loadingMessages.length;
+      setLoadingMessage(loadingMessages[messageIndex]);
+    }, 4000); // Change message every 4 seconds
+
+    return () => clearInterval(interval);
+  }, [isFirstChartLoading]);
+
+  // Guided tour auto-advance - 40 seconds total (13-14 seconds per step)
+  useEffect(() => {
+    if (guideStep === null) return;
+
+    const timer = setTimeout(() => {
+      if (guideStep < 2) {
+        setGuideStep(guideStep + 1);
+      } else {
+        setGuideStep(null);
+      }
+    }, 13000); // ~13 seconds per step = ~40 seconds total
+
+    return () => clearTimeout(timer);
+  }, [guideStep]);
+
+  // Scroll to highlighted button
+  useEffect(() => {
+    if (guideStep === null) return;
+
+    let buttonRef: React.RefObject<HTMLButtonElement> | null = null;
+    if (guideStep === 0) buttonRef = chatButtonRef;
+    else if (guideStep === 1) buttonRef = downloadButtonRef;
+    else if (guideStep === 2) buttonRef = publishButtonRef;
+
+    if (buttonRef?.current) {
+      setTimeout(() => {
+        buttonRef?.current?.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'center',
+          inline: 'center'
+        });
+      }, 300);
+    }
+  }, [guideStep]);
 
   // Close fullscreen on ESC key
   useEffect(() => {
@@ -1563,7 +1824,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
               <div className="chat-message assistant-message">
                 <div className="chat-avatar assistant-avatar">AI</div>
                 <div className="chat-bubble assistant-bubble" style={{ background: 'transparent', boxShadow: 'none', padding: 0 }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '8px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '12px', width: '100%' }}>
                     <div className="magic-sparkles" style={{ marginBottom: 0, transform: 'scale(0.8)', justifyContent: 'flex-start' }}>
                       <span className="sparkle">*</span>
                       <span className="sparkle">*</span>
@@ -1571,6 +1832,11 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                       <span className="sparkle">*</span>
                       <span className="sparkle">*</span>
                     </div>
+                    {isFirstChartLoading && (
+                      <div className="loading-message-text">
+                        {loadingMessage}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1597,9 +1863,10 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
               disabled={isLoading}
             />
             <button 
+              ref={chatButtonRef}
               onClick={handleSubmit}
               disabled={!query.trim() || isLoading}
-              className="chat-send-button"
+              className={`chat-send-button ${guideStep === 0 ? 'guide-highlight' : ''}`}
               title={isLoading ? 'Generating...' : 'Send message'}
               style={{
                 display: 'flex',
@@ -1687,8 +1954,9 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
               )}
               <div className="download-dropdown" ref={downloadMenuRef}>
                 <button 
+                  ref={downloadButtonRef}
                   onClick={() => setShowDownloadMenu(!showDownloadMenu)} 
-                  className="control-button"
+                  className={`control-button ${guideStep === 1 ? 'guide-highlight' : ''}`}
                   disabled={chartSpecs.length === 0}
                   title="Download Chart"
                 >
@@ -1740,8 +2008,9 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                 )}
               </div>
               <button 
+                ref={publishButtonRef}
                 onClick={handleShareDashboard} 
-                className="control-button"
+                className={`control-button ${guideStep === 2 ? 'guide-highlight' : ''}`}
                 disabled={chartSpecs.length === 0}
                 title="Publish Dashboard"
               >
@@ -2330,6 +2599,24 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
         shareUrl={shareUrl}
         expiresAt={shareExpiresAt}
       />
+
+      {/* Guided Tour Overlay */}
+      {guideStep !== null && (
+        <GuideTourOverlay
+          step={guideStep}
+          chatButtonRef={chatButtonRef}
+          downloadButtonRef={downloadButtonRef}
+          publishButtonRef={publishButtonRef}
+          onNext={() => {
+            if (guideStep < 2) {
+              setGuideStep(guideStep + 1);
+            } else {
+              setGuideStep(null);
+            }
+          }}
+          onSkip={() => setGuideStep(null)}
+        />
+      )}
 
       {/* Chart Preview Modal */}
       {chartPreview && (

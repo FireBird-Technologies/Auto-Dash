@@ -1240,7 +1240,7 @@ class PlotlyVisualizationModule(dspy.Module):
                 provider = "GEMINI"
             else:
                 provider = "UNKNOWN"
-            medium_lm = dspy.LM(default_model, max_tokens=2000,api_key=os.getenv(provider+'_API_KEY'), temperature=1, cache=False)
+            medium_lm = dspy.LM(default_model, max_tokens=2500,api_key=os.getenv(provider+'_API_KEY'), temperature=1, cache=False)
 
             with dspy.context(lm=medium_lm):
                 results = await asyncio.gather(*tasks)
