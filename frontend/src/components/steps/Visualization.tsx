@@ -16,7 +16,6 @@ interface GuideTourOverlayProps {
   downloadButtonRef: React.RefObject<HTMLButtonElement>;
   publishButtonRef: React.RefObject<HTMLButtonElement>;
   onNext: () => void;
-  onSkip: () => void;
 }
 
 const GuideTourOverlay: React.FC<GuideTourOverlayProps> = ({
@@ -24,8 +23,7 @@ const GuideTourOverlay: React.FC<GuideTourOverlayProps> = ({
   chatButtonRef,
   downloadButtonRef,
   publishButtonRef,
-  onNext,
-  onSkip
+  onNext
 }) => {
   const [position, setPosition] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
@@ -124,7 +122,6 @@ const GuideTourOverlay: React.FC<GuideTourOverlayProps> = ({
       {/* Overlay backdrop */}
       <div 
         className="guide-overlay-backdrop"
-        onClick={onSkip}
       />
       
       {/* Highlighted button area */}
@@ -166,12 +163,9 @@ const GuideTourOverlay: React.FC<GuideTourOverlayProps> = ({
             </span>
             <div className="guide-tooltip-actions">
               {step < guideContent.length - 1 ? (
-                <>
-                  <button onClick={onSkip} className="guide-skip-btn">Skip</button>
-                  <button onClick={onNext} className="guide-next-btn">Next</button>
-                </>
+                <button onClick={onNext} className="guide-next-btn">Next</button>
               ) : (
-                <button onClick={onSkip} className="guide-finish-btn">Got it!</button>
+                <button onClick={onNext} className="guide-finish-btn">Got it!</button>
               )}
             </div>
           </div>
@@ -428,6 +422,56 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   };
 
   // Handler for chart zoom
+  const handleDeleteChart = async (chartIndexToDelete: number) => {
+    if (!datasetId) return;
+    
+    notification.showConfirm({
+      title: 'Delete Chart',
+      message: 'Are you sure you want to delete this chart? This action cannot be undone.',
+      onConfirm: async () => {
+        try {
+          const response = await fetch(`${config.backendUrl}/api/data/datasets/${datasetId}/charts/${chartIndexToDelete}`, {
+            method: 'DELETE',
+            headers: getAuthHeaders(),
+            credentials: 'include',
+          });
+
+          await checkAuthResponse(response);
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Failed to delete chart');
+          }
+
+          // Remove the chart from local state and re-index
+          setChartSpecs(prev => {
+            const updatedCharts = prev
+              .filter((_, idx) => idx !== chartIndexToDelete)
+              .map((chart, newIdx) => ({ ...chart, chart_index: newIdx }));
+            
+            // Also re-index notes
+            const newChartNotes: Record<number, string> = {};
+            Object.entries(chartNotes).forEach(([oldIdxStr, note]) => {
+              const oldIdx = parseInt(oldIdxStr);
+              if (oldIdx !== chartIndexToDelete) {
+                const newIdx = oldIdx > chartIndexToDelete ? oldIdx - 1 : oldIdx;
+                newChartNotes[newIdx] = note;
+              }
+            });
+            setChartNotes(newChartNotes);
+
+            return updatedCharts;
+          });
+          notification.success('Chart deleted successfully!');
+        } catch (error) {
+          console.error('Error deleting chart:', error);
+          notification.error(`Failed to delete chart: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+      },
+      onCancel: () => {}
+    });
+  };
+
   const handleSaveNotes = async (chartIndex: number, notes: string) => {
     if (!datasetId) return;
     
@@ -781,6 +825,57 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     }]);
   };
 
+  // Helper function to check if a chart is blank/empty
+  const isChartBlank = (chartSpec: any): boolean => {
+    if (!chartSpec || !chartSpec.figure) {
+      return true; // No figure data at all
+    }
+    
+    const figure = chartSpec.figure;
+    
+    // Check if figure has data traces
+    if (!figure.data || figure.data.length === 0) {
+      return true;
+    }
+    
+    // Check if all traces are empty or have no meaningful data
+    const hasValidData = figure.data.some((trace: any) => {
+      // Plotly can have data as arrays OR as objects with bdata (binary data)
+      // Check for common data properties in traces
+      const hasX = trace.x && (
+        (Array.isArray(trace.x) && trace.x.length > 0) ||
+        (typeof trace.x === 'object' && trace.x.bdata) // Plotly binary data
+      );
+      const hasY = trace.y && (
+        (Array.isArray(trace.y) && trace.y.length > 0) ||
+        (typeof trace.y === 'object' && trace.y.bdata) // Plotly binary data
+      );
+      const hasValues = trace.values && (
+        (Array.isArray(trace.values) && trace.values.length > 0) ||
+        (typeof trace.values === 'object' && trace.values.bdata)
+      );
+      const hasZ = trace.z && (
+        (Array.isArray(trace.z) && trace.z.length > 0) ||
+        (typeof trace.z === 'object' && trace.z.bdata)
+      );
+      const hasLat = trace.lat && (
+        (Array.isArray(trace.lat) && trace.lat.length > 0) ||
+        (typeof trace.lat === 'object' && trace.lat.bdata)
+      );
+      const hasLon = trace.lon && (
+        (Array.isArray(trace.lon) && trace.lon.length > 0) ||
+        (typeof trace.lon === 'object' && trace.lon.bdata)
+      );
+      
+      // Also check for histogram-specific properties
+      const hasNbinsx = trace.nbinsx !== undefined;
+      
+      return hasX || hasY || hasValues || hasZ || hasLat || hasLon || hasNbinsx;
+    });
+    
+    return !hasValidData;
+  };
+
   const generateChart = async (userQuery: string) => {
     if (!userQuery.trim()) return;
     
@@ -853,33 +948,117 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
           );
         }
 
-        const result = await response.json();
+        // Handle streaming response (Server-Sent Events)
+        const contentType = response.headers.get('content-type') || '';
+        const isStreaming = contentType.includes('text/event-stream');
         
-        // Fetch full dataset before rendering chart (if not already fetched)
+        if (isStreaming && response.body) {
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
+          let totalCharts = 0;
+          let streamError: Error | null = null;
+
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split('\n');
+              
+              // Keep the last incomplete line in buffer
+              buffer = lines.pop() || '';
+
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  try {
+                    const event = JSON.parse(line.slice(6));
+                    
+                    switch (event.type) {
+                      case 'progress':
+                        console.log(`Progress: ${event.progress}% - ${event.message}`);
+                        break;
+                      
+                      case 'dashboard_info':
+                        if (event.dashboard_title) {
+                          setDashboardTitle(event.dashboard_title);
+                        }
+                        break;
+                      
+                      case 'chart':
+                        // Add chart to state immediately as it arrives (only if not blank)
+                        if (!isChartBlank(event.chart)) {
+                          totalCharts++;
+                          setChartSpecs(prev => [...prev, event.chart]);
+                          console.log('Added chart:', event.chart.title || 'Unnamed');
+                        } else {
+                          console.warn('Skipping blank chart:', event.chart);
+                        }
+                        break;
+                      
+                      case 'complete':
+                        // All charts received
+                        setChatHistory(prev => [...prev, {
+                          type: 'assistant',
+                          message: `Dashboard created successfully! Generated ${event.total_charts || totalCharts} chart(s).`
+                        }]);
+                        break;
+                      
+                      case 'error':
+                        streamError = new Error(event.message);
+                        break;
+                    }
+                  } catch (parseError) {
+                    console.error('Error parsing SSE event:', parseError, 'Line:', line);
+                    streamError = new Error(`Streaming error: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+                    break;
+                  }
+                }
+              }
+              if (streamError) break;
+            }
+          } finally {
+            reader.cancel().catch(e => console.error("Error cancelling reader:", e));
+          }
+          
+          if (streamError) {
+            throw streamError;
+          }
+          
+          // If no charts were received and no completion message, something went wrong
+          if (totalCharts === 0 && !streamError) {
+            throw new Error("No charts were generated for your query. Please try a different query.");
+          }
+        } else {
+          // Fallback: try to parse as regular JSON (backward compatibility)
+          try {
+            const result = await response.json();
+            if (result.dashboard_title) {
+              setDashboardTitle(result.dashboard_title);
+            }
+            if (result.charts && Array.isArray(result.charts)) {
+              // Filter out blank charts
+              const validCharts = result.charts.filter((chart: any) => !isChartBlank(chart));
+              setChartSpecs(validCharts);
+            } else if (result.chart_spec) {
+              const singleChart = { chart_spec: result.chart_spec, chart_type: 'unknown', title: 'Visualization', chart_index: 0 };
+              // Only add if not blank
+              if (!isChartBlank(singleChart)) {
+                setChartSpecs([singleChart]);
+              }
+            }
+            setChatHistory(prev => [...prev, {
+              type: 'assistant',
+              message: `Dashboard created successfully! Generated ${result.charts?.length || 1} chart(s).`
+            }]);
+          } catch (jsonError) {
+            throw new Error('Failed to parse response');
+          }
+        }
+        
+        // Fetch full dataset before rendering charts (if not already fetched)
         await fetchFullDataset();
-        
-        // Keep user message in chat history - don't remove it
-        // The user message was already added above, so we just update chart specs
-        
-        // Extract dashboard title if provided
-        if (result.dashboard_title) {
-          setDashboardTitle(result.dashboard_title);
-        }
-        
-        // Handle both array (new format) and single chart (old format)
-        if (result.charts && Array.isArray(result.charts)) {
-          // New format: array of charts
-          setChartSpecs(result.charts);
-        } else if (result.chart_spec) {
-          // Old format: single chart - wrap in array
-          setChartSpecs([{ chart_spec: result.chart_spec, chart_type: 'unknown', title: 'Visualization', chart_index: 0 }]);
-        }
-        
-        // Add success message to chat
-        setChatHistory(prev => [...prev, {
-          type: 'assistant',
-          message: `Dashboard created successfully! Generated ${result.charts?.length || 1} chart(s).`
-        }]);
       } else {
         // Subsequent queries: Use chat endpoint with chart context
         const response = await fetch(`${config.backendUrl}/api/chat`, {
@@ -1424,6 +1603,44 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
             padding: '40px'
           }}
         >
+          <button 
+            className="fullscreen-close" 
+            onClick={() => setZoomedChartIndex(null)}
+            style={{
+              position: 'fixed',
+              top: '20px',
+              right: '20px',
+              background: 'rgba(255, 107, 107, 0.1)',
+              backdropFilter: 'blur(4px)',
+              border: '1px solid rgba(255, 107, 107, 0.3)',
+              borderRadius: '50%',
+              width: '48px',
+              height: '48px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 10001,
+              color: '#ff6b6b',
+              transition: 'all 0.2s',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(255, 107, 107, 0.2)';
+              e.currentTarget.style.transform = 'scale(1.1)';
+              e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.3)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(255, 107, 107, 0.1)';
+              e.currentTarget.style.transform = 'scale(1)';
+              e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.2)';
+            }}
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
           <div 
             className="fullscreen-content" 
             onClick={(e) => e.stopPropagation()}
@@ -1438,30 +1655,6 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
               maxHeight: '900px'
             }}
           >
-            <button 
-              className="fullscreen-close" 
-              onClick={() => setZoomedChartIndex(null)}
-              style={{
-                position: 'absolute',
-                top: '20px',
-                right: '20px',
-                background: 'rgba(0, 0, 0, 0.1)',
-                border: 'none',
-                borderRadius: '50%',
-                width: '40px',
-                height: '40px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                zIndex: 10001
-              }}
-            >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
             <div style={{ width: '100%', height: '100%' }}>
               <PlotlyChartRenderer 
                 chartSpec={chartSpecs[zoomedChartIndex]} 
@@ -1832,11 +2025,6 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                       <span className="sparkle">*</span>
                       <span className="sparkle">*</span>
                     </div>
-                    {isFirstChartLoading && (
-                      <div className="loading-message-text">
-                        {loadingMessage}
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
@@ -2145,6 +2333,29 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                             )}
                           </div>
                           
+                          {/* Loading Message in Dashboard Area */}
+                          {isFirstChartLoading && (
+                            <div style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              padding: '40px 20px',
+                              gap: '16px'
+                            }}>
+                              <div className="magic-sparkles" style={{ marginBottom: 0 }}>
+                                <span className="sparkle">*</span>
+                                <span className="sparkle">*</span>
+                                <span className="sparkle">*</span>
+                                <span className="sparkle">*</span>
+                                <span className="sparkle">*</span>
+                              </div>
+                              <div className="loading-message-text">
+                                {loadingMessage}
+                              </div>
+                            </div>
+                          )}
+                          
                           {/* Charts Grid with Notes Icons */}
                           <div style={{
                             display: 'grid',
@@ -2184,14 +2395,55 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                   />
                                 </div>
                                 
-                                {/* Notes Icon - Outside, to the right */}
+                                {/* Notes Icon and Delete Button - Outside, to the right */}
                                 <div 
                                   data-notes-dropdown
                                   style={{
                                     position: 'relative',
-                                    flexShrink: 0
+                                    flexShrink: 0,
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '8px'
                                   }}
                                 >
+                                  {/* Delete Button */}
+                                  <button
+                                    onClick={() => handleDeleteChart(index)}
+                                    style={{
+                                      background: 'rgba(255, 107, 107, 0.1)',
+                                      backdropFilter: 'blur(4px)',
+                                      border: '1px solid rgba(255, 107, 107, 0.3)',
+                                      borderRadius: '50%',
+                                      width: '40px',
+                                      height: '40px',
+                                      padding: '0',
+                                      cursor: 'pointer',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      transition: 'all 0.2s',
+                                      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                                      color: '#ff6b6b'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.background = 'rgba(255, 107, 107, 0.2)';
+                                      e.currentTarget.style.transform = 'scale(1.05)';
+                                      e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.15)';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.currentTarget.style.background = 'rgba(255, 107, 107, 0.1)';
+                                      e.currentTarget.style.transform = 'scale(1)';
+                                      e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1)';
+                                    }}
+                                    title="Delete chart"
+                                  >
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                      <line x1="18" y1="6" x2="6" y2="18"></line>
+                                      <line x1="6" y1="6" x2="18" y2="18"></line>
+                                    </svg>
+                                  </button>
+                                  
+                                  {/* Notes Button */}
                                   <button
                                     onClick={() => {
                                       // Toggle notes visibility
@@ -2214,13 +2466,13 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                       }
                                     }}
                                     style={{
-                                      background: 'rgba(255, 255, 255, 0.9)',
+                                      background: 'rgba(255, 107, 107, 0.1)',
                                       backdropFilter: 'blur(4px)',
-                                      border: '1px solid rgba(0, 0, 0, 0.1)',
+                                      border: '1px solid rgba(255, 107, 107, 0.3)',
                                       borderRadius: '8px',
                                       padding: '8px 12px',
                                       fontSize: '12px',
-                                      color: '#6b7280',
+                                      color: '#ff6b6b',
                                       cursor: 'pointer',
                                       display: 'flex',
                                       alignItems: 'center',
@@ -2230,13 +2482,13 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                       whiteSpace: 'nowrap'
                                     }}
                                     onMouseEnter={(e) => {
-                                      e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 1)';
-                                      e.currentTarget.style.color = '#374151';
+                                      e.currentTarget.style.backgroundColor = 'rgba(255, 107, 107, 0.2)';
+                                      e.currentTarget.style.color = '#ef4444';
                                       e.currentTarget.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.15)';
                                     }}
                                     onMouseLeave={(e) => {
-                                      e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
-                                      e.currentTarget.style.color = '#6b7280';
+                                      e.currentTarget.style.backgroundColor = 'rgba(255, 107, 107, 0.1)';
+                                      e.currentTarget.style.color = '#ff6b6b';
                                       e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.1)';
                                     }}
                                     title={chartNotes[index] ? (notesVisible[index] ? "Hide notes" : "Show notes") : "Add notes"}
@@ -2556,16 +2808,52 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                           </div>
                         </React.Fragment>
                       ) : (
-                        <div className="empty-state">
-                          <p>Ask a question about your data to generate a visualization</p>
-                          <p className="empty-state-hint">
-                            Examples: "Show me a histogram of prices", "Create a scatter plot of sqft_living vs price"
+                        <div className="empty-state" style={{ 
+                          display: 'flex', 
+                          flexDirection: 'column', 
+                          alignItems: 'center', 
+                          justifyContent: 'center',
+                          minHeight: '400px',
+                          gap: '1rem'
+                        }}>
+                          <button
+                            onClick={() => setShowAddChartPopup(true)}
+                            style={{
+                              width: '120px',
+                              height: '120px',
+                              borderRadius: '50%',
+                              border: '3px solid #ff6b6b',
+                              background: 'rgba(255, 107, 107, 0.1)',
+                              color: '#ff6b6b',
+                              fontSize: '48px',
+                              fontWeight: 'bold',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              transition: 'all 0.3s ease',
+                              boxShadow: '0 4px 12px rgba(255, 107, 107, 0.2)'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = 'rgba(255, 107, 107, 0.2)';
+                              e.currentTarget.style.transform = 'scale(1.1)';
+                              e.currentTarget.style.boxShadow = '0 6px 20px rgba(255, 107, 107, 0.3)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = 'rgba(255, 107, 107, 0.1)';
+                              e.currentTarget.style.transform = 'scale(1)';
+                              e.currentTarget.style.boxShadow = '0 4px 12px rgba(255, 107, 107, 0.2)';
+                            }}
+                            title="Create Your Dashboard"
+                          >
+                            +
+                          </button>
+                          <p style={{ fontSize: '1.2rem', fontWeight: 500, color: '#374151', marginTop: '1rem' }}>
+                            Create Your Dashboard
                           </p>
-                          {localData.length > 0 && (
-                            <p className="empty-state-info" style={{ marginTop: '1rem', fontSize: '0.9rem', color: '#666' }}>
-                              Ready to visualize {localData.length.toLocaleString()} rows
-                            </p>
-                          )}
+                          <p style={{ fontSize: '0.9rem', color: '#6b7280', textAlign: 'center', maxWidth: '400px' }}>
+                            Click the + button to start building your dashboard with AI-powered visualizations
+                          </p>
                         </div>
                       )}
               </div>
@@ -2614,7 +2902,6 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
               setGuideStep(null);
             }
           }}
-          onSkip={() => setGuideStep(null)}
         />
       )}
 

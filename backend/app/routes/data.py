@@ -1069,7 +1069,6 @@ async def analyze_data(
         """Generator function that yields SSE-formatted events"""
         charts_data_for_db = []
         dashboard_title = None
-        used_cached_results = False  # Track if we used cached visualizations
         
         try:
             # Check for default housing visualizations
@@ -1095,7 +1094,9 @@ async def analyze_data(
                 prebuilt_charts = default_data['charts']
                 
                 # Send dashboard_info event first
-                yield f"data: {json.dumps({'type': 'dashboard_info', 'dashboard_title': dashboard_title, 'full_plan': full_plan})}\n\n"
+                dashboard_info_event = json.dumps({'type': 'dashboard_info', 'dashboard_title': dashboard_title, 'full_plan': full_plan})
+                logger.info(f"Sending dashboard_info event: {dashboard_info_event[:100]}...")
+                yield f"data: {dashboard_info_event}\n\n"
                 
                 # Stream pre-built charts instantly
                 for idx, chart in enumerate(prebuilt_charts):
@@ -1108,47 +1109,74 @@ async def analyze_data(
                         "plan": chart['plan']
                     })
                     
-                    yield f"data: {json.dumps({'type': 'chart', 'chart': chart, 'progress': int(((idx + 1) / len(prebuilt_charts)) * 100)})}\n\n"
+                    chart_event = json.dumps({'type': 'chart', 'chart': chart, 'progress': int(((idx + 1) / len(prebuilt_charts)) * 100)})
+                    logger.info(f"Sending chart {idx+1}/{len(prebuilt_charts)}, event size: {len(chart_event)} bytes")
+                    yield f"data: {chart_event}\n\n"
                 
-                yield f"data: {json.dumps({'type': 'complete', 'message': f'Loaded {len(prebuilt_charts)} chart(s)', 'total_charts': len(prebuilt_charts), 'progress': 100})}\n\n"
+                complete_event = json.dumps({'type': 'complete', 'message': f'Loaded {len(prebuilt_charts)} chart(s)', 'total_charts': len(prebuilt_charts), 'progress': 100})
+                logger.info(f"Sending complete event")
+                yield f"data: {complete_event}\n\n"
                 
-                # Mark that we used pre-built (skip credit deduction)
-                used_cached_results = True
-                logger.info("Used pre-built visualizations - will skip credit deduction")
+                logger.info("Used pre-built visualizations - credits will still be charged")
             else:
-                # Import streaming generator
-                from ..services.chart_creator import generate_chart_spec_streaming
+                # Generate charts using regular function
+                from ..services.chart_creator import generate_chart_spec
+                from ..services.dataset_service import dataset_service
                 
                 query = request.query + "/n use these colors " + str(request.color_theme)
                 
-                async for event in generate_chart_spec_streaming(
+                # Generate all charts
+                chart_specs, full_plan, dashboard_title = await generate_chart_spec(
                     df=df,
                     query=query,
                     dataset_context=dataset_context,
                     user_id=current_user.id,
                     dataset_id=dataset_id
-                ):
-                    # Convert event to SSE format
-                    if event.get('type') == 'dashboard_info':
-                        dashboard_title = event.get('dashboard_title', 'Dashboard')
-                        charts_data_for_db = []  # Reset for DB storage
-                    
-                    elif event.get('type') == 'chart':
-                        chart = event['chart']
+                )
+                
+                # Yield dashboard_info event
+                yield f"data: {json.dumps({'type': 'dashboard_info', 'dashboard_title': dashboard_title, 'full_plan': full_plan})}\n\n"
+                
+                # Stream charts one by one
+                if isinstance(chart_specs, list):
+                    total_charts = len(chart_specs)
+                    for idx, chart in enumerate(chart_specs):
+                        chart_index = chart.get('chart_index', idx)
+                        
+                        # Store chart metadata
+                        try:
+                            dataset_service.set_chart_metadata(
+                                user_id=current_user.id,
+                                dataset_id=dataset_id,
+                                chart_index=chart_index,
+                                chart_spec=chart.get('chart_spec', ''),
+                                plan=chart.get('plan', full_plan),
+                                figure_data=chart.get('figure'),
+                                chart_type=chart.get('chart_type'),
+                                title=chart.get('title', 'Visualization')
+                            )
+                        except Exception as e:
+                            logger.warning(f"Failed to store chart metadata: {e}")
+                        
                         charts_data_for_db.append({
-                            "chart_index": chart.get('chart_index', 0),
+                            "chart_index": chart_index,
                             "code": chart.get('chart_spec', ''),
                             "figure": chart.get('figure'),
                             "title": chart.get('title', 'Visualization'),
                             "chart_type": chart.get('chart_type'),
-                            "plan": chart.get('plan', {})
+                            "plan": chart.get('plan', full_plan)
                         })
+                        
+                        # Yield chart event
+                        yield f"data: {json.dumps({'type': 'chart', 'chart': chart, 'progress': int(((idx + 1) / total_charts) * 100)})}\n\n"
                     
-                    # Yield SSE-formatted event
-                    yield f"data: {json.dumps(event)}\n\n"
+                    # Yield complete event
+                    yield f"data: {json.dumps({'type': 'complete', 'message': f'Generated {total_charts} chart(s)', 'total_charts': total_charts, 'progress': 100})}\n\n"
+                else:
+                    yield f"data: {json.dumps({'type': 'error', 'message': 'Unexpected result format'})}\n\n"
             
-            # Save dashboard query to DB (after all charts) - skip if using cached results
-            if not used_cached_results and charts_data_for_db:
+            # Save dashboard query to DB (after all charts)
+            if charts_data_for_db:
                 try:
                     dataset_service.save_dashboard_query(
                         db,
@@ -1161,17 +1189,15 @@ async def analyze_data(
                     )
                 except Exception as e:
                     logger.warning(f"Failed to save dashboard query: {e}")
-                
-                # Deduct credits - only for newly generated visualizations
-                credit_service.deduct_credits(
-                    db,
-                    current_user.id,
-                    5,
-                    f"Data analysis: {request.query[:100]}",
-                    metadata={"dataset_id": dataset_id, "chart_count": len(charts_data_for_db)}
-                )
-            elif used_cached_results:
-                logger.info("Skipped DB save and credit deduction - used cached visualizations")
+            
+            # Deduct credits for all analyses
+            credit_service.deduct_credits(
+                db,
+                current_user.id,
+                5,
+                f"Data analysis: {request.query[:100]}",
+                metadata={"dataset_id": dataset_id, "chart_count": len(charts_data_for_db)}
+            )
             
         except Exception as e:
             logger.error(f"Error in streaming: {e}", exc_info=True)

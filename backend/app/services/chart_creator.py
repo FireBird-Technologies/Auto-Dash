@@ -262,7 +262,7 @@ async def generate_chart_spec(
         }], full_plan or {}, dashboard_title
     
     return result, full_plan or {}, dashboard_title
-        
+
 #     except Exception as e:
 #         logger.error(f"Failed to generate visualization: {e}")
 #         # Return error response with a simple error figure
