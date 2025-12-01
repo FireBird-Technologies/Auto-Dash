@@ -58,7 +58,7 @@ export const PublicDashboard: React.FC = () => {
         }
 
         if (response.status === 410) {
-          setError('This dashboard link has expired');
+          setError('😢 Sorry! The dashboard was hosted on the free plan and is no longer available. Please ask politely for whoever shared it to upgrade their plan!');
           setLoading(false);
           return;
         }

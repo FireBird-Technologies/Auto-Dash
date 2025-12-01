@@ -2481,7 +2481,10 @@ async def get_public_dashboard(
             raise HTTPException(status_code=404, detail="Dashboard not found")
         
         if isinstance(result, dict) and result.get("error") == "expired":
-            raise HTTPException(status_code=410, detail="Dashboard link has expired")
+            raise HTTPException(
+                status_code=410, 
+                detail="😢 Sorry! The dashboard was hosted on the free plan and is no longer available. Please ask politely for whoever shared it to upgrade their plan!"
+            )
         
         return result
     except HTTPException:

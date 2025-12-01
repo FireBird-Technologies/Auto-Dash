@@ -280,6 +280,35 @@ class DatasetService:
             return charts.get(chart_index)
         return None
     
+    def delete_chart_metadata(
+        self,
+        user_id: int,
+        dataset_id: str,
+        chart_index: int
+    ) -> bool:
+        """
+        Delete metadata for a specific chart.
+        
+        Args:
+            user_id: User ID
+            dataset_id: Dataset identifier
+            chart_index: Chart index to delete
+            
+        Returns:
+            True if chart was deleted, False if not found
+        """
+        if user_id in self._store and dataset_id in self._store[user_id]:
+            charts = self._store[user_id][dataset_id].get("charts", {})
+            if chart_index in charts:
+                del charts[chart_index]
+                # Re-index remaining charts to maintain sequential order
+                new_charts = {}
+                for i, (idx, chart_data) in enumerate(sorted(charts.items())):
+                    new_charts[i] = {**chart_data, "chart_index": i}
+                self._store[user_id][dataset_id]["charts"] = new_charts
+                return True
+        return False
+    
     def get_chart_plan(
         self,
         user_id: int,

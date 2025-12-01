@@ -2231,18 +2231,40 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
           </div>
 
           <div className="visualization-container-large" ref={visualizationRef}>
-            {/* Star Loading Animation - Only show when loading AND no charts exist yet */}
-            {isLoading && chartSpecs.length === 0 && (
-            <div className="magic-loading">
-              <div className="magic-sparkles">
-                <span className="sparkle">*</span>
-                <span className="sparkle">*</span>
-                <span className="sparkle">*</span>
-                <span className="sparkle">*</span>
-                <span className="sparkle">*</span>
+
+            {/* Loading Message in Dashboard Area - Show when loading first chart */}
+            {isFirstChartLoading && chartSpecs.length === 0 && (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '80px 20px',
+                gap: '16px',
+                minHeight: '400px'
+              }}>
+                <div className="magic-sparkles" style={{ marginBottom: 0 }}>
+                  <span className="sparkle">*</span>
+                  <span className="sparkle">*</span>
+                  <span className="sparkle">*</span>
+                  <span className="sparkle">*</span>
+                  <span className="sparkle">*</span>
+                </div>
+                <p style={{
+                  fontSize: '24px',
+                  fontWeight: 600,
+                  textAlign: 'center',
+                  letterSpacing: '0.5px',
+                  background: 'linear-gradient(135deg, #ff6b6b 0%, #ff8787 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                  margin: 0,
+                  animation: 'pulse 2s ease-in-out infinite'
+                }}>
+                  {loadingMessage}
+                </p>
               </div>
-              <p className="magic-text">Crafting beautiful insights from your data...</p>
-            </div>
             )}
 
             {/* Chart Display - Show when charts exist (even if loading) */}
@@ -2332,29 +2354,6 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                               </h2>
                             )}
                           </div>
-                          
-                          {/* Loading Message in Dashboard Area */}
-                          {isFirstChartLoading && (
-                            <div style={{
-                              display: 'flex',
-                              flexDirection: 'column',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              padding: '40px 20px',
-                              gap: '16px'
-                            }}>
-                              <div className="magic-sparkles" style={{ marginBottom: 0 }}>
-                                <span className="sparkle">*</span>
-                                <span className="sparkle">*</span>
-                                <span className="sparkle">*</span>
-                                <span className="sparkle">*</span>
-                                <span className="sparkle">*</span>
-                              </div>
-                              <div className="loading-message-text">
-                                {loadingMessage}
-                              </div>
-                            </div>
-                          )}
                           
                           {/* Charts Grid with Notes Icons */}
                           <div style={{
