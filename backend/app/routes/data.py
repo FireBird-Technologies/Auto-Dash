@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import Dict, Any, Optional
 from pydantic import BaseModel
@@ -12,6 +13,7 @@ import os
 from dotenv import load_dotenv
 import plotly.graph_objects as go
 import plotly
+import plotly.io
 
 # Load .env file from the parent directory (above 'app')
 from pathlib import Path
@@ -60,6 +62,115 @@ if not logger.hasHandlers():
 router = APIRouter(prefix="/api/data", tags=["data"])
 
 
+# Column name sanitization function
+def sanitize_column_name(col_name: str) -> str:
+    """
+    Clean column names from dangerous strings and characters.
+    Removes SQL injection, XSS, command injection patterns, and other dangerous content.
+    """
+    if not col_name:
+        return "column"
+    
+    # Convert to string and strip whitespace
+    col_name = str(col_name).strip()
+    
+    # Remove null bytes and control characters
+    col_name = ''.join(char for char in col_name if ord(char) >= 32 or char in ['\t', '\n', '\r'])
+    
+    # List of dangerous patterns to remove (case-insensitive)
+    dangerous_patterns = [
+        # SQL injection patterns
+        r"';?\s*(DROP|DELETE|INSERT|UPDATE|ALTER|CREATE|TRUNCATE|EXEC|EXECUTE)",
+        r"UNION\s+SELECT",
+        r"--.*",  # SQL comments
+        r"/\*.*?\*/",  # SQL block comments
+        r";\s*",  # SQL statement separator
+        r"'\s*OR\s*'1'\s*=\s*'1",
+        r"'\s*AND\s*'1'\s*=\s*'1",
+        
+        # XSS patterns
+        r"<script[^>]*>.*?</script>",
+        r"javascript:",
+        r"on\w+\s*=",  # onclick=, onerror=, etc.
+        r"<iframe[^>]*>",
+        r"<img[^>]*onerror",
+        r"<svg[^>]*onload",
+        
+        # Command injection patterns
+        r"[|&;`$<>]",
+        r"\$\{.*?\}",  # ${command}
+        r"`.*?`",  # backticks
+        
+        # Path traversal
+        r"\.\./",
+        r"\.\.\\",
+        
+        # Other dangerous characters
+        r"\x00",  # Null byte
+        r"\r\n",  # Line breaks that could be dangerous
+        r"\n",
+        r"\r",
+    ]
+    
+    # Remove dangerous patterns
+    import re
+    for pattern in dangerous_patterns:
+        col_name = re.sub(pattern, '', col_name, flags=re.IGNORECASE | re.DOTALL)
+    
+    # Remove any remaining dangerous characters
+    dangerous_chars = ['<', '>', '"', "'", '&', '|', ';', '`', '$', '{', '}', '(', ')', '[', ']']
+    for char in dangerous_chars:
+        col_name = col_name.replace(char, '_')
+    
+    # Clean up: remove multiple underscores/spaces, strip
+    col_name = re.sub(r'[_\s]+', '_', col_name)
+    col_name = col_name.strip('_').strip()
+    
+    # Ensure it's not empty and doesn't start with a number
+    if not col_name or col_name[0].isdigit():
+        col_name = f"col_{col_name}" if col_name else "column"
+    
+    # Limit length to prevent abuse
+    if len(col_name) > 100:
+        col_name = col_name[:100]
+    
+    return col_name
+
+
+def sanitize_dataframe_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Sanitize all column names in a DataFrame.
+    """
+    if df is None or df.empty:
+        return df
+    
+    try:
+        # Get sanitized column names
+        sanitized_columns = [sanitize_column_name(col) for col in df.columns]
+        
+        # Handle duplicate column names after sanitization
+        seen = {}
+        final_columns = []
+        for col in sanitized_columns:
+            if col in seen:
+                seen[col] += 1
+                final_columns.append(f"{col}_{seen[col]}")
+            else:
+                seen[col] = 0
+                final_columns.append(col)
+        
+        df.columns = final_columns
+        return df
+    except Exception as e:
+        logger.warning(f"Error sanitizing column names: {str(e)}")
+        # Fallback: just ensure columns are strings
+        try:
+            df.columns = [str(c).strip() for c in df.columns]
+        except Exception:
+            pass
+        return df
+
+
 # Automatic data type conversion functions
 def restore_headers_if_lost(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -80,12 +191,14 @@ def restore_headers_if_lost(df: pd.DataFrame) -> pd.DataFrame:
             if unique and looks_textual and non_empty_ratio > 0.7:
                 df = df.iloc[1:].reset_index(drop=True)
                 df.columns = proposed
-        # Ensure columns are strings
+        # Ensure columns are strings and sanitize them
         df.columns = [str(c) for c in df.columns]
+        df = sanitize_dataframe_columns(df)
         return df
     except Exception:
         try:
             df.columns = [str(c) for c in df.columns]
+            df = sanitize_dataframe_columns(df)
         except Exception:
             pass
         return df
@@ -276,6 +389,8 @@ class FileProcessor:
                     
                     # Check if we got meaningful data (more than 1 column)
                     if self.df.shape[1] > 1:
+                        # Sanitize column names
+                        self.df = sanitize_dataframe_columns(self.df)
                         print(f"Successfully read CSV with encoding={encoding}, delimiter='{delimiter}'")
                         return self.df
                 except Exception as e:
@@ -294,6 +409,8 @@ class FileProcessor:
             # Attempt to promote first row to headers if they look like column names
             try:
                 self.df = restore_headers_if_lost(self.df)
+                # Sanitize column names after restoring headers
+                self.df = sanitize_dataframe_columns(self.df)
             except Exception:
                 pass
             print("Read CSV as single column (may need manual parsing)")
@@ -313,6 +430,8 @@ class FileProcessor:
                     engine=engine,
                     sheet_name=0  # Read first sheet
                 )
+                # Sanitize column names
+                self.df = sanitize_dataframe_columns(self.df)
                 print(f"Successfully read Excel with engine={engine}")
                 return self.df
             except Exception as e:
@@ -379,6 +498,9 @@ async def load_sample_data(
         
         # Read the CSV
         df = pd.read_csv(sample_file)
+        
+        # Sanitize column names
+        df = sanitize_dataframe_columns(df)
         
         # Replace NaN with None (which becomes null in JSON)
         df = df.replace({np.nan: None, np.inf: None, -np.inf: None})
@@ -549,6 +671,9 @@ async def upload_data(
             processor = FileProcessor(temp_file_path)
             df = processor.read_csv()
             
+            # Sanitize column names
+            df = sanitize_dataframe_columns(df)
+            
             # Automatically convert data types
             df = auto_convert_datatypes(df)
             
@@ -576,9 +701,10 @@ async def upload_data(
                     sheet_df.dropna(how='all', inplace=True)  # Drop empty rows
                     sheet_df.dropna(how='all', axis=1, inplace=True)  # Drop empty columns
                     
-                    # Clean column names
+                    # Clean and sanitize column names
                     if not sheet_df.empty:
                         sheet_df.columns = sheet_df.columns.str.strip()
+                        sheet_df = sanitize_dataframe_columns(sheet_df)
                     
                     # Skip empty sheets
                     if sheet_df.empty:
@@ -909,10 +1035,12 @@ async def analyze_data(
     """
     Initial visualization generation endpoint - used for first chart after upload.
     Generates Plotly visualizations from natural language query.
+    Uses Server-Sent Events (SSE) to stream charts as they're generated.
     
     Costs: 5 credits per analysis
     """
     current_user = credits.user
+    
     # Get the dataset
     if request.dataset_id:
         df = dataset_service.get_dataset(current_user.id, request.dataset_id)
@@ -929,118 +1057,135 @@ async def analyze_data(
             )
         dataset_id, df = result
     
-    # Get the dataset context from memory
+    # Get dataset context
     dataset_context = dataset_service.get_context(current_user.id, dataset_id)
-    
-    # If context not available yet, provide basic fallback info
-    # df is always a dict now
     if not dataset_context:
         sheet_names = list(df.keys())
         first_sheet = df[sheet_names[0]]
         columns = [str(col) for col in first_sheet.columns.tolist()]
         dataset_context = f"Dataset with {len(first_sheet)} rows and {len(first_sheet.columns)} columns. Columns: {', '.join(columns)}. Available sheets: {', '.join(sheet_names)}"
     
-    # Generate chart specification using DSPy agents with context
-    from ..services.chart_creator import generate_chart_spec
-
-    query = request.query + "/n use these colors "+ str(request.color_theme)
-    
-    # try:
-    chart_specs, full_plan, dashboard_title = await generate_chart_spec(
-        df=df, 
-        query=query, 
-        dataset_context=dataset_context,
-        user_id=current_user.id,
-        dataset_id=dataset_id
-    )
-    
-    # Store chart metadata including plans
-    charts_data_for_db = []
-    if isinstance(chart_specs, list):
-        for chart in chart_specs:
-            chart_index = chart.get('chart_index', 0)
-            chart_spec = chart.get('chart_spec', '')
-            chart_plan = chart.get('plan', full_plan)  # Use chart-specific plan or fallback to full plan
-            figure_data = chart.get('figure')
-            chart_type = chart.get('chart_type')
-            title = chart.get('title', 'Visualization')
-            
-            # Prepare chart data for DB storage
-            charts_data_for_db.append({
-                "chart_index": chart_index,
-                "code": chart_spec,
-                "figure": figure_data,
-                "title": title,
-                "chart_type": chart_type,
-                "plan": chart_plan
-            })
-            
-            try:
-                dataset_service.set_chart_metadata(
-                    user_id=current_user.id,
-                    dataset_id=dataset_id,
-                    chart_index=chart_index,
-                    chart_spec=chart_spec,
-                    plan=chart_plan,
-                    figure_data=figure_data,
-                    chart_type=chart_type,
-                    title=title
-                )
-            except Exception as e:
-                logger.warning(f"Failed to store chart metadata for chart {chart_index}: {e}")
+    async def generate_stream():
+        """Generator function that yields SSE-formatted events"""
+        charts_data_for_db = []
+        dashboard_title = None
+        used_cached_results = False  # Track if we used cached visualizations
         
-        # Save dashboard query to DB
         try:
-            dataset_service.save_dashboard_query(
-                db,
-                current_user.id,
-                dataset_id,
-                request.query,
-                "analyze",
-                charts_data_for_db,
-                dashboard_title
-            )
+            # Check for default housing visualizations
+            is_default_housing = dataset_id.startswith("sample_housing_")
+            default_query_patterns = [
+                "comprehensive view of housing prices",
+                "housing prices and how it relates",
+                "build a dashboard",
+                "construct a dashboard"
+            ]
+            is_default_query = any(pattern.lower() in request.query.lower() for pattern in default_query_patterns)
+            
+            if is_default_housing and is_default_query:
+                # Load pre-built default visualizations from JSON file - instant!
+                logger.info(f"Loading pre-built default housing visualizations for dataset {dataset_id}")
+                default_dashboard_path = Path(__file__).parent.parent / "default_housing_dashboard.json"
+                
+                with open(default_dashboard_path, 'r') as f:
+                    default_data = json.load(f)
+                
+                dashboard_title = default_data['dashboard_title']
+                full_plan = default_data['full_plan']
+                prebuilt_charts = default_data['charts']
+                
+                # Send dashboard_info event first
+                yield f"data: {json.dumps({'type': 'dashboard_info', 'dashboard_title': dashboard_title, 'full_plan': full_plan})}\n\n"
+                
+                # Stream pre-built charts instantly
+                for idx, chart in enumerate(prebuilt_charts):
+                    charts_data_for_db.append({
+                        "chart_index": chart['chart_index'],
+                        "code": chart['chart_spec'],
+                        "figure": chart['figure'],
+                        "title": chart['title'],
+                        "chart_type": chart['chart_type'],
+                        "plan": chart['plan']
+                    })
+                    
+                    yield f"data: {json.dumps({'type': 'chart', 'chart': chart, 'progress': int(((idx + 1) / len(prebuilt_charts)) * 100)})}\n\n"
+                
+                yield f"data: {json.dumps({'type': 'complete', 'message': f'Loaded {len(prebuilt_charts)} chart(s)', 'total_charts': len(prebuilt_charts), 'progress': 100})}\n\n"
+                
+                # Mark that we used pre-built (skip credit deduction)
+                used_cached_results = True
+                logger.info("Used pre-built visualizations - will skip credit deduction")
+            else:
+                # Import streaming generator
+                from ..services.chart_creator import generate_chart_spec_streaming
+                
+                query = request.query + "/n use these colors " + str(request.color_theme)
+                
+                async for event in generate_chart_spec_streaming(
+                    df=df,
+                    query=query,
+                    dataset_context=dataset_context,
+                    user_id=current_user.id,
+                    dataset_id=dataset_id
+                ):
+                    # Convert event to SSE format
+                    if event.get('type') == 'dashboard_info':
+                        dashboard_title = event.get('dashboard_title', 'Dashboard')
+                        charts_data_for_db = []  # Reset for DB storage
+                    
+                    elif event.get('type') == 'chart':
+                        chart = event['chart']
+                        charts_data_for_db.append({
+                            "chart_index": chart.get('chart_index', 0),
+                            "code": chart.get('chart_spec', ''),
+                            "figure": chart.get('figure'),
+                            "title": chart.get('title', 'Visualization'),
+                            "chart_type": chart.get('chart_type'),
+                            "plan": chart.get('plan', {})
+                        })
+                    
+                    # Yield SSE-formatted event
+                    yield f"data: {json.dumps(event)}\n\n"
+            
+            # Save dashboard query to DB (after all charts) - skip if using cached results
+            if not used_cached_results and charts_data_for_db:
+                try:
+                    dataset_service.save_dashboard_query(
+                        db,
+                        current_user.id,
+                        dataset_id,
+                        request.query,
+                        "analyze",
+                        charts_data_for_db,
+                        dashboard_title or 'Dashboard'
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to save dashboard query: {e}")
+                
+                # Deduct credits - only for newly generated visualizations
+                credit_service.deduct_credits(
+                    db,
+                    current_user.id,
+                    5,
+                    f"Data analysis: {request.query[:100]}",
+                    metadata={"dataset_id": dataset_id, "chart_count": len(charts_data_for_db)}
+                )
+            elif used_cached_results:
+                logger.info("Skipped DB save and credit deduction - used cached visualizations")
+            
         except Exception as e:
-            logger.warning(f"Failed to save dashboard query: {e}")
-        
-        # Deduct credits after successful analysis
-        credit_service.deduct_credits(
-            db, 
-            current_user.id, 
-            5, 
-            f"Data analysis: {request.query[:100]}",
-            metadata={"dataset_id": dataset_id, "chart_count": len(chart_specs)}
-        )
-        
-        return {
-            "message": f"{len(chart_specs)} chart(s) generated successfully",
-            "query": request.query,
-            "dataset_id": dataset_id,
-            "dashboard_title": dashboard_title,
-            "charts": chart_specs  # Array of chart specs
+            logger.error(f"Error in streaming: {e}", exc_info=True)
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+    
+    return StreamingResponse(
+        generate_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"  # Disable nginx buffering
         }
-    else:
-        # Backward compatibility for single chart
-        # Deduct credits after successful analysis
-        credit_service.deduct_credits(
-            db, 
-            current_user.id, 
-            5, 
-            f"Data analysis: {request.query[:100]}",
-            metadata={"dataset_id": dataset_id}
-        )
-        
-        return {
-            "message": "Chart generated successfully",
-            "query": request.query,
-            "dataset_id": dataset_id,
-            "chart_spec": chart_specs
-        }
-    # except Exception as e:
-    #     raise HTTPException(
-    #         status_code=500,
-    #         detail=f"Error generating chart: {str(e)}"
-    #     )
+    )
 
 
 def plotly_fix_metric(example, pred, trace=None) -> float:
@@ -2056,6 +2201,43 @@ async def add_chart(
     except Exception as e:
         logger.error(f"Error adding chart: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to add chart: {str(e)}")
+
+
+@router.delete("/datasets/{dataset_id}/charts/{chart_index}")
+async def delete_chart(
+    dataset_id: str,
+    chart_index: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Delete a chart from the dashboard.
+    
+    Args:
+        dataset_id: Dataset identifier
+        chart_index: Chart index to delete
+    """
+    try:
+        # Delete chart metadata from memory
+        success = dataset_service.delete_chart_metadata(
+            current_user.id,
+            dataset_id,
+            chart_index
+        )
+        
+        if not success:
+            raise HTTPException(status_code=404, detail="Chart not found")
+        
+        return {
+            "message": "Chart deleted successfully",
+            "dataset_id": dataset_id,
+            "chart_index": chart_index
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting chart: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to delete chart: {str(e)}")
 
 
 @router.post("/datasets/{dataset_id}/charts/{chart_index}/notes")
