@@ -2340,6 +2340,208 @@ body::before {
   }
 }
 
+/* Guided Tour Overlay */
+.guide-overlay-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+  z-index: 10000;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.guide-highlight-box {
+  border-radius: 8px;
+  box-shadow: 
+    0 0 0 4px rgba(255, 107, 107, 0.3),
+    0 0 0 8px rgba(255, 107, 107, 0.15),
+    0 0 20px rgba(255, 107, 107, 0.2),
+    inset 0 0 20px rgba(255, 107, 107, 0.1);
+  animation: pulseHighlight 2s ease-in-out infinite;
+}
+
+@keyframes pulseHighlight {
+  0%, 100% {
+    box-shadow: 
+      0 0 0 4px rgba(255, 107, 107, 0.3),
+      0 0 0 8px rgba(255, 107, 107, 0.15),
+      0 0 20px rgba(255, 107, 107, 0.2),
+      inset 0 0 20px rgba(255, 107, 107, 0.1);
+  }
+  50% {
+    box-shadow: 
+      0 0 0 6px rgba(255, 107, 107, 0.4),
+      0 0 0 12px rgba(255, 107, 107, 0.2),
+      0 0 30px rgba(255, 107, 107, 0.3),
+      inset 0 0 30px rgba(255, 107, 107, 0.15);
+  }
+}
+
+.guide-highlight {
+  position: relative;
+  z-index: 10003 !important;
+  transform: scale(1.05);
+  transition: transform 0.2s ease;
+  pointer-events: auto !important;
+}
+
+.guide-tooltip {
+  min-width: 280px;
+  max-width: 320px;
+  animation: slideInTooltip 0.3s ease-out;
+}
+
+@keyframes slideInTooltip {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.guide-tooltip-content {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 1) 100%);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 2px solid rgba(255, 107, 107, 0.3);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 
+    0 10px 40px rgba(0, 0, 0, 0.2),
+    0 0 0 1px rgba(255, 107, 107, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  position: relative;
+}
+
+.guide-tooltip-header {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.guide-tooltip-icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(255, 107, 107, 0.1) 0%, rgba(255, 107, 107, 0.2) 100%);
+  border-radius: 10px;
+  color: var(--aa-primary);
+}
+
+.guide-tooltip-header h3 {
+  margin: 0 0 4px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--aa-text);
+}
+
+.guide-tooltip-header p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--aa-muted);
+  line-height: 1.5;
+}
+
+.guide-tooltip-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 12px;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.guide-step-indicator {
+  font-size: 12px;
+  color: var(--aa-muted);
+  font-weight: 500;
+}
+
+.guide-tooltip-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.guide-skip-btn,
+.guide-next-btn,
+.guide-finish-btn {
+  padding: 6px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.guide-skip-btn {
+  background: transparent;
+  color: var(--aa-muted);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.guide-skip-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--aa-text);
+}
+
+.guide-next-btn,
+.guide-finish-btn {
+  background: linear-gradient(135deg, var(--aa-primary) 0%, #ff8787 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(255, 107, 107, 0.3);
+}
+
+.guide-next-btn:hover,
+.guide-finish-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(255, 107, 107, 0.4);
+}
+
+.guide-tooltip-arrow {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  background: white;
+  border: 2px solid rgba(255, 107, 107, 0.3);
+  transform: rotate(45deg);
+  border-top: none;
+  border-left: none;
+}
+
+/* Loading Message Text */
+.loading-message-text {
+  font-size: 15px;
+  color: var(--aa-text);
+  font-weight: 500;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, rgba(255, 107, 107, 0.08) 0%, rgba(255, 107, 107, 0.12) 100%);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 107, 107, 0.15);
+  animation: fadeInMessage 0.5s ease-out;
+  line-height: 1.5;
+  margin-top: 4px;
+}
+
+@keyframes fadeInMessage {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .magic-text {
   font-size: 20px;
   font-weight: 600;

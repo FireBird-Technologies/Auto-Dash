@@ -8,7 +8,7 @@ export const pricingConfig = {
   annualDiscount: 20,
   
   // Enterprise contact email
-  enterpriseEmail: 'sales@autodash.com',
+  enterpriseEmail: 'arslan@firebird-technologies.com',
   
   // Credit costs (should match backend configuration)
   creditCosts: {
