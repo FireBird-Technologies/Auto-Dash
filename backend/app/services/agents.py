@@ -887,6 +887,49 @@ def clean_plotly_code(code: str) -> str:
     return cleaned.strip()
 
 
+def extract_columns_from_code(code: str, available_columns: list = None) -> list:
+    """
+    Extract DataFrame column names used in Python/Plotly code.
+    
+    If available_columns is provided, only returns columns that exist in the DataFrame
+    and appear in the code. This is the most reliable method.
+    
+    Args:
+        code: The Python/Plotly code to analyze
+        available_columns: List of actual column names from the DataFrame(s)
+    
+    Returns a list of unique column names found.
+    """
+    if not code:
+        return []
+    
+    # If we have the actual column names, just check which ones appear in the code
+    if available_columns:
+        columns_used = []
+        for col in available_columns:
+            # Check if column name appears in the code (in quotes)
+            # Match patterns like: ['column'], ["column"], 'column', "column"
+            if f"'{col}'" in code or f'"{col}"' in code:
+                columns_used.append(col)
+        return columns_used
+    
+    # Fallback: regex-based extraction if no columns provided
+    columns = set()
+    
+    # Pattern: df['column'] or df["column"] - bracket notation with quotes
+    bracket_pattern = r"\[\s*['\"]([^'\"]+)['\"]\s*\]"
+    columns.update(re.findall(bracket_pattern, code))
+    
+    # Filter out common non-column strings
+    exclude = {'index', 'columns', 'values', 'axis', 'inplace', 'ascending', 'descending', 
+               'left', 'right', 'inner', 'outer', 'on', 'how', 'sum', 'mean', 'count', 
+               'min', 'max', 'std', 'var', 'first', 'last', 'nunique'}
+    
+    columns = [c for c in columns if c.lower() not in exclude and len(c) > 0 and len(c) < 50]
+    
+    return list(set(columns))
+
+
 def plotly_chart_metric(example, pred, trace=None) -> float:
     """
     Simple code scorer that checks if Plotly code runs successfully.
@@ -1325,10 +1368,22 @@ class PlotlyVisualizationModule(dspy.Module):
             kpi_results = await asyncio.gather(*kpi_tasks) if kpi_tasks else []
             chart_results = await asyncio.gather(*tasks)
             
+            # Get all available column names from the dataset(s)
+            available_columns = []
+            if self.dataset:
+                for sheet_name, sheet_df in self.dataset.items():
+                    if hasattr(sheet_df, 'columns'):
+                        available_columns.extend([str(col) for col in sheet_df.columns.tolist()])
+                available_columns = list(set(available_columns))  # Remove duplicates
+                logger.info(f"Available columns for filtering: {available_columns}")
+            
             # Process KPI card results
             for i, r in enumerate(kpi_results):
                 raw_code = getattr(r, 'plotly_code', str(r))
                 cleaned = clean_plotly_code(raw_code)
+                
+                # Extract columns_used by checking which DataFrame columns appear in the code
+                columns_used = extract_columns_from_code(cleaned, available_columns)
                 
                 kpi_plan = kpi_plans[i] if i < len(kpi_plans) else {}
                 title = kpi_plan.get('title', f'KPI {i + 1}')
@@ -1339,15 +1394,19 @@ class PlotlyVisualizationModule(dspy.Module):
                     'title': title,
                     'chart_index': i,
                     'plan': kpi_plan,
-                    'is_kpi': True
+                    'is_kpi': True,
+                    'columns_used': columns_used
                 })
                 
-                logger.info(f"KPI {i+1}: {title} - cleaned successfully")
+                logger.info(f"KPI {i+1}: {title} - columns_used: {columns_used} - cleaned successfully")
             
             # Process regular chart results
             for i, r in enumerate(chart_results):
                 raw_code = getattr(r, 'plotly_code', str(r))
                 cleaned = clean_plotly_code(raw_code)
+                
+                # Extract columns_used by checking which DataFrame columns appear in the code
+                columns_used = extract_columns_from_code(cleaned, available_columns)
                 
                 # Get chart type and title from the order we tracked
                 chart_type = chart_types_order[i] if i < len(chart_types_order) else list(self.chart_sigs.keys())[min(i, len(self.chart_sigs) - 1)]
@@ -1370,10 +1429,11 @@ class PlotlyVisualizationModule(dspy.Module):
                     'title': title,
                     'chart_index': len(kpi_cards_specs) + i,  # Offset by KPI count
                     'plan': chart_plan,
-                    'is_kpi': False
+                    'is_kpi': False,
+                    'columns_used': columns_used
                 })
                 
-                logger.info(f"Chart {i+1} ({chart_type}): {title} - cleaned successfully")
+                logger.info(f"Chart {i+1} ({chart_type}): {title} - columns_used: {columns_used} - cleaned successfully")
             
             logger.info(f"Generated {len(kpi_cards_specs)} KPI cards and {len(chart_specs)} charts")
             # Return tuple: (chart_specs, full_plan_output, dashboard_title, kpi_cards_specs)

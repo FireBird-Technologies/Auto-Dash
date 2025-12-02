@@ -261,6 +261,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   const [savedNotes, setSavedNotes] = useState<Record<number, boolean>>({});
   const [filterPanelOpen, setFilterPanelOpen] = useState<number | null>(null);
   const [chartFilters, setChartFilters] = useState<Record<number, Record<string, any>>>({});
+  const [applyingFilter, setApplyingFilter] = useState<number | null>(null);
 
   // Update local data when prop changes
   useEffect(() => {
@@ -887,99 +888,65 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     return !hasValidData;
   };
 
-  // Helper function to apply filters to chart figure data
-  const applyFiltersToChart = (chartSpec: any, filters: Record<string, any>): any => {
-    if (!chartSpec?.figure?.data || !filters || Object.keys(filters).length === 0) {
-      return chartSpec;
-    }
-
-    // Clone the chart spec to avoid mutations
-    const filteredSpec = JSON.parse(JSON.stringify(chartSpec));
-    
-    // For each trace in the figure, filter the data
-    filteredSpec.figure.data = filteredSpec.figure.data.map((trace: any) => {
-      // Skip indicator traces (KPI cards)
-      if (trace.type === 'indicator') return trace;
-      
-      // Find indices to keep based on filters
-      const dataLength = trace.x?.length || trace.y?.length || trace.values?.length || 0;
-      if (dataLength === 0) return trace;
-      
-      const indicesToKeep: number[] = [];
-      
-      for (let i = 0; i < dataLength; i++) {
-        let keepRow = true;
-        
-        // Check each filter
-        for (const [key, value] of Object.entries(filters)) {
-          if (value === undefined || value === null) continue;
-          
-          // Handle range filters (number)
-          if (key.endsWith('_min') || key.endsWith('_max')) {
-            // Try to find matching data in trace
-            const traceData = trace.x || trace.y || trace.customdata;
-            if (Array.isArray(traceData)) {
-              const val = Number(traceData[i]);
-              if (!isNaN(val)) {
-                if (key.endsWith('_min') && val < Number(value)) keepRow = false;
-                if (key.endsWith('_max') && val > Number(value)) keepRow = false;
-              }
-            }
-          }
-          // Handle date filters
-          else if (key.endsWith('_from') || key.endsWith('_to')) {
-            const traceData = trace.x || trace.y;
-            if (Array.isArray(traceData)) {
-              const dateVal = new Date(traceData[i]);
-              const filterDate = new Date(value as string);
-              if (!isNaN(dateVal.getTime()) && !isNaN(filterDate.getTime())) {
-                if (key.endsWith('_from') && dateVal < filterDate) keepRow = false;
-                if (key.endsWith('_to') && dateVal > filterDate) keepRow = false;
-              }
-            }
-          }
-          // Handle category filters (array of selected values)
-          else if (Array.isArray(value) && value.length > 0) {
-            const traceData = trace.x || trace.text || trace.labels;
-            if (Array.isArray(traceData)) {
-              const traceVal = String(traceData[i]);
-              if (!value.includes(traceVal)) keepRow = false;
-            }
-          }
-        }
-        
-        if (keepRow) indicesToKeep.push(i);
-      }
-      
-      // Filter all array properties in the trace
-      const filteredTrace = { ...trace };
-      for (const prop of ['x', 'y', 'z', 'text', 'values', 'labels', 'customdata', 'hovertext', 'marker']) {
-        if (Array.isArray(trace[prop])) {
-          filteredTrace[prop] = indicesToKeep.map(i => trace[prop][i]);
-        } else if (prop === 'marker' && trace.marker) {
-          // Handle marker properties like color arrays
-          filteredTrace.marker = { ...trace.marker };
-          for (const markerProp of ['color', 'size', 'opacity']) {
-            if (Array.isArray(trace.marker[markerProp])) {
-              filteredTrace.marker[markerProp] = indicesToKeep.map(i => trace.marker[markerProp][i]);
-            }
-          }
-        }
-      }
-      
-      return filteredTrace;
-    });
-    
-    return filteredSpec;
+  // Get filtered chart spec for a given chart index (no longer used for filtering, kept for compatibility)
+  const getFilteredChartSpec = (spec: any, _chartIndex: number) => {
+    // Filters are now applied via backend, so just return the spec as-is
+    return spec;
   };
 
-  // Get filtered chart spec for a given chart index
-  const getFilteredChartSpec = (spec: any, chartIndex: number) => {
+  // Apply filter via backend API - re-executes chart code with filter prepended
+  const applyFilterToChart = async (chartIndex: number) => {
     const filters = chartFilters[chartIndex];
-    if (!filters || Object.keys(filters).length === 0) {
-      return spec;
+    const spec = chartSpecs[chartIndex];
+    
+    if (!filters || Object.keys(filters).length === 0 || !spec?.chart_spec) {
+      notification.info('No filters to apply');
+      return;
     }
-    return applyFiltersToChart(spec, filters);
+    
+    setApplyingFilter(chartIndex);
+    
+    try {
+      const response = await fetch(`${config.backendUrl}/api/data/apply-filter`, {
+        method: 'POST',
+        headers: getAuthHeaders({
+          'Content-Type': 'application/json'
+        }),
+        credentials: 'include',
+        body: JSON.stringify({
+          chart_index: chartIndex,
+          filters: filters,
+          dataset_id: datasetId,
+          original_code: spec.chart_spec
+        })
+      });
+      
+      await checkAuthResponse(response);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      
+      if (result.success && result.figure) {
+        // Update the chart spec with the new filtered figure
+        setChartSpecs(prev => prev.map((s, idx) => 
+          idx === chartIndex 
+            ? { ...s, figure: result.figure, filtered_code: result.filtered_code }
+            : s
+        ));
+        notification.success('Filters applied successfully');
+      } else {
+        notification.error(result.error || 'Failed to apply filters');
+      }
+    } catch (error) {
+      console.error('Error applying filter:', error);
+      notification.error('Failed to apply filters');
+    } finally {
+      setApplyingFilter(null);
+      setFilterPanelOpen(null);
+    }
   };
 
   const generateChart = async (userQuery: string) => {
@@ -2621,56 +2588,10 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                   
                                   {/* Filter Panel */}
                                   {filterPanelOpen === actualIndex && (() => {
-                                    // Extract columns used in the chart from figure data
-                                    const figureData = spec.figure;
-                                    const usedColumns: string[] = [];
-                                    
-                                    if (figureData?.data) {
-                                      figureData.data.forEach((trace: any) => {
-                                        // Check common Plotly trace properties for column references
-                                        ['x', 'y', 'z', 'values', 'labels', 'text', 'customdata', 'hovertext'].forEach(prop => {
-                                          if (trace[prop] && Array.isArray(trace[prop])) {
-                                            // Try to find matching column in localData
-                                            if (localData.length > 0) {
-                                              Object.keys(localData[0]).forEach(col => {
-                                                if (!usedColumns.includes(col)) {
-                                                  const colValues = localData.map(row => row[col]);
-                                                  // Check if trace data matches column data (sample check)
-                                                  if (trace[prop].length > 0 && colValues.length > 0) {
-                                                    const traceStr = JSON.stringify(trace[prop].slice(0, 5));
-                                                    const colStr = JSON.stringify(colValues.slice(0, 5));
-                                                    if (traceStr === colStr || trace[prop][0] === colValues[0]) {
-                                                      usedColumns.push(col);
-                                                    }
-                                                  }
-                                                }
-                                              });
-                                            }
-                                          }
-                                        });
-                                        // Also check axis titles for column hints
-                                        if (figureData.layout?.xaxis?.title?.text) {
-                                          const title = figureData.layout.xaxis.title.text;
-                                          Object.keys(localData[0] || {}).forEach(col => {
-                                            if (col.toLowerCase() === title.toLowerCase() && !usedColumns.includes(col)) {
-                                              usedColumns.push(col);
-                                            }
-                                          });
-                                        }
-                                        if (figureData.layout?.yaxis?.title?.text) {
-                                          const title = figureData.layout.yaxis.title.text;
-                                          Object.keys(localData[0] || {}).forEach(col => {
-                                            if (col.toLowerCase() === title.toLowerCase() && !usedColumns.includes(col)) {
-                                              usedColumns.push(col);
-                                            }
-                                          });
-                                        }
-                                      });
-                                    }
-                                    
-                                    // Fallback: if no columns detected, use first 4 columns
-                                    const columnsToFilter = usedColumns.length > 0 
-                                      ? usedColumns.slice(0, 6) 
+                                    // Use columns_used from the chart spec (extracted by backend from code)
+                                    // Fallback to first 4 columns if not available
+                                    const columnsToFilter = (spec.columns_used && spec.columns_used.length > 0)
+                                      ? spec.columns_used.slice(0, 6)
                                       : Object.keys(localData[0] || {}).slice(0, 4);
                                     
                                     // Helper to detect column type
@@ -2734,7 +2655,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                         </button>
                                       </div>
                                       <div style={{ padding: '16px', maxHeight: '350px', overflowY: 'auto' }}>
-                                        {columnsToFilter.length > 0 ? columnsToFilter.map((column) => {
+                                        {columnsToFilter.length > 0 ? columnsToFilter.map((column: string) => {
                                           const colType = getColumnType(column);
                                           const uniqueValues = [...new Set(localData.map(row => row[column]))].filter(v => v != null);
                                           
@@ -2895,16 +2816,41 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                         justifyContent: 'flex-end'
                                       }}>
                                         <button
-                                          onClick={() => setChartFilters(prev => ({ ...prev, [actualIndex]: {} }))}
+                                          onClick={() => {
+                                            setChartFilters(prev => ({ ...prev, [actualIndex]: {} }));
+                                            // Re-fetch original chart if filters were cleared
+                                          }}
                                           style={{ padding: '6px 12px', fontSize: '12px', border: '1px solid #e5e7eb', borderRadius: '6px', backgroundColor: 'white', color: '#6b7280', cursor: 'pointer' }}
                                         >
                                           Clear
                                         </button>
                                         <button
-                                          onClick={() => { setFilterPanelOpen(null); notification.success('Filters applied'); }}
-                                          style={{ padding: '6px 12px', fontSize: '12px', border: 'none', borderRadius: '6px', backgroundColor: '#ff6b6b', color: 'white', cursor: 'pointer' }}
+                                          onClick={() => applyFilterToChart(actualIndex)}
+                                          disabled={applyingFilter === actualIndex}
+                                          style={{ 
+                                            padding: '6px 12px', 
+                                            fontSize: '12px', 
+                                            border: 'none', 
+                                            borderRadius: '6px', 
+                                            backgroundColor: applyingFilter === actualIndex ? '#fca5a5' : '#ff6b6b', 
+                                            color: 'white', 
+                                            cursor: applyingFilter === actualIndex ? 'wait' : 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '6px'
+                                          }}
                                         >
-                                          Apply
+                                          {applyingFilter === actualIndex && (
+                                            <div style={{
+                                              width: '12px',
+                                              height: '12px',
+                                              border: '2px solid white',
+                                              borderTopColor: 'transparent',
+                                              borderRadius: '50%',
+                                              animation: 'spin 1s linear infinite'
+                                            }} />
+                                          )}
+                                          {applyingFilter === actualIndex ? 'Applying...' : 'Apply'}
                                         </button>
                                       </div>
                                     </div>

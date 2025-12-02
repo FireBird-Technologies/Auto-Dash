@@ -332,6 +332,13 @@ class AddChartRequest(BaseModel):
     color_theme: Optional[str] = None
 
 
+class ApplyFilterRequest(BaseModel):
+    chart_index: int
+    filters: Dict[str, Any]  # {column: {type: 'number'|'date'|'string', min?, max?, from?, to?, values?: []}}
+    dataset_id: str
+    original_code: str
+
+
 class ChartResponse(BaseModel):
     chart_type: str
     data: Any
@@ -2109,6 +2116,92 @@ async def edit_chart(
     except Exception as e:
         logger.error(f"Error editing chart: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to edit chart: {str(e)}")
+
+
+@router.post("/apply-filter")
+async def apply_filter(
+    request: ApplyFilterRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Apply filters to a chart by prepending filter code to the original chart code
+    and re-executing it.
+    
+    Filter types:
+    - number: {column_min: value, column_max: value}
+    - date: {column_from: 'YYYY-MM-DD', column_to: 'YYYY-MM-DD'}
+    - string: {column: ['value1', 'value2', ...]}
+    
+    No credits charged for filtering.
+    """
+    try:
+        # Get dataset
+        df = dataset_service.get_dataset(current_user.id, request.dataset_id)
+        if df is None:
+            raise HTTPException(status_code=404, detail="Dataset not found")
+        
+        # Generate filter code from filter specifications
+        filter_conditions = []
+        
+        for key, value in request.filters.items():
+            if value is None:
+                continue
+                
+            # Handle range filters (number) - keys end with _min or _max
+            if key.endswith('_min'):
+                column = key[:-4]  # Remove '_min'
+                filter_conditions.append(f"(df['{column}'] >= {value})")
+            elif key.endswith('_max'):
+                column = key[:-4]  # Remove '_max'
+                filter_conditions.append(f"(df['{column}'] <= {value})")
+            
+            # Handle date filters - keys end with _from or _to
+            elif key.endswith('_from'):
+                column = key[:-5]  # Remove '_from'
+                filter_conditions.append(f"(pd.to_datetime(df['{column}']) >= pd.to_datetime('{value}'))")
+            elif key.endswith('_to'):
+                column = key[:-3]  # Remove '_to'
+                filter_conditions.append(f"(pd.to_datetime(df['{column}']) <= pd.to_datetime('{value}'))")
+            
+            # Handle category filters (string) - value is a list of selected values
+            elif isinstance(value, list) and len(value) > 0:
+                column = key
+                values_str = ', '.join([f"'{v}'" for v in value])
+                filter_conditions.append(f"(df['{column}'].isin([{values_str}]))")
+        
+        # Build the filter code
+        if filter_conditions:
+            filter_code = f"# Apply filters\ndf = df[{' & '.join(filter_conditions)}].copy()\n\n"
+        else:
+            filter_code = ""
+        
+        # Prepend filter code to original chart code
+        combined_code = filter_code + request.original_code
+        
+        logger.info(f"Applying filter to chart {request.chart_index}")
+        logger.info(f"Filter code: {filter_code}")
+        
+        # Execute the combined code
+        execution_result = execute_plotly_code(combined_code, df)
+        
+        if execution_result.get('success'):
+            return {
+                "success": True,
+                "figure": execution_result.get('figure'),
+                "filtered_code": combined_code,
+                "filter_code": filter_code
+            }
+        else:
+            return {
+                "success": False,
+                "error": execution_result.get('error'),
+                "figure": None
+            }
+        
+    except Exception as e:
+        logger.error(f"Error applying filter: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to apply filter: {str(e)}")
 
 
 @router.post("/add-chart")
