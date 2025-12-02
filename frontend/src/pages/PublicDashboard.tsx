@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { PlotlyChartRenderer } from '../components/PlotlyChartRenderer';
 import { MarkdownMessage } from '../components/MarkdownMessage';
+import { KPICardsContainer } from '../components/KPICard';
 import { config } from '../config';
 
 export const PublicDashboard: React.FC = () => {
@@ -139,6 +140,10 @@ export const PublicDashboard: React.FC = () => {
 
   // Sort figures by chart_index
   const sortedFigures = [...dashboardData.figures_data].sort((a, b) => a.chart_index - b.chart_index);
+  
+  // Separate KPI cards from regular charts
+  const kpiCards = sortedFigures.filter(spec => spec.chart_type === 'kpi_card');
+  const regularCharts = sortedFigures.filter(spec => spec.chart_type !== 'kpi_card');
 
   const handleLogin = () => {
     sessionStorage.setItem('auth_callback', 'true');
@@ -306,6 +311,15 @@ export const PublicDashboard: React.FC = () => {
             </h2>
           </div>
           
+          {/* KPI Cards Row - Displayed at top as small squares */}
+          <KPICardsContainer 
+            kpiSpecs={kpiCards.map(spec => ({
+              ...spec,
+              chart_spec: '',
+              chart_index: spec.chart_index
+            }))} 
+          />
+          
           {/* Charts Grid - Same layout as dashboard with notes icon */}
           <div style={{
             display: 'grid',
@@ -315,7 +329,7 @@ export const PublicDashboard: React.FC = () => {
             alignItems: 'start',
             position: 'relative'
           }}>
-            {sortedFigures.map((spec) => (
+            {regularCharts.map((spec) => (
               <div
                 key={`chart-wrapper-${spec.chart_index}`}
                 style={{

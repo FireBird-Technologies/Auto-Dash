@@ -2667,15 +2667,15 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                                 gap: '6px',
                                                 fontSize: '11px', 
                                                 fontWeight: 600, 
-                                                color: '#374151',
+                                                color: '#ef4444',
                                                 marginBottom: '8px',
                                               }}>
                                                 {column}
                                                 <span style={{ 
                                                   fontSize: '9px', 
                                                   padding: '2px 6px', 
-                                                  backgroundColor: colType === 'number' ? '#dbeafe' : colType === 'date' ? '#fef3c7' : '#f3e8ff',
-                                                  color: colType === 'number' ? '#1d4ed8' : colType === 'date' ? '#b45309' : '#7c3aed',
+                                                  backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                                                  color: '#ef4444',
                                                   borderRadius: '4px',
                                                   textTransform: 'uppercase'
                                                 }}>
