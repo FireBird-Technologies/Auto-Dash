@@ -222,7 +222,7 @@ async def generate_chart_spec(
     dataset_context += execution_info
     
     # Generate the visualization with dataset context
-    result, full_plan, dashboard_title = await viz_module.aforward(
+    result, full_plan, dashboard_title, kpi_cards = await viz_module.aforward(
         query=query,
         dataset_context=dataset_context
     )
@@ -240,7 +240,18 @@ async def generate_chart_spec(
                 chart_spec['execution_error'] = execution_result.get('error')
                 logger.warning(f"Chart execution failed: {execution_result.get('error')}")
         
-        return result, full_plan or {}, dashboard_title
+        # Execute KPI cards
+        for kpi_spec in kpi_cards:
+            code = kpi_spec.get('chart_spec', '')
+            execution_result = execute_plotly_code(code, df)
+            
+            kpi_spec['figure'] = execution_result.get('figure')
+            kpi_spec['execution_success'] = execution_result.get('success')
+            if not execution_result.get('success'):
+                kpi_spec['execution_error'] = execution_result.get('error')
+                logger.warning(f"KPI card execution failed: {execution_result.get('error')}")
+        
+        return result, full_plan or {}, dashboard_title, kpi_cards
     
     # Handle fail message (string)
     if isinstance(result, str):
@@ -259,9 +270,9 @@ async def generate_chart_spec(
             'figure': figure,
             'execution_success': success,
             'execution_error': error
-        }], full_plan or {}, dashboard_title
+        }], full_plan or {}, dashboard_title, []
     
-    return result, full_plan or {}, dashboard_title
+    return result, full_plan or {}, dashboard_title, kpi_cards
 
 #     except Exception as e:
 #         logger.error(f"Failed to generate visualization: {e}")

@@ -211,8 +211,251 @@ export const Landing: React.FC<LandingProps> = ({ onStart }) => {
         </div>
       </section>
 
+      {/* Share with the World */}
+      <section className="sharing-section" style={{
+        padding: '80px 20px',
+        background: 'linear-gradient(135deg, #fef2f2 0%, #fff 50%, #fef2f2 100%)'
+      }}>
+        <div className="section-container">
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '60px',
+            maxWidth: '1100px',
+            margin: '0 auto',
+            flexWrap: 'wrap',
+            justifyContent: 'center'
+          }}>
+            {/* Illustration */}
+            <div style={{
+              flex: '1 1 300px',
+              maxWidth: '400px',
+              display: 'flex',
+              justifyContent: 'center'
+            }}>
+              <div style={{
+                position: 'relative',
+                width: '300px',
+                height: '220px'
+              }}>
+                {/* Main dashboard card */}
+                <div style={{
+                  position: 'absolute',
+                  top: '20px',
+                  left: '30px',
+                  width: '200px',
+                  height: '140px',
+                  backgroundColor: 'white',
+                  borderRadius: '12px',
+                  boxShadow: '0 10px 40px rgba(239, 68, 68, 0.15)',
+                  border: '1px solid #fee2e2',
+                  padding: '12px',
+                  zIndex: 2
+                }}>
+                  <div style={{ display: 'flex', gap: '4px', marginBottom: '8px' }}>
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#ff6b6b' }}></div>
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#fca5a5' }}></div>
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#fecaca' }}></div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
+                    <div style={{ flex: 1, height: '24px', backgroundColor: '#fef2f2', borderRadius: '4px' }}></div>
+                    <div style={{ flex: 1, height: '24px', backgroundColor: '#fef2f2', borderRadius: '4px' }}></div>
+                    <div style={{ flex: 1, height: '24px', backgroundColor: '#fef2f2', borderRadius: '4px' }}></div>
+                  </div>
+                  <div style={{ height: '60px', backgroundColor: '#fff5f5', borderRadius: '6px', display: 'flex', alignItems: 'flex-end', padding: '8px', gap: '4px' }}>
+                    <div style={{ flex: 1, height: '70%', backgroundColor: '#ff6b6b', borderRadius: '2px', opacity: 0.8 }}></div>
+                    <div style={{ flex: 1, height: '90%', backgroundColor: '#ff6b6b', borderRadius: '2px', opacity: 0.8 }}></div>
+                    <div style={{ flex: 1, height: '50%', backgroundColor: '#ff6b6b', borderRadius: '2px', opacity: 0.8 }}></div>
+                    <div style={{ flex: 1, height: '80%', backgroundColor: '#ff6b6b', borderRadius: '2px', opacity: 0.8 }}></div>
+                  </div>
+                </div>
+                
+                {/* Share icon floating */}
+                <div style={{
+                  position: 'absolute',
+                  top: '0',
+                  right: '40px',
+                  width: '50px',
+                  height: '50px',
+                  backgroundColor: '#ff6b6b',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 4px 20px rgba(239, 68, 68, 0.4)',
+                  zIndex: 3
+                }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="18" cy="5" r="3" />
+                    <circle cx="6" cy="12" r="3" />
+                    <circle cx="18" cy="19" r="3" />
+                    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                    <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+                  </svg>
+                </div>
+                
+                {/* Globe icon */}
+                <div style={{
+                  position: 'absolute',
+                  bottom: '10px',
+                  right: '20px',
+                  width: '60px',
+                  height: '60px',
+                  backgroundColor: 'white',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
+                  border: '2px solid #fee2e2',
+                  zIndex: 1
+                }}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ff6b6b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="2" y1="12" x2="22" y2="12" />
+                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                  </svg>
+                </div>
+                
+                {/* Link floating */}
+                <div style={{
+                  position: 'absolute',
+                  bottom: '40px',
+                  left: '0',
+                  backgroundColor: 'white',
+                  borderRadius: '20px',
+                  padding: '8px 14px',
+                  boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontSize: '11px',
+                  color: '#6b7280',
+                  border: '1px solid #e5e7eb'
+                }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ff6b6b" strokeWidth="2">
+                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                  </svg>
+                  autodash.art/shared/...
+                </div>
+              </div>
+            </div>
+            
+            {/* Content */}
+            <div style={{
+              flex: '1 1 400px',
+              maxWidth: '500px'
+            }}>
+              <div style={{
+                display: 'inline-block',
+                padding: '6px 12px',
+                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                borderRadius: '20px',
+                fontSize: '12px',
+                fontWeight: 600,
+                color: '#ef4444',
+                marginBottom: '16px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px'
+              }}>
+                Share Instantly
+              </div>
+              <h2 style={{
+                fontSize: '2.2rem',
+                fontWeight: 700,
+                color: '#1f2937',
+                marginBottom: '16px',
+                lineHeight: 1.2
+              }}>
+                Share your dashboards with the world
+              </h2>
+              <p style={{
+                fontSize: '1.1rem',
+                color: '#6b7280',
+                lineHeight: 1.7,
+                marginBottom: '24px'
+              }}>
+                Generate a public link and share your insights with anyone - no login required for viewers. 
+                Perfect for stakeholders, clients, or publishing your analysis publicly.
+              </p>
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '50%',
+                    backgroundColor: '#fef2f2',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  </div>
+                  <span style={{ color: '#374151', fontSize: '15px' }}>One-click shareable links</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '50%',
+                    backgroundColor: '#fef2f2',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  </div>
+                  <span style={{ color: '#374151', fontSize: '15px' }}>No login required for viewers</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '50%',
+                    backgroundColor: '#fef2f2',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  </div>
+                  <span style={{ color: '#374151', fontSize: '15px' }}>Interactive charts stay fully functional</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '50%',
+                    backgroundColor: '#fef2f2',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  </div>
+                  <span style={{ color: '#374151', fontSize: '15px' }}>KPI cards & notes included</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Interactive Demo */}
-      <section className="demo-section">
+      <section className="demo-section" style={{ backgroundColor: 'white' }}>
         <div className="section-container">
           <div className="demo-header">
             <span className="demo-badge">Live Demo</span>
@@ -222,7 +465,9 @@ export const Landing: React.FC<LandingProps> = ({ onStart }) => {
               Hover, filter, and sort to explore the data - all powered by Plotly and natural language.
             </p>
           </div>
-          <DemoVisualization />
+          <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '20px' }}>
+            <DemoVisualization />
+          </div>
           <div className="demo-cta">
             <p className="demo-cta-text">
               This is just one example. AutoDash can create <strong>any visualization you can imagine</strong> - just describe it.

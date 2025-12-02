@@ -6,6 +6,7 @@ import { AddChartPopup } from '../AddChartPopup';
 import { SharePopup } from '../SharePopup';
 import { InsufficientBalancePopup } from '../InsufficientBalancePopup';
 import { ChartNotes } from '../ChartNotes';
+import { KPICardsContainer } from '../KPICard';
 import { config, getAuthHeaders, checkAuthResponse } from '../../config';
 import { useNotification } from '../../contexts/NotificationContext';
 
@@ -258,6 +259,9 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   const [generatingInsights, setGeneratingInsights] = useState<Record<number, boolean>>({});
   const [savingNotes, setSavingNotes] = useState<Record<number, boolean>>({});
   const [savedNotes, setSavedNotes] = useState<Record<number, boolean>>({});
+  const [filterPanelOpen, setFilterPanelOpen] = useState<number | null>(null);
+  const [chartFilters, setChartFilters] = useState<Record<number, Record<string, any>>>({});
+  const [applyingFilter, setApplyingFilter] = useState<number | null>(null);
 
   // Update local data when prop changes
   useEffect(() => {
@@ -870,10 +874,79 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
       // Also check for histogram-specific properties
       const hasNbinsx = trace.nbinsx !== undefined;
       
-      return hasX || hasY || hasValues || hasZ || hasLat || hasLon || hasNbinsx;
+      // Check for indicator traces (KPI cards) - they have 'value' property instead of x/y
+      // Indicators can have value as number, or mode property for gauge/number/delta
+      const isIndicator = trace.type === 'indicator' && (
+        trace.value !== undefined || 
+        trace.mode !== undefined ||
+        trace.gauge !== undefined
+      );
+      
+      return hasX || hasY || hasValues || hasZ || hasLat || hasLon || hasNbinsx || isIndicator;
     });
     
     return !hasValidData;
+  };
+
+  // Get filtered chart spec for a given chart index (no longer used for filtering, kept for compatibility)
+  const getFilteredChartSpec = (spec: any, _chartIndex: number) => {
+    // Filters are now applied via backend, so just return the spec as-is
+    return spec;
+  };
+
+  // Apply filter via backend API - re-executes chart code with filter prepended
+  const applyFilterToChart = async (chartIndex: number) => {
+    const filters = chartFilters[chartIndex];
+    const spec = chartSpecs[chartIndex];
+    
+    if (!filters || Object.keys(filters).length === 0 || !spec?.chart_spec) {
+      notification.info('No filters to apply');
+      return;
+    }
+    
+    setApplyingFilter(chartIndex);
+    
+    try {
+      const response = await fetch(`${config.backendUrl}/api/data/apply-filter`, {
+        method: 'POST',
+        headers: getAuthHeaders({
+          'Content-Type': 'application/json'
+        }),
+        credentials: 'include',
+        body: JSON.stringify({
+          chart_index: chartIndex,
+          filters: filters,
+          dataset_id: datasetId,
+          original_code: spec.chart_spec
+        })
+      });
+      
+      await checkAuthResponse(response);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      
+      if (result.success && result.figure) {
+        // Update the chart spec with the new filtered figure
+        setChartSpecs(prev => prev.map((s, idx) => 
+          idx === chartIndex 
+            ? { ...s, figure: result.figure, filtered_code: result.filtered_code }
+            : s
+        ));
+        notification.success('Filters applied successfully');
+      } else {
+        notification.error(result.error || 'Failed to apply filters');
+      }
+    } catch (error) {
+      console.error('Error applying filter:', error);
+      notification.error('Failed to apply filters');
+    } finally {
+      setApplyingFilter(null);
+      setFilterPanelOpen(null);
+    }
   };
 
   const generateChart = async (userQuery: string) => {
@@ -984,6 +1057,24 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                         if (event.dashboard_title) {
                           setDashboardTitle(event.dashboard_title);
                         }
+                        console.log(`Dashboard info received. KPI count: ${event.kpi_count || 0}`);
+                        break;
+                      
+                      case 'kpi_card':
+                        // Add KPI card to state immediately as it arrives
+                        console.log('Received KPI card event:', event);
+                        console.log('KPI card has figure:', !!event.kpi?.figure);
+                        console.log('KPI card figure data:', event.kpi?.figure?.data);
+                        const kpiIsBlank = isChartBlank(event.kpi);
+                        console.log('isChartBlank result:', kpiIsBlank);
+                        
+                        if (event.kpi && !kpiIsBlank) {
+                          totalCharts++;
+                          setChartSpecs(prev => [...prev, { ...event.kpi, chart_type: 'kpi_card' }]);
+                          console.log('Added KPI card:', event.kpi.title || 'Unnamed KPI');
+                        } else {
+                          console.warn('Skipping blank KPI card:', event.kpi);
+                        }
                         break;
                       
                       case 'chart':
@@ -999,9 +1090,14 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                       
                       case 'complete':
                         // All charts received
+                        const kpiCount = event.kpi_count || 0;
+                        const chartCount = (event.total_charts || totalCharts) - kpiCount;
+                        const message = kpiCount > 0 
+                          ? `Dashboard created successfully! Generated ${kpiCount} KPI card(s) and ${chartCount} chart(s).`
+                          : `Dashboard created successfully! Generated ${event.total_charts || totalCharts} chart(s).`;
                         setChatHistory(prev => [...prev, {
                           type: 'assistant',
-                          message: `Dashboard created successfully! Generated ${event.total_charts || totalCharts} chart(s).`
+                          message
                         }]);
                         break;
                       
@@ -2355,6 +2451,11 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                             )}
                           </div>
                           
+                          {/* KPI Cards Row - Displayed at top as small squares */}
+                          <KPICardsContainer 
+                            kpiSpecs={chartSpecs.filter(spec => spec.chart_type === 'kpi_card')} 
+                          />
+                          
                           {/* Charts Grid with Notes Icons */}
                           <div style={{
                             display: 'grid',
@@ -2364,9 +2465,12 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                             alignItems: 'start',
                             position: 'relative'
                           }}>
-                            {chartSpecs.map((spec, index) => (
+                            {chartSpecs.filter(spec => spec.chart_type !== 'kpi_card').map((spec) => {
+                              // Find the actual index in chartSpecs array
+                              const actualIndex = chartSpecs.findIndex(s => s === spec);
+                              return (
                               <div
-                                key={`chart-wrapper-${index}`}
+                                key={`chart-wrapper-${actualIndex}`}
                                 style={{
                                   display: 'flex',
                                   gap: '12px',
@@ -2384,9 +2488,9 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                   minHeight: '600px'
                                 }}>
                                   <PlotlyChartRenderer 
-                                    chartSpec={spec} 
+                                    chartSpec={getFilteredChartSpec(spec, actualIndex)} 
                                     data={localData}
-                                    chartIndex={index}
+                                    chartIndex={actualIndex}
                                     datasetId={datasetId}
                                     onChartFixed={handleChartFixed}
                                     onFixingStatusChange={(isFixing) => setShowFixNotification(isFixing)}
@@ -2407,7 +2511,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                 >
                                   {/* Delete Button */}
                                   <button
-                                    onClick={() => handleDeleteChart(index)}
+                                    onClick={() => handleDeleteChart(actualIndex)}
                                     style={{
                                       background: 'rgba(255, 107, 107, 0.1)',
                                       backdropFilter: 'blur(4px)',
@@ -2442,25 +2546,336 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                     </svg>
                                   </button>
                                   
+                                  {/* Filter Button */}
+                                  <button
+                                    onClick={() => {
+                                      setFilterPanelOpen(filterPanelOpen === actualIndex ? null : actualIndex);
+                                    }}
+                                    style={{
+                                      background: filterPanelOpen === actualIndex ? 'rgba(255, 107, 107, 0.2)' : 'rgba(255, 107, 107, 0.1)',
+                                      backdropFilter: 'blur(4px)',
+                                      border: '1px solid rgba(255, 107, 107, 0.3)',
+                                      borderRadius: '50%',
+                                      width: '40px',
+                                      height: '40px',
+                                      padding: '0',
+                                      cursor: 'pointer',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      transition: 'all 0.2s',
+                                      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                                      color: '#ff6b6b'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.background = 'rgba(255, 107, 107, 0.2)';
+                                      e.currentTarget.style.transform = 'scale(1.05)';
+                                      e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.15)';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      if (filterPanelOpen !== actualIndex) {
+                                        e.currentTarget.style.background = 'rgba(255, 107, 107, 0.1)';
+                                      }
+                                      e.currentTarget.style.transform = 'scale(1)';
+                                      e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1)';
+                                    }}
+                                    title="Filter data"
+                                  >
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                                    </svg>
+                                  </button>
+                                  
+                                  {/* Filter Panel */}
+                                  {filterPanelOpen === actualIndex && (() => {
+                                    // Use columns_used from the chart spec (extracted by backend from code)
+                                    // Fallback to first 4 columns if not available
+                                    const columnsToFilter = (spec.columns_used && spec.columns_used.length > 0)
+                                      ? spec.columns_used.slice(0, 6)
+                                      : Object.keys(localData[0] || {}).slice(0, 4);
+                                    
+                                    // Helper to detect column type
+                                    const getColumnType = (column: string): 'number' | 'date' | 'string' => {
+                                      if (localData.length === 0) return 'string';
+                                      const sampleValues = localData.slice(0, 10).map(row => row[column]).filter(v => v != null);
+                                      if (sampleValues.length === 0) return 'string';
+                                      
+                                      // Check if all values are numbers
+                                      if (sampleValues.every(v => typeof v === 'number' || (!isNaN(Number(v)) && v !== ''))) {
+                                        return 'number';
+                                      }
+                                      
+                                      // Check if values look like dates
+                                      const datePatterns = [/^\d{4}-\d{2}-\d{2}/, /^\d{2}\/\d{2}\/\d{4}/, /^\d{2}-\d{2}-\d{4}/];
+                                      if (sampleValues.every(v => datePatterns.some(p => p.test(String(v))) || !isNaN(Date.parse(String(v))))) {
+                                        return 'date';
+                                      }
+                                      
+                                      return 'string';
+                                    };
+                                    
+                                    // Get min/max for numeric columns
+                                    const getNumericRange = (column: string) => {
+                                      const values = localData.map(row => Number(row[column])).filter(v => !isNaN(v));
+                                      return { min: Math.min(...values), max: Math.max(...values) };
+                                    };
+                                    
+                                    return (
+                                    <div style={{
+                                      position: 'absolute',
+                                      top: '100%',
+                                      right: 0,
+                                      marginTop: '8px',
+                                      width: '320px',
+                                      backgroundColor: 'white',
+                                      border: '1px solid rgba(0, 0, 0, 0.08)',
+                                      borderRadius: '12px',
+                                      boxShadow: '0 4px 16px rgba(0, 0, 0, 0.12)',
+                                      zIndex: 100,
+                                      overflow: 'hidden'
+                                    }}>
+                                      <div style={{
+                                        padding: '12px 16px',
+                                        borderBottom: '1px solid rgba(0, 0, 0, 0.06)',
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center'
+                                      }}>
+                                        <span style={{ fontSize: '13px', fontWeight: 600, color: '#374151' }}>
+                                          Filter Data
+                                        </span>
+                                        <button
+                                          onClick={() => setFilterPanelOpen(null)}
+                                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: '#9ca3af' }}
+                                        >
+                                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                                          </svg>
+                                        </button>
+                                      </div>
+                                      <div style={{ padding: '16px', maxHeight: '350px', overflowY: 'auto' }}>
+                                        {columnsToFilter.length > 0 ? columnsToFilter.map((column: string) => {
+                                          const colType = getColumnType(column);
+                                          const uniqueValues = [...new Set(localData.map(row => row[column]))].filter(v => v != null);
+                                          
+                                          return (
+                                            <div key={column} style={{ marginBottom: '16px' }}>
+                                              <label style={{ 
+                                                display: 'flex', 
+                                                alignItems: 'center',
+                                                gap: '6px',
+                                                fontSize: '11px', 
+                                                fontWeight: 600, 
+                                                color: '#ef4444',
+                                                marginBottom: '8px',
+                                              }}>
+                                                {column}
+                                                <span style={{ 
+                                                  fontSize: '9px', 
+                                                  padding: '2px 6px', 
+                                                  backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                                                  color: '#ef4444',
+                                                  borderRadius: '4px',
+                                                  textTransform: 'uppercase'
+                                                }}>
+                                                  {colType}
+                                                </span>
+                                              </label>
+                                              
+                                              {/* Number: Range slider */}
+                                              {colType === 'number' && (() => {
+                                                const { min, max } = getNumericRange(column);
+                                                const currentMin = chartFilters[actualIndex]?.[`${column}_min`] ?? min;
+                                                const currentMax = chartFilters[actualIndex]?.[`${column}_max`] ?? max;
+                                                return (
+                                                  <div>
+                                                    <div style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
+                                                      <input
+                                                        type="number"
+                                                        placeholder="Min"
+                                                        value={currentMin}
+                                                        onChange={(e) => setChartFilters(prev => ({
+                                                          ...prev,
+                                                          [actualIndex]: { ...prev[actualIndex], [`${column}_min`]: e.target.value ? Number(e.target.value) : undefined }
+                                                        }))}
+                                                        style={{ flex: 1, padding: '6px 8px', fontSize: '12px', border: '1px solid #e5e7eb', borderRadius: '6px', width: '100%' }}
+                                                      />
+                                                      <span style={{ color: '#9ca3af', alignSelf: 'center' }}>—</span>
+                                                      <input
+                                                        type="number"
+                                                        placeholder="Max"
+                                                        value={currentMax}
+                                                        onChange={(e) => setChartFilters(prev => ({
+                                                          ...prev,
+                                                          [actualIndex]: { ...prev[actualIndex], [`${column}_max`]: e.target.value ? Number(e.target.value) : undefined }
+                                                        }))}
+                                                        style={{ flex: 1, padding: '6px 8px', fontSize: '12px', border: '1px solid #e5e7eb', borderRadius: '6px', width: '100%' }}
+                                                      />
+                                                    </div>
+                                                    <input
+                                                      type="range"
+                                                      min={min}
+                                                      max={max}
+                                                      value={currentMax}
+                                                      onChange={(e) => setChartFilters(prev => ({
+                                                        ...prev,
+                                                        [actualIndex]: { ...prev[actualIndex], [`${column}_max`]: Number(e.target.value) }
+                                                      }))}
+                                                      style={{ width: '100%', accentColor: '#ff6b6b' }}
+                                                    />
+                                                  </div>
+                                                );
+                                              })()}
+                                              
+                                              {/* Date: Date range picker */}
+                                              {colType === 'date' && (
+                                                <div style={{ display: 'flex', gap: '8px' }}>
+                                                  <input
+                                                    type="date"
+                                                    value={chartFilters[actualIndex]?.[`${column}_from`] || ''}
+                                                    onChange={(e) => setChartFilters(prev => ({
+                                                      ...prev,
+                                                      [actualIndex]: { ...prev[actualIndex], [`${column}_from`]: e.target.value || undefined }
+                                                    }))}
+                                                    style={{ flex: 1, padding: '6px 8px', fontSize: '12px', border: '1px solid #e5e7eb', borderRadius: '6px' }}
+                                                  />
+                                                  <span style={{ color: '#9ca3af', alignSelf: 'center' }}>to</span>
+                                                  <input
+                                                    type="date"
+                                                    value={chartFilters[actualIndex]?.[`${column}_to`] || ''}
+                                                    onChange={(e) => setChartFilters(prev => ({
+                                                      ...prev,
+                                                      [actualIndex]: { ...prev[actualIndex], [`${column}_to`]: e.target.value || undefined }
+                                                    }))}
+                                                    style={{ flex: 1, padding: '6px 8px', fontSize: '12px', border: '1px solid #e5e7eb', borderRadius: '6px' }}
+                                                  />
+                                                </div>
+                                              )}
+                                              
+                                              {/* String: Category multi-select */}
+                                              {colType === 'string' && (
+                                                <div style={{ 
+                                                  display: 'flex', 
+                                                  flexWrap: 'wrap', 
+                                                  gap: '6px',
+                                                  maxHeight: '100px',
+                                                  overflowY: 'auto',
+                                                  padding: '4px 0'
+                                                }}>
+                                                  {uniqueValues.slice(0, 15).map((val, i) => {
+                                                    const isSelected = (chartFilters[actualIndex]?.[column] as string[] || []).includes(String(val));
+                                                    return (
+                                                      <button
+                                                        key={i}
+                                                        onClick={() => {
+                                                          const current = (chartFilters[actualIndex]?.[column] as string[]) || [];
+                                                          const newValues = isSelected 
+                                                            ? current.filter(v => v !== String(val))
+                                                            : [...current, String(val)];
+                                                          setChartFilters(prev => ({
+                                                            ...prev,
+                                                            [actualIndex]: { ...prev[actualIndex], [column]: newValues.length > 0 ? newValues : undefined }
+                                                          }));
+                                                        }}
+                                                        style={{
+                                                          padding: '4px 10px',
+                                                          fontSize: '11px',
+                                                          border: isSelected ? '1px solid #ff6b6b' : '1px solid #e5e7eb',
+                                                          borderRadius: '14px',
+                                                          backgroundColor: isSelected ? 'rgba(255, 107, 107, 0.1)' : 'white',
+                                                          color: isSelected ? '#ff6b6b' : '#6b7280',
+                                                          cursor: 'pointer',
+                                                          transition: 'all 0.15s'
+                                                        }}
+                                                      >
+                                                        {String(val).length > 20 ? String(val).slice(0, 20) + '...' : String(val)}
+                                                      </button>
+                                                    );
+                                                  })}
+                                                  {uniqueValues.length > 15 && (
+                                                    <span style={{ fontSize: '10px', color: '#9ca3af', alignSelf: 'center' }}>
+                                                      +{uniqueValues.length - 15} more
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              )}
+                                            </div>
+                                          );
+                                        }) : (
+                                          <div style={{ fontSize: '12px', color: '#9ca3af', textAlign: 'center', padding: '20px' }}>
+                                            No filterable columns detected
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div style={{
+                                        padding: '12px 16px',
+                                        borderTop: '1px solid rgba(0, 0, 0, 0.06)',
+                                        display: 'flex',
+                                        gap: '8px',
+                                        justifyContent: 'flex-end'
+                                      }}>
+                                        <button
+                                          onClick={() => {
+                                            setChartFilters(prev => ({ ...prev, [actualIndex]: {} }));
+                                            // Re-fetch original chart if filters were cleared
+                                          }}
+                                          style={{ padding: '6px 12px', fontSize: '12px', border: '1px solid #e5e7eb', borderRadius: '6px', backgroundColor: 'white', color: '#6b7280', cursor: 'pointer' }}
+                                        >
+                                          Clear
+                                        </button>
+                                        <button
+                                          onClick={() => applyFilterToChart(actualIndex)}
+                                          disabled={applyingFilter === actualIndex}
+                                          style={{ 
+                                            padding: '6px 12px', 
+                                            fontSize: '12px', 
+                                            border: 'none', 
+                                            borderRadius: '6px', 
+                                            backgroundColor: applyingFilter === actualIndex ? '#fca5a5' : '#ff6b6b', 
+                                            color: 'white', 
+                                            cursor: applyingFilter === actualIndex ? 'wait' : 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '6px'
+                                          }}
+                                        >
+                                          {applyingFilter === actualIndex && (
+                                            <div style={{
+                                              width: '12px',
+                                              height: '12px',
+                                              border: '2px solid white',
+                                              borderTopColor: 'transparent',
+                                              borderRadius: '50%',
+                                              animation: 'spin 1s linear infinite'
+                                            }} />
+                                          )}
+                                          {applyingFilter === actualIndex ? 'Applying...' : 'Apply'}
+                                        </button>
+                                      </div>
+                                    </div>
+                                    );
+                                  })()}
+                                  
                                   {/* Notes Button */}
                                   <button
                                     onClick={() => {
                                       // Toggle notes visibility
-                                      if (chartNotes[index] || editingNotesIndex === index) {
+                                      if (chartNotes[actualIndex] || editingNotesIndex === actualIndex) {
                                         setNotesVisible(prev => ({
                                           ...prev,
-                                          [index]: !prev[index]
+                                          [actualIndex]: !prev[actualIndex]
                                         }));
                                         // If hiding and was editing, stop editing
-                                        if (notesVisible[index] && editingNotesIndex === index) {
+                                        if (notesVisible[actualIndex] && editingNotesIndex === actualIndex) {
                                           setEditingNotesIndex(null);
                                         }
                                       } else {
                                         // If no notes exist, start editing immediately
-                                        setEditingNotesIndex(index);
+                                        setEditingNotesIndex(actualIndex);
                                         setNotesVisible(prev => ({
                                           ...prev,
-                                          [index]: true
+                                          [actualIndex]: true
                                         }));
                                       }
                                     }}
@@ -2490,7 +2905,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                       e.currentTarget.style.color = '#ff6b6b';
                                       e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.1)';
                                     }}
-                                    title={chartNotes[index] ? (notesVisible[index] ? "Hide notes" : "Show notes") : "Add notes"}
+                                    title={chartNotes[actualIndex] ? (notesVisible[actualIndex] ? "Hide notes" : "Show notes") : "Add notes"}
                                   >
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -2498,11 +2913,11 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                       <line x1="12" y1="18" x2="12" y2="12" />
                                       <line x1="9" y1="15" x2="15" y2="15" />
                                     </svg>
-                                    {chartNotes[index] ? (notesVisible[index] ? 'Hide notes' : 'Show notes') : 'Add notes'}
+                                    {chartNotes[actualIndex] ? (notesVisible[actualIndex] ? 'Hide notes' : 'Show notes') : 'Add notes'}
                                   </button>
                                   
                                   {/* Notes Panel - Subtle area on the right */}
-                                  {notesVisible[index] && (editingNotesIndex === index || chartNotes[index]) && (
+                                  {notesVisible[actualIndex] && (editingNotesIndex === actualIndex || chartNotes[actualIndex]) && (
                                     <div style={{
                                       position: 'absolute',
                                       top: '100%',
@@ -2539,14 +2954,14 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                           }}>
                                             Notes
                                           </span>
-                                          {editingNotesIndex === index && (
+                                          {editingNotesIndex === actualIndex && (
                                             <button
                                               onClick={async () => {
                                                 if (!datasetId) return;
-                                                setGeneratingInsights(prev => ({ ...prev, [index]: true }));
+                                                setGeneratingInsights(prev => ({ ...prev, [actualIndex]: true }));
                                                 try {
                                                   const response = await fetch(
-                                                    `${config.backendUrl}/api/data/datasets/${datasetId}/charts/${index}/insights`,
+                                                    `${config.backendUrl}/api/data/datasets/${datasetId}/charts/${actualIndex}/insights`,
                                                     {
                                                       method: 'POST',
                                                       headers: getAuthHeaders({
@@ -2558,16 +2973,16 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                                   await checkAuthResponse(response);
                                                   if (!response.ok) throw new Error('Failed to generate insights');
                                                   const result = await response.json();
-                                                  const newNotes = chartNotes[index] ? `${chartNotes[index]}\n\n${result.insights}` : result.insights;
-                                                  setChartNotes(prev => ({ ...prev, [index]: newNotes }));
+                                                  const newNotes = chartNotes[actualIndex] ? `${chartNotes[actualIndex]}\n\n${result.insights}` : result.insights;
+                                                  setChartNotes(prev => ({ ...prev, [actualIndex]: newNotes }));
                                                 } catch (error) {
                                                   console.error('Error generating insights:', error);
                                                   notification.error('Failed to generate insights');
                                                 } finally {
-                                                  setGeneratingInsights(prev => ({ ...prev, [index]: false }));
+                                                  setGeneratingInsights(prev => ({ ...prev, [actualIndex]: false }));
                                                 }
                                               }}
-                                              disabled={generatingInsights[index]}
+                                              disabled={generatingInsights[actualIndex]}
                                               style={{
                                                 padding: '4px 10px',
                                                 background: 'rgba(220, 38, 38, 0.1)',
@@ -2575,15 +2990,15 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                                 borderRadius: '6px',
                                                 fontSize: '11px',
                                                 color: '#dc2626',
-                                                cursor: generatingInsights[index] ? 'wait' : 'pointer',
+                                                cursor: generatingInsights[actualIndex] ? 'wait' : 'pointer',
                                                 display: 'flex',
                                                 alignItems: 'center',
                                                 gap: '4px',
                                                 transition: 'all 0.2s',
-                                                opacity: generatingInsights[index] ? 0.6 : 1
+                                                opacity: generatingInsights[actualIndex] ? 0.6 : 1
                                               }}
                                               onMouseEnter={(e) => {
-                                                if (!generatingInsights[index]) {
+                                                if (!generatingInsights[actualIndex]) {
                                                   e.currentTarget.style.background = 'rgba(220, 38, 38, 0.15)';
                                                 }
                                               }}
@@ -2594,7 +3009,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                                 <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
                                               </svg>
-                                              {generatingInsights[index] ? 'Generating...' : 'Generate with AI'}
+                                              {generatingInsights[actualIndex] ? 'Generating...' : 'Generate with AI'}
                                             </button>
                                           )}
                                         </div>
@@ -2603,7 +3018,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                             setEditingNotesIndex(null);
                                             setNotesVisible(prev => ({
                                               ...prev,
-                                              [index]: false
+                                              [actualIndex]: false
                                             }));
                                           }}
                                           style={{
@@ -2641,9 +3056,9 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                         backgroundColor: 'white',
                                         position: 'relative'
                                       }}>
-                                        {editingNotesIndex === index ? (
+                                        {editingNotesIndex === actualIndex ? (
                                           <div style={{ position: 'relative', width: '100%', flex: 1 }}>
-                                            {generatingInsights[index] && (
+                                            {generatingInsights[actualIndex] && (
                                               <div className="magic-sparkles" style={{
                                                 position: 'absolute',
                                                 top: '12px',
@@ -2659,14 +3074,14 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                               </div>
                                             )}
                                             <textarea
-                                              value={chartNotes[index] || ''}
+                                              value={chartNotes[actualIndex] || ''}
                                               onChange={(e) => {
-                                                setChartNotes(prev => ({ ...prev, [index]: e.target.value }));
+                                                setChartNotes(prev => ({ ...prev, [actualIndex]: e.target.value }));
                                                 // Reset saved state when user edits
-                                                setSavedNotes(prev => ({ ...prev, [index]: false }));
+                                                setSavedNotes(prev => ({ ...prev, [actualIndex]: false }));
                                               }}
                                               placeholder="Add your notes here... (Markdown supported)"
-                                              disabled={generatingInsights[index]}
+                                              disabled={generatingInsights[actualIndex]}
                                               style={{
                                                 width: '100%',
                                                 flex: 1,
@@ -2680,7 +3095,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                                 resize: 'vertical',
                                                 outline: 'none',
                                                 backgroundColor: 'white',
-                                                opacity: generatingInsights[index] ? 0.7 : 1,
+                                                opacity: generatingInsights[actualIndex] ? 0.7 : 1,
                                                 transition: 'opacity 0.2s'
                                               }}
                                               autoFocus
@@ -2688,20 +3103,20 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                           </div>
                                         ) : (
                                           <ChartNotes
-                                            chartIndex={index}
+                                            chartIndex={actualIndex}
                                             datasetId={datasetId}
-                                            initialNotes={chartNotes[index] || ''}
+                                            initialNotes={chartNotes[actualIndex] || ''}
                                             forceEdit={false}
                                             onNotesChange={(notes) => {
-                                              setChartNotes(prev => ({ ...prev, [index]: notes }));
+                                              setChartNotes(prev => ({ ...prev, [actualIndex]: notes }));
                                             }}
                                             onEditStart={() => {
-                                              setEditingNotesIndex(index);
+                                              setEditingNotesIndex(actualIndex);
                                             }}
                                           />
                                         )}
                                       </div>
-                                      {editingNotesIndex === index && (
+                                      {editingNotesIndex === actualIndex && (
                                         <div style={{
                                           padding: '12px 16px',
                                           borderTop: '1px solid rgba(0, 0, 0, 0.06)',
@@ -2710,33 +3125,33 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                           justifyContent: 'flex-end'
                                         }}>
                                           <button
-                                            onClick={() => handleSaveNotes(index, chartNotes[index] || '')}
-                                            disabled={savingNotes[index] || savedNotes[index]}
+                                            onClick={() => handleSaveNotes(actualIndex, chartNotes[actualIndex] || '')}
+                                            disabled={savingNotes[actualIndex] || savedNotes[actualIndex]}
                                             style={{
                                               padding: '6px 16px',
-                                              background: savedNotes[index] ? 'rgba(34, 197, 94, 0.15)' : 'rgba(34, 197, 94, 0.1)',
-                                              border: savedNotes[index] ? '1px solid rgba(34, 197, 94, 0.3)' : '1px solid rgba(34, 197, 94, 0.2)',
+                                              background: savedNotes[actualIndex] ? 'rgba(34, 197, 94, 0.15)' : 'rgba(34, 197, 94, 0.1)',
+                                              border: savedNotes[actualIndex] ? '1px solid rgba(34, 197, 94, 0.3)' : '1px solid rgba(34, 197, 94, 0.2)',
                                               borderRadius: '6px',
                                               fontSize: '12px',
                                               fontWeight: 500,
                                               color: '#22c55e',
-                                              cursor: savingNotes[index] || savedNotes[index] ? 'default' : 'pointer',
+                                              cursor: savingNotes[actualIndex] || savedNotes[actualIndex] ? 'default' : 'pointer',
                                               display: 'flex',
                                               alignItems: 'center',
                                               gap: '6px',
                                               transition: 'all 0.2s',
-                                              opacity: savingNotes[index] ? 0.6 : 1
+                                              opacity: savingNotes[actualIndex] ? 0.6 : 1
                                             }}
                                             onMouseEnter={(e) => {
-                                              if (!savingNotes[index] && !savedNotes[index]) {
+                                              if (!savingNotes[actualIndex] && !savedNotes[actualIndex]) {
                                                 e.currentTarget.style.background = 'rgba(34, 197, 94, 0.15)';
                                               }
                                             }}
                                             onMouseLeave={(e) => {
-                                              e.currentTarget.style.background = savedNotes[index] ? 'rgba(34, 197, 94, 0.15)' : 'rgba(34, 197, 94, 0.1)';
+                                              e.currentTarget.style.background = savedNotes[actualIndex] ? 'rgba(34, 197, 94, 0.15)' : 'rgba(34, 197, 94, 0.1)';
                                             }}
                                           >
-                                            {savedNotes[index] ? (
+                                            {savedNotes[actualIndex] ? (
                                               <>
                                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                                   <polyline points="20 6 9 17 4 12" />
@@ -2750,7 +3165,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                                   <polyline points="17 21 17 13 7 13 7 21" />
                                                   <polyline points="7 3 7 8 15 8" />
                                                 </svg>
-                                                {savingNotes[index] ? 'Saving...' : 'Save Notes'}
+                                                {savingNotes[actualIndex] ? 'Saving...' : 'Save Notes'}
                                               </>
                                             )}
                                           </button>
@@ -2760,7 +3175,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                   )}
                                 </div>
                               </div>
-                            ))}
+                            );
+                            })}
                           </div>
                           
                           {/* Add Chart Button */}
