@@ -114,7 +114,9 @@ export const PublicDashboard: React.FC = () => {
           boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
           maxWidth: '500px'
         }}>
-          <h2 style={{ marginBottom: '16px', color: '#dc2626' }}>Error</h2>
+          <h2 style={{ marginBottom: '16px', color: '#dc2626' }}>
+            {error && error.includes('free plan') ? 'Apologies' : 'Error'}
+          </h2>
           <p style={{ marginBottom: '24px', color: '#666' }}>{error || 'Dashboard not found'}</p>
           <button
             onClick={() => navigate('/')}

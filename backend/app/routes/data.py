@@ -1125,8 +1125,8 @@ async def analyze_data(
                 
                 query = request.query + "/n use these colors " + str(request.color_theme)
                 
-                # Generate all charts
-                chart_specs, full_plan, dashboard_title = await generate_chart_spec(
+                # Generate all charts (including KPI cards separately)
+                chart_specs, full_plan, dashboard_title, kpi_cards = await generate_chart_spec(
                     df=df,
                     query=query,
                     dataset_context=dataset_context,
@@ -1134,14 +1134,47 @@ async def analyze_data(
                     dataset_id=dataset_id
                 )
                 
-                # Yield dashboard_info event
-                yield f"data: {json.dumps({'type': 'dashboard_info', 'dashboard_title': dashboard_title, 'full_plan': full_plan})}\n\n"
+                # Yield dashboard_info event with KPI cards count
+                yield f"data: {json.dumps({'type': 'dashboard_info', 'dashboard_title': dashboard_title, 'full_plan': full_plan, 'kpi_count': len(kpi_cards)})}\n\n"
                 
-                # Stream charts one by one
+                # Stream KPI cards first (if any)
+                if kpi_cards:
+                    for idx, kpi in enumerate(kpi_cards):
+                        kpi_index = kpi.get('chart_index', idx)
+                        
+                        # Store KPI metadata
+                        try:
+                            dataset_service.set_chart_metadata(
+                                user_id=current_user.id,
+                                dataset_id=dataset_id,
+                                chart_index=kpi_index,
+                                chart_spec=kpi.get('chart_spec', ''),
+                                plan=kpi.get('plan', full_plan),
+                                figure_data=kpi.get('figure'),
+                                chart_type='kpi_card',
+                                title=kpi.get('title', 'KPI')
+                            )
+                        except Exception as e:
+                            logger.warning(f"Failed to store KPI metadata: {e}")
+                        
+                        charts_data_for_db.append({
+                            "chart_index": kpi_index,
+                            "code": kpi.get('chart_spec', ''),
+                            "figure": kpi.get('figure'),
+                            "title": kpi.get('title', 'KPI'),
+                            "chart_type": 'kpi_card',
+                            "plan": kpi.get('plan', full_plan),
+                            "is_kpi": True
+                        })
+                        
+                        # Yield KPI card event
+                        yield f"data: {json.dumps({'type': 'kpi_card', 'kpi': kpi, 'index': idx})}\n\n"
+                
+                # Stream regular charts
                 if isinstance(chart_specs, list):
                     total_charts = len(chart_specs)
                     for idx, chart in enumerate(chart_specs):
-                        chart_index = chart.get('chart_index', idx)
+                        chart_index = chart.get('chart_index', idx + len(kpi_cards))
                         
                         # Store chart metadata
                         try:
@@ -1171,7 +1204,8 @@ async def analyze_data(
                         yield f"data: {json.dumps({'type': 'chart', 'chart': chart, 'progress': int(((idx + 1) / total_charts) * 100)})}\n\n"
                     
                     # Yield complete event
-                    yield f"data: {json.dumps({'type': 'complete', 'message': f'Generated {total_charts} chart(s)', 'total_charts': total_charts, 'progress': 100})}\n\n"
+                    total_items = len(kpi_cards) + total_charts
+                    yield f"data: {json.dumps({'type': 'complete', 'message': f'Generated {len(kpi_cards)} KPI cards and {total_charts} chart(s)', 'total_charts': total_items, 'kpi_count': len(kpi_cards), 'progress': 100})}\n\n"
                 else:
                     yield f"data: {json.dumps({'type': 'error', 'message': 'Unexpected result format'})}\n\n"
             
@@ -1596,7 +1630,7 @@ async def fix_visualization_error(
         logger.info(f"Error line: {error_line}, Context window: lines {context_start}-{context_end}")
 
         # Use Claude for code fixing
-        lm = dspy.LM("anthropic/claude-3-7-sonnet-latest", api_key=os.getenv("ANTHROPIC_API_KEY"), max_tokens=8000)
+        lm = dspy.LM("anthropic/claude-3-7-sonnet-latest", api_key=os.getenv("ANTHROPIC_API_KEY"), max_tokens=4000)
 
         logger.info("Starting Plotly code fixing...")
         start_time = datetime.now()
@@ -2007,7 +2041,7 @@ async def edit_chart(
                 raise HTTPException(status_code=404, detail="Dataset not found")
         
         # Call plotly_editor module with session LM
-        with dspy.context(lm=dspy.LM("openai/gpt-4o-mini", max_tokens=1400)):
+        with dspy.context(lm=dspy.LM("openai/gpt-4o-mini", max_tokens=1800)):
             editor = dspy.Predict(plotly_editor)
             result = editor(
                 user_query=request.edit_request,

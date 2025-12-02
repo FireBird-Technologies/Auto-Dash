@@ -353,6 +353,26 @@ STYLING_INSTRUCTIONS = [
         }
     },
     {
+        "category": "kpi_cards",
+        "description": "Display key performance indicators with values, change indicators, and optional mini charts.",
+        "styling": {
+            "template": "plotly_white",
+            "title": {"bold_html": True, "include": True},
+            "show_change_indicator": True,
+            "show_sparkline": True,
+            "number_format": {
+                "apply_k_m": True,
+                "thresholds": {"K": 1000, "M": 1000000},
+                "percentage_decimals": 2,
+                "percentage_sign": True
+            },
+            "default_size": {"height": 300, "width": 400},
+            "layout": {
+                "showlegend": False
+            }
+        }
+    },
+    {
         "category": "histogram_distribution",
         "description": "Specialized histogram for return distributions with opacity control.",
         "styling": {
@@ -538,6 +558,14 @@ class GenerateVisualizationPlan(dspy.Signature):
     
     Format: {
       "data_source": {"file_type": "csv" or "excel", "sheet_name": "Sheet1" (for Excel, omit for CSV)},
+      "filters": {
+        "enabled": true,
+        "instructions": "Add filter controls for key dimensions like date ranges, categories, or numerical ranges. Each chart should respect these filters."
+      },
+      "interconnected": {
+        "enabled": true,
+        "instructions": "Make charts interconnected - when a user clicks or selects data in one chart, other charts should update to show filtered/related data. Use Plotly's built-in selection callbacks or shared filter state."
+      },
       "bar_chart": {"title": "Chart Title", "instructions": "Specific Plotly instructions"},
       "line_chart": {"title": "Another Chart", "instructions": "More instructions"},
       ...
@@ -548,6 +576,10 @@ class GenerateVisualizationPlan(dspy.Signature):
     
     Keep instructions short (2-3 lines per chart).
     Include only essential charts - avoid redundant ones.
+    ALWAYS include filters and interconnected settings in the plan.
+    
+    KPI CARDS: If the dashboard should include KPI cards (3-4 key metrics displayed as small squares at the top), 
+    set kpi_cards=True and include a "kpi_cards" array in the plan with 3-4 KPI specifications.
     """
 
     query = dspy.InputField(
@@ -558,11 +590,18 @@ class GenerateVisualizationPlan(dspy.Signature):
         "IMPORTANT: Lists which DataFrames are available (df is default, sheets accessible by name)"
     )
     dashboard_title = dspy.OutputField(desc="A global title for the dashboard", type=str)
+    kpi_cards = dspy.OutputField(
+        desc="Boolean - True if the dashboard should include KPI cards (3-4 key metrics as small squares at the top)",
+        type=bool
+    )
     plan = dspy.OutputField(
         desc=(
             "JSON dictionary with 'data_source' key containing {'file_type': 'csv' or 'excel', 'sheet_name': 'SheetName' (for Excel only)}, "
+            "'filters' key with {'enabled': bool, 'instructions': str}, "
+            "'interconnected' key with {'enabled': bool, 'instructions': str}, "
             "and chart_type keys (bar_chart, line_chart, scatter_plot, heatmap, histogram, pie_chart, box_plot, area_chart) "
-            'with values as objects: {"title": "Descriptive Chart Title", "instructions": "Specific Plotly visualization instructions"}.'
+            'with values as objects: {"title": "Descriptive Chart Title", "instructions": "Specific Plotly visualization instructions"}. '
+            'If kpi_cards=True, include a "kpi_cards" key with an array of 3-4 objects: [{"title": "KPI Title", "metric": "metric_name", "instructions": "Display instructions"}]'
         ),
         type=dict
     )
@@ -621,43 +660,19 @@ fig.add_annotation(
 # ============================================================================
 
 COMMON_PLOTLY_DOCS = """
-CRITICAL OUTPUT FORMAT - READ CAREFULLY
-
 REQUIRED FORMAT:
-- Pure Python code using Plotly
-- Start with imports: import plotly.graph_objects as go (or import plotly.express as px)
-- ALWAYS assume 'df' already exists (pandas DataFrame) - DO NOT create or load it
-- Create figure using Plotly
-- MUST end with: fig (the variable name that stores the figure object)
+- Pure Python Plotly code starting with imports (go or px)
+- Use DataFrame variables specified in dataset_context (e.g., 'df' for default, sheet names for multi-sheet)
+- Process data with pandas, create Plotly figure, end with: fig
 
-FORBIDDEN - DO NOT INCLUDE:
-- fig.show() or fig.write_html() calls
-- Data loading code (pd.read_csv, pd.read_excel, pd.DataFrame(), data = ..., df = pd.read_..., etc.)
-- Data creation code (df = ..., data = ..., etc.) - df ALREADY EXISTS
-- Markdown code blocks (```)
-- HTML or JavaScript code
-- File I/O operations
+DO NOT add filter controls or dropdowns to the chart - filtering is handled separately by the UI.
+DO NOT use fig.update_layout(updatemenus=[...]) for filters.
 
-REQUIRED:
-1. Use 'df' directly - it's already loaded and available (NEVER add df = ... or data = ...)
-2. Process/aggregate data using pandas if needed (e.g., df.groupby(), df.agg(), etc.)
-3. Create Plotly figure with go.Figure() or px functions using 'df'
-4. Configure layout with fig.update_layout()
-5. END with just: fig (on its own line, this returns the figure)
-
-EXAMPLE STRUCTURE:
-import plotly.graph_objects as go
-import pandas as pd
-
-# Process data (df already exists, use it directly)
+FORBIDDEN: fig.show(), data loading/creation, markdown blocks, HTML/JS, filter controls on chart
+EXAMPLE:
 grouped = df.groupby('category')['value'].sum().reset_index()
-
-# Create figure
-fig = go.Figure()
-fig.add_trace(go.Bar(x=grouped['category'], y=grouped['value']))
+fig = go.Figure().add_trace(go.Bar(x=grouped['category'], y=grouped['value']))
 fig.update_layout(title="My Chart", xaxis_title="Category", yaxis_title="Value")
-
-fig
 """
 
 
@@ -728,7 +743,7 @@ class histogram_plotly(dspy.Signature):
 class heatmap_plotly(dspy.Signature):
     """Generate Plotly Python code for a heatmap.
     
-    Heatmaps show data intensity using colors.
+    Heatmaps show data intensity using colors. Only use this for correlation stuff
     
     """ + COMMON_PLOTLY_DOCS
     
@@ -740,19 +755,6 @@ class heatmap_plotly(dspy.Signature):
     plotly_code = dspy.OutputField(desc="Pure Python Plotly code - must end with 'fig'")
 
 
-class pie_chart_plotly(dspy.Signature):
-    """Generate Plotly Python code for a pie chart.
-    
-    Pie charts show parts of a whole.
-    
-    """ + COMMON_PLOTLY_DOCS
-    
-    plan = dspy.InputField(desc="User requirements for pie chart")
-    styling = dspy.InputField(desc="Chart styling preferences")
-    dataset_context = dspy.InputField(
-        desc="Dataset info: available sheets, columns, stats. Use 'df' for default data or access sheets by name"
-    )
-    plotly_code = dspy.OutputField(desc="Pure Python Plotly code - must end with 'fig'")
 
 
 class box_plot_plotly(dspy.Signature):
@@ -783,6 +785,39 @@ class area_chart_plotly(dspy.Signature):
         desc="Dataset info: available sheets, columns, stats. Use 'df' for default data or access sheets by name"
     )
     plotly_code = dspy.OutputField(desc="Pure Python Plotly code - must end with 'fig'")
+
+
+class kpi_card_plotly(dspy.Signature):
+    """Generate MINIMAL Plotly KPI card using go.Indicator with mode="number" ONLY.
+    
+    STRICT REQUIREMENTS - Follow exactly:
+    
+    import plotly.graph_objects as go
+    
+    value = df['column'].sum()  # Calculate ONE metric
+    
+    fig = go.Figure(go.Indicator(
+        mode="number",
+        value=value,
+        title={"text": "Title", "font": {"size": 12, "color": "#6b7280"}},
+        number={"font": {"size": 28, "color": "#111827"}, "valueformat": ",.0f"}
+    ))
+    fig.update_layout(margin=dict(l=10, r=10, t=25, b=10), paper_bgcolor="white")
+    fig
+    
+    FORBIDDEN - DO NOT USE:
+    - mode="gauge" or any gauge
+    - mode="delta" or mode="number+delta"
+    - Sparklines or any additional traces
+    - Any colors other than #111827 (number) and #6b7280 (title)
+    
+    ONLY USE: mode="number" - simple number display with title above it.
+    """
+    
+    plan = dspy.InputField(desc="KPI metric to display - use mode='number' ONLY")
+    styling = dspy.InputField(desc="Ignored - use standard minimal style")
+    dataset_context = dspy.InputField(desc="Dataset info")
+    plotly_code = dspy.OutputField(desc="Minimal go.Indicator code with mode='number' only")
 
 
 class SuggestQueries(dspy.Signature):
@@ -1146,7 +1181,7 @@ class PlotlyVisualizationModule(dspy.Module):
             'heatmap': dspy.asyncify(dspy.Refine(dspy.Predict(heatmap_plotly), N=self.N, reward_fn=plotly_chart_metric, threshold=0.5)),
             'box_plot': dspy.asyncify(dspy.Refine(dspy.Predict(box_plot_plotly), N=self.N, reward_fn=plotly_chart_metric, threshold=0.5)),
             'area_chart': dspy.asyncify(dspy.Refine(dspy.Predict(area_chart_plotly), N=self.N, reward_fn=plotly_chart_metric, threshold=0.5)),
-            'pie_chart': dspy.asyncify(dspy.Refine(dspy.Predict(pie_chart_plotly), N=self.N, reward_fn=plotly_chart_metric, threshold=0.5))
+            'kpi_card': dspy.asyncify(dspy.Refine(dspy.Predict(kpi_card_plotly), N=self.N, reward_fn=plotly_chart_metric, threshold=0.5)),
         }
         self.fail = FAIL_MESSAGE
     
@@ -1173,29 +1208,72 @@ class PlotlyVisualizationModule(dspy.Module):
 
         plan_output = plan.plan
         dashboard_title = plan.dashboard_title
+        kpi_cards_enabled = getattr(plan, 'kpi_cards', False)
 
         if isinstance(plan_output, str):
             try:
                 plan_output = json.loads(plan_output)
             except json.JSONDecodeError:
                 logger.error("Failed to parse plan JSON: %s", plan.plan)
-                return self.fail, None
+                return self.fail, None, "Unable to generate", []
 
         logger.info("GenerateVisualizationPlan result: %s", plan_output)
         
         # Extract dashboard title from plan
         dashboard_title = getattr(plan, 'dashboard_title', 'Dashboard Analysis')
         
+        # Separate KPI cards and regular charts
+        kpi_cards_specs = []
+        chart_specs = []
+        
         tasks = []
+        kpi_tasks = []  # Separate list for KPI tasks
         chart_plans = {}  # Store individual chart plans by chart_type
         chart_types_order = []  # Track order of chart types
+        kpi_plans = []  # Track KPI plans
         
         if 'False' in str(plan.relevant_query):
             # Query is relevant for visualization
             # Extract data_source info from plan
             data_source = plan_output.get('data_source', {'file_type': 'csv'})
             
-            for chart_key in self.chart_sigs.keys():
+            # Note: Filtering is handled by frontend UI, not on charts
+            enhanced_context = dataset_context
+            enhanced_context += "\n\nIMPORTANT: Do NOT add filter controls, dropdowns, or updatemenus to charts. Filtering is handled separately by the dashboard UI."
+            
+            # Handle KPI cards separately if enabled
+            if kpi_cards_enabled or plan_output.get('kpi_cards'):
+                kpi_cards_list = plan_output.get('kpi_cards', [])
+                if not kpi_cards_list:
+                    # Generate default KPIs if none specified (limit to 3)
+                    kpi_cards_list = [
+                        {"title": "Total Records", "metric": "count", "instructions": "Display total number of records"},
+                        {"title": "Average Value", "metric": "mean", "instructions": "Display average of main numeric column"},
+                        {"title": "Total Sum", "metric": "sum", "instructions": "Display sum of main numeric column"}
+                    ]
+                
+                # Generate KPI cards (limit to 3)
+                kpi_style = next(
+                    (s['styling'] for s in self.styling_instructions if s.get('category') == 'kpi_cards'),
+                    {}
+                )
+                
+                for idx, kpi_spec in enumerate(kpi_cards_list[:3]):  # Limit to 3 KPIs
+                    kpi_plan = {
+                        'title': kpi_spec.get('title', f'KPI {idx + 1}'),
+                        'instructions': kpi_spec.get('instructions', 'Display key metric'),
+                        'metric': kpi_spec.get('metric', 'value')
+                    }
+                    kpi_plans.append(kpi_plan)
+                    
+                    kpi_tasks.append(self.chart_sigs['kpi_card'](
+                        plan=kpi_plan,
+                        dataset_context=enhanced_context,
+                        styling=kpi_style
+                    ))
+            
+            # Process regular charts (exclude kpi_card from regular processing)
+            for chart_key in [k for k in self.chart_sigs.keys() if k != 'kpi_card']:
                 if chart_key in plan_output:
                     # Find styling for this chart type
                     style = next(
@@ -1213,7 +1291,7 @@ class PlotlyVisualizationModule(dspy.Module):
                     
                     tasks.append(self.chart_sigs[chart_key](
                         plan=chart_plan,
-                        dataset_context=dataset_context,
+                        dataset_context=enhanced_context,  # Use enhanced context
                         styling=style
                     ))
             
@@ -1231,6 +1309,7 @@ class PlotlyVisualizationModule(dspy.Module):
                     dataset_context=dataset_context,
                     styling=style
                 ))
+            
             default_model = os.getenv("DEFAULT_MODEL", "").lower()
             if "anthropic" in default_model:
                 provider = "ANTHROPIC"
@@ -1240,15 +1319,33 @@ class PlotlyVisualizationModule(dspy.Module):
                 provider = "GEMINI"
             else:
                 provider = "UNKNOWN"
-            medium_lm = dspy.LM(default_model, max_tokens=2500,api_key=os.getenv(provider+'_API_KEY'), temperature=1, cache=False)
+            # medium_lm = dspy.LM(default_model, max_tokens=2950,api_key=os.getenv(provider+'_API_KEY'), temperature=1, cache=False)
 
-            with dspy.context(lm=medium_lm):
-                results = await asyncio.gather(*tasks)
+            # Execute KPI tasks and regular chart tasks separately
+            kpi_results = await asyncio.gather(*kpi_tasks) if kpi_tasks else []
+            chart_results = await asyncio.gather(*tasks)
             
-            # Process results into chart specifications
-            chart_specs = []
+            # Process KPI card results
+            for i, r in enumerate(kpi_results):
+                raw_code = getattr(r, 'plotly_code', str(r))
+                cleaned = clean_plotly_code(raw_code)
+                
+                kpi_plan = kpi_plans[i] if i < len(kpi_plans) else {}
+                title = kpi_plan.get('title', f'KPI {i + 1}')
+                
+                kpi_cards_specs.append({
+                    'chart_spec': cleaned,
+                    'chart_type': 'kpi_card',
+                    'title': title,
+                    'chart_index': i,
+                    'plan': kpi_plan,
+                    'is_kpi': True
+                })
+                
+                logger.info(f"KPI {i+1}: {title} - cleaned successfully")
             
-            for i, r in enumerate(results):
+            # Process regular chart results
+            for i, r in enumerate(chart_results):
                 raw_code = getattr(r, 'plotly_code', str(r))
                 cleaned = clean_plotly_code(raw_code)
                 
@@ -1271,15 +1368,16 @@ class PlotlyVisualizationModule(dspy.Module):
                     'chart_spec': cleaned,
                     'chart_type': chart_type,
                     'title': title,
-                    'chart_index': i,
-                    'plan': chart_plan  # Include plan for this specific chart
+                    'chart_index': len(kpi_cards_specs) + i,  # Offset by KPI count
+                    'plan': chart_plan,
+                    'is_kpi': False
                 })
                 
                 logger.info(f"Chart {i+1} ({chart_type}): {title} - cleaned successfully")
             
-            logger.info(f"Generated {len(chart_specs)} charts")
-            # Return tuple: (chart_specs, full_plan_output, dashboard_title)
-            return chart_specs, plan_output, dashboard_title
+            logger.info(f"Generated {len(kpi_cards_specs)} KPI cards and {len(chart_specs)} charts")
+            # Return tuple: (chart_specs, full_plan_output, dashboard_title, kpi_cards_specs)
+            return chart_specs, plan_output, dashboard_title, kpi_cards_specs
         else:
             logger.info("Query not relevant for visualization. Returning FAIL_MESSAGE.")
-            return self.fail + str(plan.relevant_query), None, "Unable to generate"
+            return self.fail + str(plan.relevant_query), None, "Unable to generate", []
