@@ -30,6 +30,9 @@ class User(Base):
     datasets: Mapped[list["Dataset"]] = relationship(back_populates="user")
     credits: Mapped["UserCredits"] = relationship(back_populates="user", uselist=False)
     credit_transactions: Mapped[list["CreditTransaction"]] = relationship(back_populates="user")
+    dashboard_queries: Mapped[list["DashboardQuery"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    chat_messages: Mapped[list["ChatMessage"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    public_dashboards: Mapped[list["PublicDashboard"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
 
 class Subscription(Base):
@@ -100,6 +103,7 @@ class DashboardQuery(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
     
     dataset: Mapped["Dataset"] = relationship(back_populates="dashboard_queries")
+    user: Mapped["User"] = relationship(back_populates="dashboard_queries")
 
 
 class ChatMessage(Base):
@@ -117,6 +121,7 @@ class ChatMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
     
     dataset: Mapped["Dataset"] = relationship(back_populates="chat_messages")
+    user: Mapped["User"] = relationship(back_populates="chat_messages")
 
 
 class PublicDashboard(Base):
@@ -135,6 +140,7 @@ class PublicDashboard(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     dataset: Mapped["Dataset"] = relationship(back_populates="public_dashboards")
+    user: Mapped["User"] = relationship(back_populates="public_dashboards")
 
 
 class SubscriptionPlan(Base):
