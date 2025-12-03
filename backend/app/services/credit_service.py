@@ -102,12 +102,15 @@ class CreditService:
             logger.info(f"Created credit record for user {user_id} with plan_id={plan_id}")
         elif credits.plan_id is None:
             # Existing credits but no plan_id - assign free tier
+            # Only reset balance if user was never assigned credits before (last_reset_at is None)
+            # This prevents users who exhausted credits from getting free credits again
             free_plan = plan_service.get_plan_by_name(db, "Free")
             if free_plan:
                 old_balance = credits.balance
                 credits.plan_id = free_plan.id
-                # Reset balance to free tier amount if it's 0
-                if credits.balance == 0:
+                # Only reset balance if user was never assigned credits before
+                # (last_reset_at is None means they never had credits initialized)
+                if credits.balance == 0 and credits.last_reset_at is None:
                     credits.balance = free_plan.credits_per_month
                     credits.last_reset_at = datetime.utcnow()
                 credits.updated_at = datetime.utcnow()
