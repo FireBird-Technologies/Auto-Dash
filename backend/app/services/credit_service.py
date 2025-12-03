@@ -8,6 +8,7 @@ from typing import Optional, Dict, Any
 import logging
 
 from ..models import User, UserCredits, CreditTransaction, TransactionType, SubscriptionPlan
+from .plan_service import plan_service
 
 logger = logging.getLogger(__name__)
 
@@ -30,28 +31,62 @@ class CreditService:
     
     def get_or_create_user_credits(self, db: Session, user_id: int, plan_id: Optional[int] = None) -> UserCredits:
         """
-        Get or create credit record for a user
+        Get or create credit record for a user. If plan_id is null, assigns free tier.
         
         Args:
             db: Database session
             user_id: User ID
-            plan_id: Optional plan ID
+            plan_id: Optional plan ID (if None and credits don't exist, assigns free tier)
             
         Returns:
             UserCredits object
         """
         credits = self.get_user_credits(db, user_id)
         if not credits:
-            credits = UserCredits(
-                user_id=user_id,
-                plan_id=plan_id,
-                balance=0,
-                last_reset_at=None
-            )
+            # If no plan_id provided, get free tier
+            if plan_id is None:
+                free_plan = plan_service.get_plan_by_name(db, "Free")
+                if free_plan:
+                    plan_id = free_plan.id
+                    # Initialize with free tier credits
+                    credits = UserCredits(
+                        user_id=user_id,
+                        plan_id=plan_id,
+                        balance=free_plan.credits_per_month,
+                        last_reset_at=datetime.utcnow()
+                    )
+                else:
+                    # Fallback if free plan doesn't exist
+                    credits = UserCredits(
+                        user_id=user_id,
+                        plan_id=None,
+                        balance=0,
+                        last_reset_at=None
+                    )
+            else:
+                credits = UserCredits(
+                    user_id=user_id,
+                    plan_id=plan_id,
+                    balance=0,
+                    last_reset_at=None
+                )
             db.add(credits)
             db.commit()
             db.refresh(credits)
-            logger.info(f"Created credit record for user {user_id}")
+            logger.info(f"Created credit record for user {user_id} with plan_id={plan_id}")
+        elif credits.plan_id is None:
+            # Existing credits but no plan_id - assign free tier
+            free_plan = plan_service.get_plan_by_name(db, "Free")
+            if free_plan:
+                credits.plan_id = free_plan.id
+                # Reset balance to free tier amount if it's 0
+                if credits.balance == 0:
+                    credits.balance = free_plan.credits_per_month
+                    credits.last_reset_at = datetime.utcnow()
+                credits.updated_at = datetime.utcnow()
+                db.commit()
+                db.refresh(credits)
+                logger.info(f"Assigned free tier to user {user_id} (existing credits record)")
         return credits
     
     def check_sufficient_credits(self, db: Session, user_id: int, amount: int) -> bool:
