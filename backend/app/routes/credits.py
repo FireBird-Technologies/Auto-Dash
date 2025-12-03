@@ -47,6 +47,8 @@ def get_credit_balance(
         Credit balance and plan details
     """
     try:
+        # Ensure credits record exists (auto-create if missing)
+        credit_service.get_or_create_user_credits(db, current_user.id)
         balance_info = credit_service.get_balance_info(db, current_user.id)
         return balance_info
     except Exception as e:
