@@ -2816,13 +2816,44 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                         justifyContent: 'flex-end'
                                       }}>
                                         <button
-                                          onClick={() => {
+                                          onClick={async () => {
                                             setChartFilters(prev => ({ ...prev, [actualIndex]: {} }));
-                                            // Re-fetch original chart if filters were cleared
+                                            // Re-execute original code with no filters
+                                            const spec = chartSpecs[actualIndex];
+                                            if (spec?.chart_spec) {
+                                              setApplyingFilter(actualIndex);
+                                              try {
+                                                const response = await fetch(`${config.backendUrl}/api/data/apply-filter`, {
+                                                  method: 'POST',
+                                                  headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+                                                  credentials: 'include',
+                                                  body: JSON.stringify({
+                                                    chart_index: actualIndex,
+                                                    filters: {},
+                                                    dataset_id: datasetId,
+                                                    original_code: spec.chart_spec
+                                                  })
+                                                });
+                                                await checkAuthResponse(response);
+                                                const result = await response.json();
+                                                if (result.success && result.figure) {
+                                                  setChartSpecs(prev => prev.map((s, idx) => 
+                                                    idx === actualIndex ? { ...s, figure: result.figure } : s
+                                                  ));
+                                                  notification.success('Filters cleared');
+                                                }
+                                              } catch (error) {
+                                                console.error('Error clearing filters:', error);
+                                              } finally {
+                                                setApplyingFilter(null);
+                                                setFilterPanelOpen(null);
+                                              }
+                                            }
                                           }}
-                                          style={{ padding: '6px 12px', fontSize: '12px', border: '1px solid #e5e7eb', borderRadius: '6px', backgroundColor: 'white', color: '#6b7280', cursor: 'pointer' }}
+                                          disabled={applyingFilter === actualIndex}
+                                          style={{ padding: '6px 12px', fontSize: '12px', border: '1px solid #e5e7eb', borderRadius: '6px', backgroundColor: 'white', color: '#6b7280', cursor: applyingFilter === actualIndex ? 'wait' : 'pointer' }}
                                         >
-                                          Clear
+                                          {applyingFilter === actualIndex ? 'Clearing...' : 'Clear'}
                                         </button>
                                         <button
                                           onClick={() => applyFilterToChart(actualIndex)}
