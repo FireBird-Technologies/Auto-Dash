@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Optional, Dict, Any
 import logging
 
-from ..models import User, UserCredits, CreditTransaction, TransactionType, SubscriptionPlan
+from ..models import User, UserCredits, CreditTransaction, TransactionType, SubscriptionPlan, Subscription
 from .plan_service import plan_service
 
 logger = logging.getLogger(__name__)
@@ -55,6 +55,31 @@ class CreditService:
                         balance=free_plan.credits_per_month,
                         last_reset_at=datetime.utcnow()
                     )
+                    db.add(credits)
+                    
+                    # Also create subscription record
+                    subscription = db.query(Subscription).filter(
+                        Subscription.user_id == user_id
+                    ).order_by(Subscription.created_at.desc()).first()
+                    
+                    if not subscription:
+                        subscription = Subscription(
+                            user_id=user_id,
+                            plan_id=free_plan.id,
+                            status="active"
+                        )
+                        db.add(subscription)
+                        logger.info(f"Created subscription record for user {user_id} with free tier")
+                    
+                    # Log credit transaction for initial free tier assignment
+                    transaction = CreditTransaction(
+                        user_id=user_id,
+                        amount=free_plan.credits_per_month,
+                        transaction_type=TransactionType.RESET,
+                        description="Initial free tier assignment",
+                        transaction_metadata={"plan_id": free_plan.id, "plan_name": free_plan.name}
+                    )
+                    db.add(transaction)
                 else:
                     # Fallback if free plan doesn't exist
                     credits = UserCredits(
@@ -63,6 +88,7 @@ class CreditService:
                         balance=0,
                         last_reset_at=None
                     )
+                    db.add(credits)
             else:
                 credits = UserCredits(
                     user_id=user_id,
@@ -70,7 +96,7 @@ class CreditService:
                     balance=0,
                     last_reset_at=None
                 )
-            db.add(credits)
+                db.add(credits)
             db.commit()
             db.refresh(credits)
             logger.info(f"Created credit record for user {user_id} with plan_id={plan_id}")
@@ -78,12 +104,45 @@ class CreditService:
             # Existing credits but no plan_id - assign free tier
             free_plan = plan_service.get_plan_by_name(db, "Free")
             if free_plan:
+                old_balance = credits.balance
                 credits.plan_id = free_plan.id
                 # Reset balance to free tier amount if it's 0
                 if credits.balance == 0:
                     credits.balance = free_plan.credits_per_month
                     credits.last_reset_at = datetime.utcnow()
                 credits.updated_at = datetime.utcnow()
+                
+                # Also ensure subscription record exists
+                subscription = db.query(Subscription).filter(
+                    Subscription.user_id == user_id
+                ).order_by(Subscription.created_at.desc()).first()
+                
+                if not subscription:
+                    # Create subscription record
+                    subscription = Subscription(
+                        user_id=user_id,
+                        plan_id=free_plan.id,
+                        status="active"
+                    )
+                    db.add(subscription)
+                    logger.info(f"Created subscription record for user {user_id} with free tier")
+                elif subscription.plan_id != free_plan.id:
+                    # Update existing subscription to free tier
+                    subscription.plan_id = free_plan.id
+                    subscription.status = "active"
+                    logger.info(f"Updated subscription for user {user_id} to free tier")
+                
+                # Log credit transaction if balance changed
+                if old_balance != credits.balance:
+                    transaction = CreditTransaction(
+                        user_id=user_id,
+                        amount=credits.balance - old_balance,
+                        transaction_type=TransactionType.RESET,
+                        description="Free tier assignment - balance reset",
+                        transaction_metadata={"plan_id": free_plan.id, "plan_name": free_plan.name, "old_balance": old_balance}
+                    )
+                    db.add(transaction)
+                
                 db.commit()
                 db.refresh(credits)
                 logger.info(f"Assigned free tier to user {user_id} (existing credits record)")
