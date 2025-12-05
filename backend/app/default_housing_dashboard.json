@@ -4,6 +4,59 @@
     "title": "Housing Market Dashboard",
     "instructions": "Comprehensive dashboard showing housing prices and relationships with various variables"
   },
+  "kpi_cards": [
+    {
+      "chart_index": 0,
+      "chart_type": "kpi_card",
+      "title": "Average Price",
+      "chart_spec": "import plotly.graph_objects as go\n\nvalue = df['price'].mean()\n\nfig = go.Figure(go.Indicator(\n    mode=\"number\",\n    value=value,\n    title={\"text\": \"Average Price\", \"font\": {\"size\": 12, \"color\": \"#6b7280\"}},\n    number={\"font\": {\"size\": 28, \"color\": \"#111827\"}, \"prefix\": \"$\", \"valueformat\": \",.0f\"}\n))\nfig.update_layout(margin=dict(l=10, r=10, t=25, b=10), paper_bgcolor=\"white\")\nfig",
+      "figure": {
+        "data": [{
+          "type": "indicator",
+          "mode": "number",
+          "value": 1156050,
+          "title": {"text": "Average Price", "font": {"size": 12, "color": "#6b7280"}},
+          "number": {"font": {"size": 28, "color": "#111827"}, "prefix": "$", "valueformat": ",.0f"}
+        }],
+        "layout": {"margin": {"l": 10, "r": 10, "t": 25, "b": 10}, "paper_bgcolor": "white"}
+      },
+      "plan": {"title": "Average Price", "instructions": "Display average housing price"}
+    },
+    {
+      "chart_index": 1,
+      "chart_type": "kpi_card",
+      "title": "Total Properties",
+      "chart_spec": "import plotly.graph_objects as go\n\nvalue = len(df)\n\nfig = go.Figure(go.Indicator(\n    mode=\"number\",\n    value=value,\n    title={\"text\": \"Total Properties\", \"font\": {\"size\": 12, \"color\": \"#6b7280\"}},\n    number={\"font\": {\"size\": 28, \"color\": \"#111827\"}, \"valueformat\": \",d\"}\n))\nfig.update_layout(margin=dict(l=10, r=10, t=25, b=10), paper_bgcolor=\"white\")\nfig",
+      "figure": {
+        "data": [{
+          "type": "indicator",
+          "mode": "number",
+          "value": 20,
+          "title": {"text": "Total Properties", "font": {"size": 12, "color": "#6b7280"}},
+          "number": {"font": {"size": 28, "color": "#111827"}, "valueformat": ",d"}
+        }],
+        "layout": {"margin": {"l": 10, "r": 10, "t": 25, "b": 10}, "paper_bgcolor": "white"}
+      },
+      "plan": {"title": "Total Properties", "instructions": "Display count of properties"}
+    },
+    {
+      "chart_index": 2,
+      "chart_type": "kpi_card",
+      "title": "Avg Living Area",
+      "chart_spec": "import plotly.graph_objects as go\n\nvalue = df['sqft_living'].mean()\n\nfig = go.Figure(go.Indicator(\n    mode=\"number\",\n    value=value,\n    title={\"text\": \"Avg Living Area\", \"font\": {\"size\": 12, \"color\": \"#6b7280\"}},\n    number={\"font\": {\"size\": 28, \"color\": \"#111827\"}, \"suffix\": \" sqft\", \"valueformat\": \",.0f\"}\n))\nfig.update_layout(margin=dict(l=10, r=10, t=25, b=10), paper_bgcolor=\"white\")\nfig",
+      "figure": {
+        "data": [{
+          "type": "indicator",
+          "mode": "number",
+          "value": 3072,
+          "title": {"text": "Avg Living Area", "font": {"size": 12, "color": "#6b7280"}},
+          "number": {"font": {"size": 28, "color": "#111827"}, "suffix": " sqft", "valueformat": ",.0f"}
+        }],
+        "layout": {"margin": {"l": 10, "r": 10, "t": 25, "b": 10}, "paper_bgcolor": "white"}
+      },
+      "plan": {"title": "Avg Living Area", "instructions": "Display average square footage"}
+    }
+  ],
   "charts": [
     {
       "chart_index": 0,
