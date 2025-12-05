@@ -1,4 +1,5 @@
 import os
+import logging
 from urllib.parse import urlencode
 from fastapi import APIRouter, Request, Depends
 from authlib.integrations.starlette_client import OAuth
@@ -9,8 +10,9 @@ from .models import User
 from .security import create_access_token
 from .services.subscription_service import subscription_service
 
-
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/auth/google", tags=["auth"])
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
@@ -35,40 +37,41 @@ async def login(request: Request):
 
 @router.get("/callback")
 async def callback(request: Request, db: Session = Depends(get_db)):
-    token = await oauth.google.authorize_access_token(request)
-    userinfo = token.get("userinfo")
-    if not userinfo:
-        # Fallback fetch
-        userinfo = await oauth.google.parse_id_token(request, token)
-
-    email = userinfo.get("email")
-    sub = userinfo.get("sub")
-    name = userinfo.get("name")
-    picture = userinfo.get("picture")
-
-    user = db.query(User).filter(User.email == email).first()
-    is_new_user = False
-    if not user:
-        user = User(email=email, name=name, picture=picture, provider="google", provider_id=sub)
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-        is_new_user = True
+    try:
+        token = await oauth.google.authorize_access_token(request)
+        userinfo = token.get("userinfo") or await oauth.google.parse_id_token(request, token)
+        
+        email = userinfo.get("email")
+        if not email:
+            logger.error("No email in Google OAuth response")
+            return RedirectResponse(url=f"{FRONTEND_URL}/?error=missing_email")
+        
+        user = db.query(User).filter(User.email == email).first()
+        is_new_user = not user
+        
+        if is_new_user:
+            user = User(
+                email=email,
+                name=userinfo.get("name"),
+                picture=userinfo.get("picture"),
+                provider="google",
+                provider_id=userinfo.get("sub")
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+            
+            # Assign free tier (non-blocking)
+            try:
+                subscription_service.assign_free_tier(db, user)
+            except Exception as e:
+                logger.error(f"Failed to assign free tier to user {user.id}: {e}")
+        
+        jwt_token = create_access_token(str(user.id), {"email": user.email})
+        return RedirectResponse(url=f"{FRONTEND_URL}/?{urlencode({'token': jwt_token})}")
     
-    # Assign Free tier to new users
-    if is_new_user:
-        try:
-            subscription_service.assign_free_tier(db, user)
-        except Exception as e:
-            # Log error but don't block user login
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"Failed to assign free tier to user {user.id}: {e}")
-
-    jwt_token = create_access_token(str(user.id), {"email": user.email})
-    # redirect back to frontend with token in query for simplicity
-    params = urlencode({"token": jwt_token})
-    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
-    return RedirectResponse(url=f"{frontend_url}/?{params}")
+    except Exception as e:
+        logger.error(f"OAuth callback error: {e}", exc_info=True)
+        return RedirectResponse(url=f"{FRONTEND_URL}/?error=login_failed")
 
 

@@ -74,7 +74,7 @@ export const Landing: React.FC<LandingProps> = ({ onStart }) => {
             }}
           />
         </div>
-        <h1 className="landing-title">Your AI Data Artist</h1>
+        <h1 className="landing-title">Visualize Data in 1,2,3</h1>
         <p className="landing-subtitle">
           AutoDash transforms raw data into beautiful, interactive visualizations in three simple steps.
           <br />No code. No complexity. Just insights.
