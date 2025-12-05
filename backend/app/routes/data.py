@@ -1099,13 +1099,31 @@ async def analyze_data(
                 dashboard_title = default_data['dashboard_title']
                 full_plan = default_data['full_plan']
                 prebuilt_charts = default_data['charts']
+                prebuilt_kpis = default_data.get('kpi_cards', [])
                 
-                # Send dashboard_info event first
-                dashboard_info_event = json.dumps({'type': 'dashboard_info', 'dashboard_title': dashboard_title, 'full_plan': full_plan})
+                total_items = len(prebuilt_kpis) + len(prebuilt_charts)
+                
+                # Send dashboard_info event first (include KPI count)
+                dashboard_info_event = json.dumps({
+                    'type': 'dashboard_info', 
+                    'dashboard_title': dashboard_title, 
+                    'full_plan': full_plan,
+                    'kpi_count': len(prebuilt_kpis)
+                })
                 logger.info(f"Sending dashboard_info event: {dashboard_info_event[:100]}...")
                 yield f"data: {dashboard_info_event}\n\n"
                 
-                # Stream pre-built charts instantly
+                # Stream KPI cards first
+                for idx, kpi in enumerate(prebuilt_kpis):
+                    kpi_event = json.dumps({
+                        'type': 'kpi_card',
+                        'kpi': kpi,
+                        'progress': int(((idx + 1) / total_items) * 100)
+                    })
+                    logger.info(f"Sending KPI card {idx+1}/{len(prebuilt_kpis)}")
+                    yield f"data: {kpi_event}\n\n"
+                
+                # Stream pre-built charts
                 for idx, chart in enumerate(prebuilt_charts):
                     charts_data_for_db.append({
                         "chart_index": chart['chart_index'],
@@ -1116,11 +1134,18 @@ async def analyze_data(
                         "plan": chart['plan']
                     })
                     
-                    chart_event = json.dumps({'type': 'chart', 'chart': chart, 'progress': int(((idx + 1) / len(prebuilt_charts)) * 100)})
+                    progress = int(((len(prebuilt_kpis) + idx + 1) / total_items) * 100)
+                    chart_event = json.dumps({'type': 'chart', 'chart': chart, 'progress': progress})
                     logger.info(f"Sending chart {idx+1}/{len(prebuilt_charts)}, event size: {len(chart_event)} bytes")
                     yield f"data: {chart_event}\n\n"
                 
-                complete_event = json.dumps({'type': 'complete', 'message': f'Loaded {len(prebuilt_charts)} chart(s)', 'total_charts': len(prebuilt_charts), 'progress': 100})
+                complete_event = json.dumps({
+                    'type': 'complete', 
+                    'message': f'Loaded {len(prebuilt_kpis)} KPI card(s) and {len(prebuilt_charts)} chart(s)', 
+                    'total_charts': len(prebuilt_charts),
+                    'total_kpis': len(prebuilt_kpis),
+                    'progress': 100
+                })
                 logger.info(f"Sending complete event")
                 yield f"data: {complete_event}\n\n"
                 
