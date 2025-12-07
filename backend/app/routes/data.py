@@ -326,10 +326,21 @@ class EditChartRequest(BaseModel):
     current_code: str
     dataset_id: str
 
+class EditKPIRequest(BaseModel):
+    kpi_index: int
+    edit_request: str
+    current_code: str
+    dataset_id: str
+    current_title: str
+
 class AddChartRequest(BaseModel):
     query: str
     dataset_id: str
     color_theme: Optional[str] = None
+
+class AddKPIRequest(BaseModel):
+    description: str  # What metric to show, e.g., "average price", "total sales"
+    dataset_id: str
 
 
 class ApplyFilterRequest(BaseModel):
@@ -2141,6 +2152,152 @@ async def edit_chart(
     except Exception as e:
         logger.error(f"Error editing chart: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to edit chart: {str(e)}")
+
+
+@router.post("/edit-kpi")
+async def edit_kpi(
+    request: EditKPIRequest,
+    credits: CreditCheckResult = Depends(require_credits(1)),
+    db: Session = Depends(get_db)
+):
+    """
+    Edit a KPI card using natural language instructions.
+    Uses the kpi_editor DSPy module to generate edited code.
+    
+    Costs: 1 credit per edit
+    """
+    from ..services.agents import kpi_editor, clean_plotly_code
+    
+    current_user = credits.user
+    try:
+        # Get dataset
+        df = dataset_service.get_dataset(current_user.id, request.dataset_id)
+        if df is None:
+            raise HTTPException(status_code=404, detail="Dataset not found")
+        
+        # Get dataset context
+        data_context = dataset_service.get_context(current_user.id, request.dataset_id)
+        
+        if not data_context:
+            if isinstance(df, dict):
+                sheet_names = list(df.keys())
+                first_sheet = df[sheet_names[0]]
+                columns = [str(col) for col in first_sheet.columns.tolist()]
+                data_context = f"Multi-sheet Excel with {len(df)} sheets: {', '.join(sheet_names)}. First sheet columns: {', '.join(columns)}"
+            else:
+                columns = [str(col) for col in df.columns.tolist()]
+                data_context = f"Dataset with {len(df)} rows. Columns: {', '.join(columns)}"
+        
+        # Call kpi_editor module
+        with dspy.context(lm=dspy.LM("openai/gpt-4o-mini", max_tokens=800)):
+            editor = dspy.Predict(kpi_editor)
+            result = editor(
+                user_query=request.edit_request,
+                current_code=request.current_code,
+                dataset_context=data_context
+            )
+        
+        # Clean the edited code
+        edited_code = clean_plotly_code(result.edited_code)
+        new_title = getattr(result, 'new_title', request.current_title) or request.current_title
+        
+        # Execute edited code to get figure
+        execution_result = execute_plotly_code(edited_code, df)
+        
+        # Deduct credits after successful edit
+        if execution_result.get('success'):
+            credit_service.deduct_credits(
+                db,
+                current_user.id,
+                1,
+                f"KPI edit: {request.edit_request[:100]}",
+                metadata={"dataset_id": request.dataset_id, "kpi_index": request.kpi_index}
+            )
+        
+        return {
+            "edited_code": edited_code,
+            "title": new_title.strip('"').strip("'") if new_title else request.current_title,
+            "figure": execution_result.get('figure'),
+            "success": execution_result.get('success'),
+            "error": execution_result.get('error') if not execution_result.get('success') else None
+        }
+        
+    except Exception as e:
+        logger.error(f"Error editing KPI: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to edit KPI: {str(e)}")
+
+
+@router.post("/add-kpi")
+async def add_kpi(
+    request: AddKPIRequest,
+    credits: CreditCheckResult = Depends(require_credits(1)),
+    db: Session = Depends(get_db)
+):
+    """
+    Add a new KPI card based on a description.
+    Uses the kpi_card_plotly DSPy signature to generate the code.
+    
+    Costs: 1 credit per creation
+    """
+    from ..services.agents import kpi_card_plotly, clean_plotly_code
+    
+    current_user = credits.user
+    try:
+        # Get dataset
+        df = dataset_service.get_dataset(current_user.id, request.dataset_id)
+        if df is None:
+            raise HTTPException(status_code=404, detail="Dataset not found")
+        
+        # Get dataset context
+        data_context = dataset_service.get_context(current_user.id, request.dataset_id)
+        
+        if not data_context:
+            if isinstance(df, dict):
+                sheet_names = list(df.keys())
+                first_sheet = df[sheet_names[0]]
+                columns = [str(col) for col in first_sheet.columns.tolist()]
+                data_context = f"Multi-sheet Excel with {len(df)} sheets: {', '.join(sheet_names)}. First sheet columns: {', '.join(columns)}"
+            else:
+                columns = [str(col) for col in df.columns.tolist()]
+                data_context = f"Dataset with {len(df)} rows. Columns: {', '.join(columns)}"
+        
+        # Call kpi_card_plotly module
+        with dspy.context(lm=dspy.LM("openai/gpt-4o-mini", max_tokens=800)):
+            kpi_generator = dspy.Predict(kpi_card_plotly)
+            result = kpi_generator(
+                plan=request.description,
+                styling="minimal, mode='number' only",
+                dataset_context=data_context
+            )
+        
+        # Clean the generated code
+        kpi_code = clean_plotly_code(result.plotly_code)
+        
+        # Execute code to get figure
+        execution_result = execute_plotly_code(kpi_code, df)
+        
+        # Deduct credits after successful creation
+        if execution_result.get('success'):
+            credit_service.deduct_credits(
+                db,
+                current_user.id,
+                1,
+                f"KPI created: {request.description[:100]}",
+                metadata={"dataset_id": request.dataset_id}
+            )
+        
+        return {
+            "chart_spec": kpi_code,
+            "title": request.description.title()[:30],  # Use description as title (truncated)
+            "chart_type": "kpi_card",
+            "figure": execution_result.get('figure'),
+            "success": execution_result.get('success'),
+            "error": execution_result.get('error') if not execution_result.get('success') else None
+        }
+        
+    except Exception as e:
+        logger.error(f"Error adding KPI: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to add KPI: {str(e)}")
 
 
 @router.post("/apply-filter")

@@ -224,6 +224,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   const [isResizing, setIsResizing] = useState(false);
   const [localData, setLocalData] = useState<Row[]>(data); // Local copy that may be full dataset
   const [fullDataFetched, setFullDataFetched] = useState(false); // Track if we've fetched full data
+  const [totalRowsInDataset, setTotalRowsInDataset] = useState<number | null>(null); // Actual total rows in dataset
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const [showDatasetPreview, setShowDatasetPreview] = useState(false);
   const [previewData, setPreviewData] = useState<{ preview: Row[], total_rows: number } | null>(null);
@@ -262,6 +263,10 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   const [filterPanelOpen, setFilterPanelOpen] = useState<number | null>(null);
   const [chartFilters, setChartFilters] = useState<Record<number, Record<string, any>>>({});
   const [applyingFilter, setApplyingFilter] = useState<number | null>(null);
+  const [editingKPIIndex, setEditingKPIIndex] = useState<number | null>(null);
+  const [isAddingKPI, setIsAddingKPI] = useState(false);
+  const [showAddKPIPopup, setShowAddKPIPopup] = useState(false);
+  const [addKPIInput, setAddKPIInput] = useState('');
 
   // Update local data when prop changes
   useEffect(() => {
@@ -325,6 +330,11 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
         const result = await response.json();
         console.log(`[SUCCESS] Full dataset loaded: ${result.rows} rows (Total: ${result.total_rows_in_dataset} rows)`);
         
+        // Store the actual total rows in dataset
+        if (result.total_rows_in_dataset) {
+          setTotalRowsInDataset(result.total_rows_in_dataset);
+        }
+        
         // Show warning if data was limited
         if (result.limited) {
           console.warn(`[WARNING] Dataset limited to ${result.rows} rows for performance (Total dataset: ${result.total_rows_in_dataset} rows)`);
@@ -357,6 +367,10 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
       if (response.ok) {
         const result = await response.json();
         setPreviewData(result);
+        // Also capture total rows if we don't have it yet
+        if (result.total_rows && !totalRowsInDataset) {
+          setTotalRowsInDataset(result.total_rows);
+        }
         setShowDatasetPreview(true);
       } else {
         console.error('Failed to fetch dataset preview');
@@ -946,6 +960,147 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     } finally {
       setApplyingFilter(null);
       setFilterPanelOpen(null);
+    }
+  };
+
+  // KPI Edit Handler
+  const handleEditKPI = async (kpiIndex: number, editRequest: string) => {
+    const kpiSpecs = chartSpecs.filter(spec => spec.chart_type === 'kpi_card');
+    const kpiSpec = kpiSpecs[kpiIndex];
+    
+    if (!kpiSpec) return;
+    
+    setEditingKPIIndex(kpiIndex);
+    
+    try {
+      const response = await fetch(`${config.backendUrl}/api/data/edit-kpi`, {
+        method: 'POST',
+        headers: {
+          ...getAuthHeaders(),
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          kpi_index: kpiIndex,
+          edit_request: editRequest,
+          current_code: kpiSpec.chart_spec || '',
+          dataset_id: datasetId,
+          current_title: kpiSpec.title || 'KPI'
+        })
+      });
+      
+      await checkAuthResponse(response);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to edit KPI');
+      }
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        // Update the KPI in chartSpecs
+        setChartSpecs(prev => {
+          const newSpecs = [...prev];
+          // Find the actual index in the full chartSpecs array
+          let kpiCount = 0;
+          for (let i = 0; i < newSpecs.length; i++) {
+            if (newSpecs[i].chart_type === 'kpi_card') {
+              if (kpiCount === kpiIndex) {
+                newSpecs[i] = {
+                  ...newSpecs[i],
+                  chart_spec: result.edited_code,
+                  title: result.title,
+                  figure: result.figure
+                };
+                break;
+              }
+              kpiCount++;
+            }
+          }
+          return newSpecs;
+        });
+        notification.success('KPI updated successfully');
+      } else {
+        notification.error(result.error || 'Failed to edit KPI');
+      }
+    } catch (error) {
+      console.error('Error editing KPI:', error);
+      notification.error(error instanceof Error ? error.message : 'Failed to edit KPI');
+    } finally {
+      setEditingKPIIndex(null);
+    }
+  };
+
+  // KPI Remove Handler
+  const handleRemoveKPI = (kpiIndex: number) => {
+    const kpiSpecs = chartSpecs.filter(spec => spec.chart_type === 'kpi_card');
+    if (kpiIndex >= kpiSpecs.length) return;
+    
+    // Find the actual index in chartSpecs
+    let kpiCount = 0;
+    const actualIndex = chartSpecs.findIndex(spec => {
+      if (spec.chart_type === 'kpi_card') {
+        if (kpiCount === kpiIndex) return true;
+        kpiCount++;
+      }
+      return false;
+    });
+    
+    if (actualIndex !== -1) {
+      setChartSpecs(prev => prev.filter((_, i) => i !== actualIndex));
+      notification.info('KPI card removed');
+    }
+  };
+
+  // KPI Add Handler
+  const handleAddKPI = async (description: string) => {
+    if (!description.trim()) return;
+    
+    setIsAddingKPI(true);
+    setShowAddKPIPopup(false);
+    
+    try {
+      const response = await fetch(`${config.backendUrl}/api/data/add-kpi`, {
+        method: 'POST',
+        headers: {
+          ...getAuthHeaders(),
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          description: description.trim(),
+          dataset_id: datasetId
+        })
+      });
+      
+      await checkAuthResponse(response);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to add KPI');
+      }
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        // Add the new KPI to chartSpecs
+        const newKPI = {
+          chart_spec: result.chart_spec,
+          title: result.title,
+          chart_type: 'kpi_card',
+          figure: result.figure,
+          chart_index: chartSpecs.length
+        };
+        setChartSpecs(prev => [...prev, newKPI]);
+        notification.success('KPI card added successfully');
+        setAddKPIInput('');
+      } else {
+        notification.error(result.error || 'Failed to add KPI');
+      }
+    } catch (error) {
+      console.error('Error adding KPI:', error);
+      notification.error(error instanceof Error ? error.message : 'Failed to add KPI');
+    } finally {
+      setIsAddingKPI(false);
     }
   };
 
@@ -2451,10 +2606,269 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                             )}
                           </div>
                           
-                          {/* KPI Cards Row - Displayed at top as small squares */}
+                          {/* KPI Cards Row - Displayed at top, wraps after 3 cards */}
                           <KPICardsContainer 
-                            kpiSpecs={chartSpecs.filter(spec => spec.chart_type === 'kpi_card')} 
+                            kpiSpecs={chartSpecs.filter(spec => spec.chart_type === 'kpi_card')}
+                            onEditKPI={handleEditKPI}
+                            onRemoveKPI={handleRemoveKPI}
+                            onAddKPI={() => setShowAddKPIPopup(true)}
+                            editingKPIIndex={editingKPIIndex}
+                            isAddingKPI={isAddingKPI}
                           />
+                          
+                          {/* Add KPI Popup with Dataset Preview */}
+                          {showAddKPIPopup && (
+                            <div 
+                              style={{
+                                position: 'fixed',
+                                inset: 0,
+                                backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                zIndex: 1000
+                              }}
+                              onClick={() => setShowAddKPIPopup(false)}
+                            >
+                              <div 
+                                style={{
+                                  backgroundColor: 'white',
+                                  borderRadius: '12px',
+                                  padding: '24px',
+                                  width: '600px',
+                                  maxWidth: '90vw',
+                                  maxHeight: '80vh',
+                                  overflow: 'hidden',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)'
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <div style={{
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  alignItems: 'center',
+                                  marginBottom: '20px'
+                                }}>
+                                  <h2 style={{
+                                    margin: 0,
+                                    fontSize: '24px',
+                                    fontWeight: 700,
+                                    color: '#1f2937'
+                                  }}>
+                                    Add New KPI Card
+                                  </h2>
+                                  <button
+                                    onClick={() => {
+                                      setShowAddKPIPopup(false);
+                                      setAddKPIInput('');
+                                    }}
+                                    style={{
+                                      background: 'none',
+                                      border: 'none',
+                                      fontSize: '24px',
+                                      cursor: 'pointer',
+                                      color: '#6b7280',
+                                      padding: '4px 8px',
+                                      lineHeight: 1
+                                    }}
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                                
+                                {/* Dataset Preview */}
+                                <div style={{ marginBottom: '16px' }}>
+                                  <label style={{
+                                    display: 'block',
+                                    marginBottom: '8px',
+                                    fontSize: '14px',
+                                    fontWeight: 600,
+                                    color: '#374151'
+                                  }}>
+                                    Data Preview
+                                  </label>
+                                  {localData.length > 0 ? (
+                                    <div style={{
+                                      border: '1px solid #e5e7eb',
+                                      borderRadius: '8px',
+                                      overflow: 'auto',
+                                      maxHeight: '200px'
+                                    }}>
+                                      <table style={{
+                                        width: '100%',
+                                        borderCollapse: 'collapse',
+                                        fontSize: '13px'
+                                      }}>
+                                        <thead>
+                                          <tr style={{
+                                            backgroundColor: '#f9fafb',
+                                            borderBottom: '2px solid #e5e7eb'
+                                          }}>
+                                            {Object.keys(localData[0]).map((col, idx) => (
+                                              <th key={idx} style={{
+                                                padding: '8px 12px',
+                                                textAlign: 'left',
+                                                fontWeight: 600,
+                                                color: '#374151',
+                                                borderRight: '1px solid #e5e7eb',
+                                                whiteSpace: 'nowrap'
+                                              }}>
+                                                {col}
+                                              </th>
+                                            ))}
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {localData.slice(0, 3).map((row, rowIdx) => (
+                                            <tr key={rowIdx} style={{
+                                              borderBottom: '1px solid #e5e7eb'
+                                            }}>
+                                              {Object.keys(localData[0]).map((col, colIdx) => (
+                                                <td key={colIdx} style={{
+                                                  padding: '8px 12px',
+                                                  borderRight: '1px solid #e5e7eb',
+                                                  color: '#6b7280'
+                                                }}>
+                                                  {row[col] !== null && row[col] !== undefined ? String(row[col]) : '-'}
+                                                </td>
+                                              ))}
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                      <div style={{
+                                        padding: '8px 12px',
+                                        backgroundColor: '#f9fafb',
+                                        borderTop: '1px solid #e5e7eb',
+                                        fontSize: '12px',
+                                        color: '#6b7280'
+                                      }}>
+                                        Total rows: {totalRowsInDataset || localData.length}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div style={{
+                                      padding: '20px',
+                                      textAlign: 'center',
+                                      color: '#6b7280',
+                                      border: '1px solid #e5e7eb',
+                                      borderRadius: '8px'
+                                    }}>
+                                      No preview available
+                                    </div>
+                                  )}
+                                </div>
+                                
+                                {/* Input Field */}
+                                <div style={{ marginBottom: '4px' }}>
+                                  <label style={{
+                                    display: 'block',
+                                    marginBottom: '8px',
+                                    fontSize: '14px',
+                                    fontWeight: 600,
+                                    color: '#374151'
+                                  }}>
+                                    KPI Description
+                                  </label>
+                                  <textarea
+                                    value={addKPIInput}
+                                    onChange={(e) => setAddKPIInput(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter' && !e.shiftKey && addKPIInput.trim()) {
+                                        e.preventDefault();
+                                        handleAddKPI(addKPIInput);
+                                      }
+                                      if (e.key === 'Escape') {
+                                        setShowAddKPIPopup(false);
+                                        setAddKPIInput('');
+                                      }
+                                    }}
+                                    placeholder="Describe the KPI you want to add (e.g., 'Average price', 'Total count of sales')"
+                                    autoFocus
+                                    style={{
+                                      width: '100%',
+                                      minHeight: '80px',
+                                      padding: '12px',
+                                      border: '2px solid #e5e7eb',
+                                      borderRadius: '8px',
+                                      fontSize: '14px',
+                                      fontFamily: 'inherit',
+                                      resize: 'vertical',
+                                      outline: 'none',
+                                      transition: 'border-color 0.2s',
+                                      boxSizing: 'border-box'
+                                    }}
+                                    onFocus={(e) => {
+                                      e.currentTarget.style.borderColor = '#ff6b6b';
+                                    }}
+                                    onBlur={(e) => {
+                                      e.currentTarget.style.borderColor = '#e5e7eb';
+                                    }}
+                                  />
+                                </div>
+                                
+                                {/* Buttons */}
+                                <div style={{
+                                  display: 'flex',
+                                  gap: '12px',
+                                  justifyContent: 'flex-end'
+                                }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setShowAddKPIPopup(false);
+                                      setAddKPIInput('');
+                                    }}
+                                    disabled={isAddingKPI}
+                                    style={{
+                                      padding: '10px 20px',
+                                      border: '2px solid #e5e7eb',
+                                      borderRadius: '8px',
+                                      backgroundColor: 'white',
+                                      color: '#374151',
+                                      fontSize: '14px',
+                                      fontWeight: 500,
+                                      cursor: isAddingKPI ? 'not-allowed' : 'pointer',
+                                      transition: 'all 0.2s',
+                                      opacity: isAddingKPI ? 0.6 : 1
+                                    }}
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    onClick={() => handleAddKPI(addKPIInput)}
+                                    disabled={isAddingKPI || !addKPIInput.trim()}
+                                    style={{
+                                      padding: '10px 20px',
+                                      border: 'none',
+                                      borderRadius: '8px',
+                                      backgroundColor: isAddingKPI || !addKPIInput.trim() ? '#9ca3af' : '#ff6b6b',
+                                      color: 'white',
+                                      fontSize: '14px',
+                                      fontWeight: 500,
+                                      cursor: isAddingKPI || !addKPIInput.trim() ? 'not-allowed' : 'pointer',
+                                      transition: 'all 0.2s',
+                                      boxShadow: isAddingKPI || !addKPIInput.trim() ? 'none' : '0 2px 8px rgba(255, 107, 107, 0.3)'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      if (!isAddingKPI && addKPIInput.trim()) {
+                                        e.currentTarget.style.backgroundColor = '#ef4444';
+                                      }
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      if (!isAddingKPI && addKPIInput.trim()) {
+                                        e.currentTarget.style.backgroundColor = '#ff6b6b';
+                                      }
+                                    }}
+                                  >
+                                    {isAddingKPI ? 'Adding KPI...' : 'Add KPI'}
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
                           
                           {/* Charts Grid with Notes Icons */}
                           <div style={{
