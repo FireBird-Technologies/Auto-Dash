@@ -84,7 +84,7 @@ export const Landing: React.FC<LandingProps> = ({ onStart }) => {
             localStorage.setItem('auth_token', token);
             onStart();
           }}>
-            Get Started with Google
+            Visualize Data for free
           </GoogleAuthButton>
         </div>
       </header>
