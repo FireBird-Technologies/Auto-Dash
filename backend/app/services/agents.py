@@ -820,6 +820,41 @@ class kpi_card_plotly(dspy.Signature):
     plotly_code = dspy.OutputField(desc="Minimal go.Indicator code with mode='number' only")
 
 
+class kpi_editor(dspy.Signature):
+    """Edit a KPI card based on user instructions.
+    
+    Output MINIMAL Plotly KPI card using go.Indicator with mode="number" ONLY.
+    
+    STRICT REQUIREMENTS - Follow exactly:
+    
+    import plotly.graph_objects as go
+    
+    value = df['column'].sum()  # Calculate ONE metric
+    
+    fig = go.Figure(go.Indicator(
+        mode="number",
+        value=value,
+        title={"text": "Title", "font": {"size": 12, "color": "#6b7280"}},
+        number={"font": {"size": 28, "color": "#111827"}, "valueformat": ",.0f"}
+    ))
+    fig.update_layout(margin=dict(l=10, r=10, t=25, b=10), paper_bgcolor="white")
+    fig
+    
+    FORBIDDEN - DO NOT USE:
+    - mode="gauge" or any gauge
+    - mode="delta" or mode="number+delta"
+    - Sparklines or any additional traces
+    - Any colors other than #111827 (number) and #6b7280 (title)
+    
+    ONLY USE: mode="number" - simple number display with title above it.
+    """
+    user_query = dspy.InputField(desc="The edit instructions from the user")
+    current_code = dspy.InputField(desc="The current KPI card code")
+    dataset_context = dspy.InputField(desc="Dataset info: columns, types, sample values")
+    edited_code = dspy.OutputField(desc="Edited KPI code with mode='number' only", prefix="```python")
+    new_title = dspy.OutputField(desc="The new title for this KPI card (short, descriptive)")
+
+
 class SuggestQueries(dspy.Signature):
     """Generate a single contextual query suggestion for dataset visualization."""
     dataset_context = dspy.InputField(desc="Column names, types, sample rows")
