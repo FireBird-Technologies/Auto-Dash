@@ -42,6 +42,7 @@ class plotly_editor(dspy.Signature):
     5. The code must end with 'fig' on the last line.
     6. You MUST add data traces (fig.add_trace) or use px functions. Do NOT just update layout.
     7. set fig.update_layout(template='plotly_white').
+    8. NUMBER FORMATTING: Format numbers to show 1 decimal place normally, or 2 decimal places if precision is needed (e.g., financial data, percentages). Use tickformat=".1f" or ".2f" for axes, and hovertemplate with %{y:.1f} or %{y:.2f} for hover text.
     """
     user_query = dspy.InputField(desc="edits the user needs to make")
     plotly_code = dspy.InputField(desc="The initial plotly code")
@@ -64,6 +65,7 @@ class plotly_adder_sig(dspy.Signature):
     5. set fig.update_layout(template='plotly_white').
     6. Output must end with the 'fig' variable as the final line.
     7. The chart type, data, and features must be based on user_request and the dataset context.
+    8. NUMBER FORMATTING: Format numbers to show 1 decimal place normally, or 2 decimal places if precision is needed (e.g., financial data, percentages). Use tickformat=".1f" or ".2f" for axes, and hovertemplate with %{y:.1f} or %{y:.2f} for hover text.
 
     INPUTS:
     - user_request: Instructions for the new chart to add to the dashboard.
@@ -668,11 +670,17 @@ REQUIRED FORMAT:
 DO NOT add filter controls or dropdowns to the chart - filtering is handled separately by the UI.
 DO NOT use fig.update_layout(updatemenus=[...]) for filters.
 
+NUMBER FORMATTING:
+- Format numbers to show 1 decimal place normally, or 2 decimal places if precision is needed (e.g., financial data, percentages)
+- For axes: Use tickformat=".1f" for 1 decimal or tickformat=".2f" for 2 decimals in fig.update_layout(xaxis=dict(tickformat=".1f"))
+- For hover text: Use hovertemplate with %{y:.1f} for 1 decimal or %{y:.2f} for 2 decimals
+- For text on charts: Use texttemplate with %{y:.1f} or %{y:.2f} format
+
 FORBIDDEN: fig.show(), data loading/creation, markdown blocks, HTML/JS, filter controls on chart
 EXAMPLE:
 grouped = df.groupby('category')['value'].sum().reset_index()
-fig = go.Figure().add_trace(go.Bar(x=grouped['category'], y=grouped['value']))
-fig.update_layout(title="My Chart", xaxis_title="Category", yaxis_title="Value")
+fig = go.Figure().add_trace(go.Bar(x=grouped['category'], y=grouped['value'], hovertemplate='%{y:.1f}<extra></extra>'))
+fig.update_layout(title="My Chart", xaxis_title="Category", yaxis_title="Value", yaxis=dict(tickformat=".1f"))
 """
 
 
