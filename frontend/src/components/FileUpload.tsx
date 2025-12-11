@@ -127,13 +127,37 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded }) => {
           </div>
         </div>
         
-        <div style={{ marginTop: '1rem' }}>
+        <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'row', gap: '0.75rem', flexWrap: 'wrap', justifyContent: 'center' }}>
           <button
             onClick={loadSampleData}
             disabled={uploading}
             className="feedback-button"
           >
             {uploading ? 'Loading...' : 'Use Sample Data'}
+          </button>
+          
+          <button
+            onClick={() => {
+              const subject = encodeURIComponent('Connect to Database Request');
+              const body = encodeURIComponent('Hello,\n\nI would like to connect my database to AutoDash.\n\nPlease let me know the next steps.\n\nThank you!');
+              window.location.href = `mailto:arslan@firebird-technologies.com?subject=${subject}&body=${body}`;
+            }}
+            disabled={uploading}
+            className="feedback-button"
+          >
+            Connect to your db
+          </button>
+          
+          <button
+            onClick={() => {
+              const subject = encodeURIComponent('Demo Request');
+              const body = encodeURIComponent('Hello,\n\nI would like to request a demo of AutoDash.\n\nPlease let me know when would be a good time.\n\nThank you!');
+              window.location.href = `mailto:arslan@firebird-technologies.com?subject=${subject}&body=${body}`;
+            }}
+            disabled={uploading}
+            className="feedback-button"
+          >
+            Ask for demo
           </button>
         </div>
 
