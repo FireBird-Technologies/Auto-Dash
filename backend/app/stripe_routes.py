@@ -130,12 +130,13 @@ def create_checkout_session(
             }
         }
         
-        # Add discounts if promo code is valid, always allow manual entry
+        # Add discounts if promo code is valid, otherwise allow manual entry
+        # Note: Stripe doesn't allow both discounts and allow_promotion_codes together
         if discounts:
             session_params["discounts"] = discounts
-        
-        # Always allow users to enter/see promo codes in checkout
-        session_params["allow_promotion_codes"] = True
+        else:
+            # Only allow manual promo code entry if no discount is pre-applied
+            session_params["allow_promotion_codes"] = True
         
         session = stripe.checkout.Session.create(**session_params)
         
