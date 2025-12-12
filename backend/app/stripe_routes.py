@@ -81,36 +81,38 @@ def create_checkout_session(
             customer_id = customer.id
             logger.info(f"Created Stripe customer {customer_id} for user {current_user.id}")
         
-        # Validate promo code if provided
+        # Validate promo code if provided (proceed without discount if invalid)
         discounts = None
         if request.promo_code:
-            # Get price object to find product ID
-            price = stripe.Price.retrieve(price_id)
-            product_id = price.product if isinstance(price.product, str) else price.product.id
-            
-            # Search for promotion code
-            promo_codes = stripe.PromotionCode.list(
-                active=True,
-                code=request.promo_code.upper(),
-                limit=1
-            )
-            
-            if promo_codes.data:
-                promo_code_obj = promo_codes.data[0]
-                coupon = promo_code_obj.coupon
+            try:
+                # Get price object to find product ID
+                price = stripe.Price.retrieve(price_id)
+                product_id = price.product if isinstance(price.product, str) else price.product.id
                 
-                # Check if coupon applies to specific products
-                if coupon.applies_to and coupon.applies_to.products:
-                    if product_id not in coupon.applies_to.products:
-                        raise HTTPException(
-                            status_code=400,
-                            detail=f"Promo code does not apply to {plan.name} plan"
-                        )
+                # Search for promotion code
+                promo_codes = stripe.PromotionCode.list(
+                    active=True,
+                    code=request.promo_code.upper(),
+                    limit=1
+                )
                 
-                # Use the promotion code
-                discounts = [{"promotion_code": promo_code_obj.id}]
-            else:
-                raise HTTPException(status_code=400, detail="Invalid promo code")
+                if promo_codes.data:
+                    promo_code_obj = promo_codes.data[0]
+                    coupon = promo_code_obj.coupon
+                    
+                    # Check if coupon applies to specific products
+                    if coupon.applies_to and coupon.applies_to.products:
+                        if product_id not in coupon.applies_to.products:
+                            logger.warning(f"Promo code {request.promo_code} does not apply to {plan.name} plan, proceeding without discount")
+                        else:
+                            discounts = [{"promotion_code": promo_code_obj.id}]
+                    else:
+                        # Use the promotion code
+                        discounts = [{"promotion_code": promo_code_obj.id}]
+                else:
+                    logger.warning(f"Invalid promo code {request.promo_code}, proceeding without discount")
+            except Exception as promo_error:
+                logger.warning(f"Error validating promo code {request.promo_code}: {promo_error}, proceeding without discount")
         
         # Create checkout session
         domain = os.getenv("FRONTEND_URL", "http://localhost:5173")

@@ -9,6 +9,7 @@ import { SubscriptionResult } from './pages/SubscriptionResult';
 import { PublicDashboard } from './pages/PublicDashboard';
 import { CreditsProvider } from './contexts/CreditsContext';
 import { NotificationProvider } from './contexts/NotificationContext';
+import { NewYearBanner } from './components/NewYearBanner';
 
 function AuthHandler() {
   const navigate = useNavigate();
@@ -43,6 +44,7 @@ function AppRoutes() {
   return (
     <>
       <AuthHandler />
+      <NewYearBanner />
       <Navbar onAccountClick={() => navigate('/account')} />
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         <Routes>
