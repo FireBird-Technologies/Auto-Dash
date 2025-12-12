@@ -142,7 +142,15 @@ def create_checkout_session(
         session = stripe.checkout.Session.create(**session_params)
         
         logger.info(f"Created checkout session {session.id} for user {current_user.id}, plan {plan.name}")
-        return {"checkoutUrl": session.url}
+        
+        # Build checkout URL with prefilled promo code if provided but not applied via discounts
+        checkout_url = session.url
+        if request.promo_code and not discounts:
+            # Prefill the promo code field in Stripe checkout
+            separator = "&" if "?" in checkout_url else "?"
+            checkout_url = f"{checkout_url}{separator}prefilled_promo_code={request.promo_code.upper()}"
+        
+        return {"checkoutUrl": checkout_url}
         
     except stripe.error.StripeError as e:
         logger.error(f"Stripe error creating checkout session: {e}")
