@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { config, getAuthHeaders, checkAuthResponse } from '../config';
 import { pricingConfig } from '../config/pricing';
 import { useCreditsContext } from '../contexts/CreditsContext';
@@ -62,6 +62,7 @@ const FAQS: FAQ[] = [
 
 export const PricingPage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const notification = useNotification();
   const { credits } = useCreditsContext();
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -69,6 +70,7 @@ export const PricingPage: React.FC = () => {
   const [upgrading, setUpgrading] = useState<number | null>(null);
   const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'annual'>('monthly');
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
+  const [promoCode] = useState<string | null>(() => searchParams.get('prefilled_promo_code'));
 
   useEffect(() => {
     fetchPlans();
@@ -108,16 +110,23 @@ export const PricingPage: React.FC = () => {
     setUpgrading(planId);
 
     try {
+      const requestBody: { plan_id: number; billing_period: string; promo_code?: string } = { 
+        plan_id: planId,
+        billing_period: billingPeriod === 'annual' ? 'yearly' : 'monthly'
+      };
+      
+      // Include promo code if available from URL
+      if (promoCode) {
+        requestBody.promo_code = promoCode;
+      }
+
       const response = await fetch(`${config.backendUrl}/api/payment/create-checkout-session`, {
         method: 'POST',
         headers: {
           ...getAuthHeaders(),
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
-          plan_id: planId,
-          billing_period: billingPeriod === 'annual' ? 'yearly' : 'monthly'
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       await checkAuthResponse(response);
@@ -127,7 +136,8 @@ export const PricingPage: React.FC = () => {
         // Redirect to Stripe Checkout
         window.location.href = data.checkoutUrl;
       } else {
-        notification.error('Failed to create checkout session. Please try again.');
+        const errorData = await response.json();
+        notification.error(errorData.detail || 'Failed to create checkout session. Please try again.');
       }
     } catch (error) {
       console.error('Upgrade error:', error);
