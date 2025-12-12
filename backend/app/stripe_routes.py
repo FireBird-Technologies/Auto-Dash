@@ -132,25 +132,17 @@ def create_checkout_session(
             }
         }
         
-        # Add discounts if promo code is valid
+        # Add discounts if promo code is valid, always allow manual entry
         if discounts:
             session_params["discounts"] = discounts
-        else:
-            # Allow users to enter promo codes in checkout
-            session_params["allow_promotion_codes"] = True
+        
+        # Always allow users to enter/see promo codes in checkout
+        session_params["allow_promotion_codes"] = True
         
         session = stripe.checkout.Session.create(**session_params)
         
         logger.info(f"Created checkout session {session.id} for user {current_user.id}, plan {plan.name}")
-        
-        # Build checkout URL with prefilled promo code if provided but not applied via discounts
-        checkout_url = session.url
-        if request.promo_code and not discounts:
-            # Prefill the promo code field in Stripe checkout
-            separator = "&" if "?" in checkout_url else "?"
-            checkout_url = f"{checkout_url}{separator}prefilled_promo_code={request.promo_code.upper()}"
-        
-        return {"checkoutUrl": checkout_url}
+        return {"checkoutUrl": session.url}
         
     except stripe.error.StripeError as e:
         logger.error(f"Stripe error creating checkout session: {e}")
