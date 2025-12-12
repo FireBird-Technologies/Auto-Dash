@@ -140,7 +140,7 @@ export const PricingPage: React.FC = () => {
 
       if (response.ok) {
         const data = await response.json();
-        // Redirect to Stripe Checkout
+        // Redirect to Stripe Checkout (promo code is auto-applied by backend)
         window.location.href = data.checkoutUrl;
       } else {
         const errorData = await response.json();
