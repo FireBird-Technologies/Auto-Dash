@@ -99,9 +99,16 @@ export const PricingPage: React.FC = () => {
     if (!token) {
       notification.showConfirm({
         title: 'Sign In Required',
-        message: 'Please sign in to upgrade your plan. Would you like to go to the sign in page?',
+        message: 'Please sign in to upgrade your plan. Would you like to sign in now?',
         onConfirm: () => {
-          navigate('/');
+          // Store current URL (with promo code if present) for redirect after login
+          const currentUrl = promoCode 
+            ? `/pricing?prefilled_promo_code=${promoCode}` 
+            : '/pricing';
+          sessionStorage.setItem('auth_callback', 'true');
+          sessionStorage.setItem('auth_redirect_to', currentUrl);
+          // Redirect to Google OAuth
+          window.location.href = `${config.backendUrl}/api/auth/google/login`;
         }
       });
       return;
