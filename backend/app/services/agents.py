@@ -135,6 +135,34 @@ CLARITY_RESPONSE = (
 )
 
 
+class query_router(dspy.Signature):
+    """Route user queries to the appropriate handler based on intent.
+    
+    ROUTING RULES:
+    
+    - **add_chart_query**: User wants to CREATE a NEW visualization/chart/graph.
+      Keywords: "plot", "chart", "graph", "visualize", "show me a", "create a chart", "display", "draw", "make a chart", "plot the", "show the", "visualize the"
+      Examples: "Plot the weekly moving average", "Show me a bar chart of sales", "Create a graph showing trends"
+    
+    - **plotly_edit_query**: User wants to MODIFY or EDIT an existing chart (only if plotly_code exists).
+      Keywords: "edit", "change", "modify", "update", "adjust", "make it", "change the", "update the chart"
+      Examples: "Make it blue", "Change the title", "Update the chart to show percentages"
+    
+    - **data_query**: User wants data ANALYSIS, calculations, or insights WITHOUT visualization.
+      Keywords: "analyze", "calculate", "sum", "average", "find", "what is", "how many", "compare", "filter", "group by"
+      NO visualization keywords (plot/chart/graph/visualize)
+      Examples: "What is the total sales?", "Calculate the average price", "How many orders are there?"
+    
+    - **general_query**: General questions about the dataset, tool usage, or definitions.
+      Examples: "What columns are in this dataset?", "How do I use this tool?", "What is a moving average?"
+    
+    - **need_more_clarity**: Query is ambiguous, unclear, or doesn't fit any category above.
+    """
+    user_query = dspy.InputField(desc="The user's query")
+    data_context = dspy.InputField(desc="Context about available data and columns")
+    query_type = dspy.OutputField(desc="One of: 'add_chart_query', 'plotly_edit_query', 'data_query', 'general_query', 'need_more_clarity'")
+    reasoning = dspy.OutputField(desc="Brief explanation of why this route was chosen")
+
 
 class chat_function(dspy.Module):
     def __init__(self):
@@ -145,28 +173,34 @@ class chat_function(dspy.Module):
         self.CLARITY_RESPONSE = CLARITY_RESPONSE
 
   
-        self.router = dspy.Predict("user_query->query_type:Literal['data_query','general_query','need_more_clarity','plotly_edit_query','add_chart_query'],reasoning")
+        self.router = dspy.Predict(query_router)
+        # Recheck router (same format, for retry when unclear)
+        self.recheck_router = dspy.Predict(query_router)
 
+    async def aforward(self, user_query, fig_data, data_context, plotly_code):
+        with dspy.context(lm=dspy.LM('openai/gpt-4o-mini', api_key=os.getenv('OPENAI_API_KEY'), max_tokens=1000, temperature=1)):
+            route = self.router(user_query=user_query, data_context=data_context)
+            query_type = route.query_type
+            
+            # If unclear, try recheck router
+            if 'need_more_clarity' in query_type:
+                recheck = self.recheck_router(user_query=user_query, data_context=data_context)
+                if 'need_more_clarity' not in recheck.query_type:
+                    query_type = recheck.query_type
         
-        
-    async def aforward(self, user_query, fig_data, data_context,plotly_code):
-        with dspy.context(lm= dspy.LM('openai/gpt-4o-mini', api_key=os.getenv('OPENAI_API_KEY'), max_tokens=600)):
-            route = self.router(user_query=user_query)
-        
-        if 'data_query' in route.query_type:
+        if 'data_query' in query_type:
             response = self.data_query_mod(user_query=user_query, dataset_context=data_context)
-        elif 'plotly_edit_query' in route.query_type:
-            response =  self.plotly_editor_mod(user_query=user_query,dataset_context=data_context, plotly_code=plotly_code)
-        elif 'add_chart_query' in route.query_type:
-            response =  self.plotly_add_mod(user_query=user_query,dataset_context=data_context)
-        elif 'need_more_clarity' in route.query_type:
+        elif 'plotly_edit_query' in query_type:
+            response = self.plotly_editor_mod(user_query=user_query, dataset_context=data_context, plotly_code=plotly_code)
+        elif 'add_chart_query' in query_type:
+            response = self.plotly_add_mod(user_query=user_query, dataset_context=data_context)
+        elif 'need_more_clarity' in query_type:
             response = self.CLARITY_RESPONSE
-
         else:
             response = self.general_qa(user_query=user_query)
-            
-            
-        return_dict = {'route':route,'response':response}
+        
+        route.query_type = query_type
+        return_dict = {'route': route, 'response': response}
             
             
         
