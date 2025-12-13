@@ -79,7 +79,7 @@ export const DemoVisualization: React.FC = () => {
               color: '#1a1a1a',
               family: 'inherit'
             }
-          }
+          } as any
         ]}
         layout={{
           title: {
@@ -109,7 +109,7 @@ export const DemoVisualization: React.FC = () => {
           hovermode: 'closest',
           showlegend: false,
           height: 500
-        }}
+        } as any}
         config={{
           displayModeBar: true,
           displaylogo: false,
@@ -127,7 +127,7 @@ export const DemoVisualization: React.FC = () => {
         data={[
           {
             type: 'scatter',
-            mode: 'markers+text',
+            mode: 'markers+text' as any,
             x: scatterData.map(d => d.energy),
             y: scatterData.map(d => d.gdp),
             text: scatterData.map(d => d.country),
@@ -149,7 +149,7 @@ export const DemoVisualization: React.FC = () => {
               'GDP per Capita: $%{y:,.0f}<br>' +
               'Energy Use: %{x:,.0f} kg<br>' +
               '<extra></extra>'
-          }
+          } as any
         ]}
         layout={{
           title: {
@@ -181,7 +181,7 @@ export const DemoVisualization: React.FC = () => {
           hovermode: 'closest',
           showlegend: false,
           height: 500
-        }}
+        } as any}
         config={{
           displayModeBar: true,
           displaylogo: false,
@@ -218,7 +218,7 @@ export const DemoVisualization: React.FC = () => {
             hovertemplate: '<b>%{x} 2024</b><br>' +
               'Price: $%{y:.2f}<br>' +
               '<extra></extra>'
-          }
+          } as any
         ]}
         layout={{
           title: {
@@ -248,7 +248,7 @@ export const DemoVisualization: React.FC = () => {
           hovermode: 'closest',
           showlegend: false,
           height: 500
-        }}
+        } as any}
         config={{
           displayModeBar: true,
           displaylogo: false,
