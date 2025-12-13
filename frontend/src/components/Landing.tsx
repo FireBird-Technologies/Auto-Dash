@@ -465,7 +465,7 @@ export const Landing: React.FC<LandingProps> = ({ onStart }) => {
               Hover, filter, and sort to explore the data - all powered by Plotly and natural language.
             </p>
           </div>
-          <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '20px' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '32px', boxShadow: '0 4px 24px rgba(0, 0, 0, 0.08)' }}>
             <DemoVisualization />
           </div>
           <div className="demo-cta">
