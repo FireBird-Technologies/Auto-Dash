@@ -20,6 +20,8 @@ interface ChatMessage {
   type: 'user' | 'assistant' | 'error';
   message: string;
   timestamp: Date;
+  queryType?: string;  // Show action buttons when 'need_clarity'
+  originalQuery?: string;
 }
 
 export const Chat: React.FC<ChatProps> = ({ 
@@ -85,6 +87,8 @@ export const Chat: React.FC<ChatProps> = ({
         type: 'assistant',
         message: response.reply,
         timestamp: new Date(),
+        queryType: response.query_type,
+        originalQuery: userMessage,
       }]);
 
     } catch (error) {
@@ -131,6 +135,54 @@ export const Chat: React.FC<ChatProps> = ({
     }
   };
 
+  // Handle action button click - resend with forced action prefix
+  const handleActionClick = async (action: 'edit' | 'add' | 'analyze', originalQuery: string) => {
+    const prefixMap = {
+      edit: 'Edit chart: ',
+      add: 'Plot: ',
+      analyze: 'Calculate: ',
+    };
+    
+    const newMessage = prefixMap[action] + originalQuery;
+    setInput(newMessage);
+    
+    // Auto-send with slight delay for UX
+    setTimeout(() => {
+      setInput('');
+      // Simulate sending the message
+      setMessages(prev => [...prev, {
+        type: 'user',
+        message: newMessage,
+        timestamp: new Date(),
+      }]);
+      
+      const request: ChatRequest = {
+        message: newMessage,
+        dataset_id: datasetId,
+        fig_data: figData,
+        plotly_code: plotlyCode,
+      };
+      
+      setIsLoading(true);
+      sendChatMessage(request)
+        .then(response => {
+          setMessages(prev => [...prev, {
+            type: 'assistant',
+            message: response.reply,
+            timestamp: new Date(),
+          }]);
+        })
+        .catch(error => {
+          setMessages(prev => [...prev, {
+            type: 'error',
+            message: `Error: ${error.message}`,
+            timestamp: new Date(),
+          }]);
+        })
+        .finally(() => setIsLoading(false));
+    }, 100);
+  };
+
   return (
     <div className="chat-container">
       {/* Chat Messages */}
@@ -150,6 +202,60 @@ export const Chat: React.FC<ChatProps> = ({
               </div>
               <div className={`chat-bubble ${msg.type}-bubble`}>
                 {msg.message}
+                {msg.queryType === 'need_clarity' && msg.originalQuery && (
+                  <div style={{
+                    display: 'flex',
+                    gap: '8px',
+                    marginTop: '12px',
+                    flexWrap: 'wrap',
+                  }}>
+                    <button
+                      onClick={() => handleActionClick('add', msg.originalQuery!)}
+                      style={{
+                        padding: '6px 12px',
+                        fontSize: '12px',
+                        background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontWeight: 500,
+                      }}
+                    >
+                      ➕ Add Chart
+                    </button>
+                    <button
+                      onClick={() => handleActionClick('edit', msg.originalQuery!)}
+                      style={{
+                        padding: '6px 12px',
+                        fontSize: '12px',
+                        background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontWeight: 500,
+                      }}
+                    >
+                      ✏️ Edit Chart
+                    </button>
+                    <button
+                      onClick={() => handleActionClick('analyze', msg.originalQuery!)}
+                      style={{
+                        padding: '6px 12px',
+                        fontSize: '12px',
+                        background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontWeight: 500,
+                      }}
+                    >
+                      📊 Analyze Data
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           ))

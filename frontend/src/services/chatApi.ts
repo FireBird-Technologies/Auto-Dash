@@ -24,6 +24,7 @@ export interface ChatResponse {
   };
   code_type?: 'plotly_edit' | 'analysis' | 'add_chart_query';
   executable_code?: string;
+  query_type?: string;  // The query type - show action buttons when 'need_clarity'
 }
 
 /**

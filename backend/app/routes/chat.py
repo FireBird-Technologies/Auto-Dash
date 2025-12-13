@@ -243,7 +243,8 @@ async def chat(
             user=str(current_user.id),
             matched_chart=matched_chart_info,
             code_type=code_type,
-            executable_code=executable_code
+            executable_code=executable_code,
+            query_type=db_query_type
         )
         
     except Exception as e:

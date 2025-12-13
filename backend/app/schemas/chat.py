@@ -15,6 +15,7 @@ class ChatResponse(BaseModel):
     matched_chart: Optional[Dict[str, Any]] = None
     code_type: Optional[Literal['plotly_edit', 'analysis', 'add_chart_query']] = None
     executable_code: Optional[str] = None
+    query_type: Optional[str] = None  # The detected query type (for showing action buttons on need_clarity)
 
 
 class FixVisualizationRequest(BaseModel):
