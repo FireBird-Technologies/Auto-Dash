@@ -3573,6 +3573,58 @@ body::before {
   margin: 0 auto;
 }
 
+/* Promo Banner */
+.promo-banner {
+  background: linear-gradient(135deg, var(--aa-primary) 0%, var(--aa-primary-600) 100%);
+  padding: 20px;
+  border-radius: 16px;
+  margin-bottom: 40px;
+  box-shadow: 0 4px 20px rgba(255, 107, 107, 0.3);
+  animation: pulse-border 2s ease-in-out infinite;
+}
+
+@keyframes pulse-border {
+  0%, 100% {
+    box-shadow: 0 4px 20px rgba(255, 107, 107, 0.3);
+  }
+  50% {
+    box-shadow: 0 4px 30px rgba(255, 107, 107, 0.5);
+  }
+}
+
+.promo-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.promo-icon {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.promo-text {
+  color: white;
+  font-size: 18px;
+  line-height: 1.4;
+}
+
+.promo-text strong {
+  font-weight: 700;
+}
+
+.promo-badge {
+  background: white;
+  color: var(--aa-primary);
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
 .pricing-header {
   text-align: center;
   margin-bottom: 60px;
@@ -3766,6 +3818,32 @@ body::before {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
+/* Discount Ribbon */
+.discount-ribbon {
+  position: absolute;
+  top: -12px;
+  left: 24px;
+  background: linear-gradient(135deg, var(--aa-primary) 0%, var(--aa-primary-700) 100%);
+  color: white;
+  padding: 6px 16px;
+  border-radius: 16px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 8px rgba(255, 107, 107, 0.4);
+  animation: bounce-subtle 2s ease-in-out infinite;
+}
+
+@keyframes bounce-subtle {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
 .plan-header {
   margin-bottom: 32px;
   padding-bottom: 28px;
@@ -3784,6 +3862,16 @@ body::before {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+/* Original Price (Strikethrough) */
+.original-price {
+  font-size: 24px;
+  color: #9ca3af;
+  text-decoration: line-through;
+  font-weight: 600;
+  margin-bottom: 4px;
+  opacity: 0.7;
 }
 
 .price-amount {
@@ -4050,6 +4138,34 @@ body::before {
 @media (max-width: 768px) {
   .pricing-page {
     padding: 40px 16px;
+  }
+
+  .promo-banner {
+    padding: 16px;
+    margin-bottom: 32px;
+  }
+
+  .promo-content {
+    gap: 12px;
+  }
+
+  .promo-text {
+    font-size: 16px;
+    text-align: center;
+  }
+
+  .promo-icon {
+    font-size: 24px;
+  }
+
+  .discount-ribbon,
+  .popular-badge {
+    font-size: 10px;
+    padding: 5px 12px;
+  }
+
+  .original-price {
+    font-size: 20px;
   }
 
   .pricing-header h1 {

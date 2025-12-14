@@ -461,8 +461,8 @@ export const Landing: React.FC<LandingProps> = ({ onStart }) => {
             <span className="demo-badge">Live Demo</span>
             <h2 className="section-heading">See AutoDash in Action</h2>
             <p className="section-subheading">
-              Try interacting with this fully functional visualization below. 
-              Hover, filter, and sort to explore the data - all powered by Plotly and natural language.
+              Try interacting with fully functional visualizations and data analysis below. 
+              Explore charts, run notebook-style analysis, and see AI-powered insights - all created with natural language.
             </p>
           </div>
           <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '32px', boxShadow: '0 4px 24px rgba(0, 0, 0, 0.08)' }}>
@@ -470,7 +470,7 @@ export const Landing: React.FC<LandingProps> = ({ onStart }) => {
           </div>
           <div className="demo-cta">
             <p className="demo-cta-text">
-              This is just one example. AutoDash can create <strong>any visualization you can imagine</strong> - just describe it.
+              These are just examples. AutoDash can create <strong>any visualization or analysis you can imagine</strong> - just describe it in plain English.
             </p>
             <GoogleAuthButton
               onSuccess={(token) => {
