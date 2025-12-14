@@ -71,6 +71,10 @@ export const PricingPage: React.FC = () => {
   const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'annual'>('monthly');
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
   const [promoCode] = useState<string | null>(() => searchParams.get('prefilled_promo_code'));
+  
+  // 50% off promotion
+  const PROMO_DISCOUNT = 0.5; // 50% off
+  const PROMO_ACTIVE = true;
 
   useEffect(() => {
     fetchPlans();
@@ -171,6 +175,14 @@ export const PricingPage: React.FC = () => {
     return plan.price_monthly;
   };
 
+  const calculateDiscountedPrice = (plan: Plan) => {
+    const originalPrice = calculatePrice(plan);
+    if (PROMO_ACTIVE && plan.price_monthly > 0) {
+      return Math.round(originalPrice * (1 - PROMO_DISCOUNT));
+    }
+    return originalPrice;
+  };
+
   const handleContactSales = () => {
     window.location.href = `mailto:${pricingConfig.enterpriseEmail}?subject=Enterprise Plan Inquiry`;
   };
@@ -186,6 +198,18 @@ export const PricingPage: React.FC = () => {
   return (
     <div className="pricing-page">
       <div className="pricing-container">
+        {PROMO_ACTIVE && (
+          <div className="promo-banner">
+            <div className="promo-content">
+              <span className="promo-icon">🎉</span>
+              <div className="promo-text">
+                <strong>Limited Time Offer!</strong> Get 50% off all paid plans
+              </div>
+              <span className="promo-badge">50% OFF</span>
+            </div>
+          </div>
+        )}
+        
         <div className="pricing-header">
           <button className="back-button" onClick={() => navigate(-1)}>
             Back
@@ -215,7 +239,9 @@ export const PricingPage: React.FC = () => {
             const isCurrent = isCurrentPlan(plan.name);
             const isFree = plan.price_monthly === 0;
             const isPaid = !isFree;
-            const displayPrice = calculatePrice(plan);
+            const originalPrice = calculatePrice(plan);
+            const discountedPrice = calculateDiscountedPrice(plan);
+            const showDiscount = PROMO_ACTIVE && isPaid;
 
             return (
               <div 
@@ -223,6 +249,7 @@ export const PricingPage: React.FC = () => {
                 className={`pricing-card ${isCurrent ? 'current-plan' : ''} ${plan.name === 'Pro' ? 'popular' : ''}`}
               >
                 {plan.name === 'Pro' && <div className="popular-badge">Most Popular</div>}
+                {showDiscount && <div className="discount-ribbon">50% OFF</div>}
                 
                 <div className="plan-header">
                   <h3>{plan.name}</h3>
@@ -234,15 +261,21 @@ export const PricingPage: React.FC = () => {
                       </>
                     ) : billingPeriod === 'annual' ? (
                       <>
-                        <span className="price-amount">${displayPrice}</span>
+                        {showDiscount && (
+                          <div className="original-price">${originalPrice}</div>
+                        )}
+                        <span className="price-amount">${discountedPrice}</span>
                         <span className="price-period">/year</span>
                         <div className="price-breakdown">
-                          ${Math.round(displayPrice / 12)}/month
+                          ${Math.round(discountedPrice / 12)}/month
                         </div>
                       </>
                     ) : (
                       <>
-                        <span className="price-amount">${displayPrice}</span>
+                        {showDiscount && (
+                          <div className="original-price">${originalPrice}</div>
+                        )}
+                        <span className="price-amount">${discountedPrice}</span>
                         <span className="price-period">/month</span>
                       </>
                     )}

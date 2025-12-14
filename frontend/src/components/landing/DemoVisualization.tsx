@@ -50,7 +50,7 @@ const timeSeriesData = [
   { month: 'Dec', price: 565.2, volume: 89.3, volatility: 16.2 },
 ];
 
-type ChartType = 'bar' | 'scatter' | 'timeseries';
+type ChartType = 'bar' | 'scatter' | 'timeseries' | 'analysis';
 
 export const DemoVisualization: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ChartType>('bar');
@@ -193,6 +193,324 @@ export const DemoVisualization: React.FC = () => {
     );
   };
 
+  const renderAnalysisNotebook = () => {
+    return (
+      <div style={{
+        width: '100%',
+        background: 'white',
+        borderRadius: '12px',
+        overflow: 'hidden',
+        fontFamily: 'inherit'
+      }}>
+        {/* Notebook Header */}
+        <div style={{
+          background: '#f8f9fa',
+          padding: '16px 24px',
+          borderBottom: '1px solid #e5e7eb',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px'
+        }}>
+          <div style={{
+            width: '12px',
+            height: '12px',
+            borderRadius: '50%',
+            background: '#ff6b6b'
+          }} />
+          <div style={{
+            fontSize: '14px',
+            fontWeight: '600',
+            color: '#1a1a1a'
+          }}>
+            Sales Analysis Notebook
+          </div>
+          <div style={{
+            marginLeft: 'auto',
+            fontSize: '12px',
+            color: '#6b7280',
+            fontFamily: 'monospace'
+          }}>
+            Last run: Just now
+          </div>
+        </div>
+
+        {/* Notebook Cells */}
+        <div style={{ padding: '0' }}>
+          {/* Cell 1: Import and Load Data */}
+          <div style={{
+            borderBottom: '1px solid #e5e7eb',
+            padding: '20px 24px'
+          }}>
+            <div style={{
+              fontSize: '11px',
+              color: '#6b7280',
+              marginBottom: '8px',
+              fontFamily: 'monospace'
+            }}>
+              [1]:
+            </div>
+            <div style={{
+              background: '#f8f9fa',
+              padding: '16px',
+              borderRadius: '8px',
+              border: '1px solid #e5e7eb',
+              marginBottom: '12px'
+            }}>
+              <pre style={{
+                margin: 0,
+                fontSize: '13px',
+                fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+                color: '#1a1a1a',
+                lineHeight: '1.6',
+                whiteSpace: 'pre-wrap'
+              }}>
+{`# Load and preview the sales dataset
+df = load_data('sales_2024.csv')
+df.head()`}
+              </pre>
+            </div>
+            <div style={{
+              background: '#fafbfc',
+              padding: '16px',
+              borderRadius: '8px',
+              border: '1px solid #e5e7eb',
+              fontSize: '13px',
+              fontFamily: 'monospace'
+            }}>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{
+                  width: '100%',
+                  borderCollapse: 'collapse',
+                  fontSize: '12px'
+                }}>
+                  <thead>
+                    <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
+                      <th style={{ padding: '8px', textAlign: 'left', color: '#6b7280' }}></th>
+                      <th style={{ padding: '8px', textAlign: 'left', fontWeight: '600' }}>Date</th>
+                      <th style={{ padding: '8px', textAlign: 'left', fontWeight: '600' }}>Product</th>
+                      <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600' }}>Revenue</th>
+                      <th style={{ padding: '8px', textAlign: 'right', fontWeight: '600' }}>Units</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr style={{ borderBottom: '1px solid #f0f0f0' }}>
+                      <td style={{ padding: '8px', color: '#6b7280' }}>0</td>
+                      <td style={{ padding: '8px' }}>2024-01-15</td>
+                      <td style={{ padding: '8px' }}>Pro Plan</td>
+                      <td style={{ padding: '8px', textAlign: 'right' }}>$2,850</td>
+                      <td style={{ padding: '8px', textAlign: 'right' }}>45</td>
+                    </tr>
+                    <tr style={{ borderBottom: '1px solid #f0f0f0' }}>
+                      <td style={{ padding: '8px', color: '#6b7280' }}>1</td>
+                      <td style={{ padding: '8px' }}>2024-01-16</td>
+                      <td style={{ padding: '8px' }}>Enterprise</td>
+                      <td style={{ padding: '8px', textAlign: 'right' }}>$5,200</td>
+                      <td style={{ padding: '8px', textAlign: 'right' }}>12</td>
+                    </tr>
+                    <tr style={{ borderBottom: '1px solid #f0f0f0' }}>
+                      <td style={{ padding: '8px', color: '#6b7280' }}>2</td>
+                      <td style={{ padding: '8px' }}>2024-01-17</td>
+                      <td style={{ padding: '8px' }}>Starter</td>
+                      <td style={{ padding: '8px', textAlign: 'right' }}>$890</td>
+                      <td style={{ padding: '8px', textAlign: 'right' }}>78</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div style={{ marginTop: '12px', color: '#6b7280', fontSize: '11px' }}>
+                Shape: (1,247 rows × 5 columns)
+              </div>
+            </div>
+          </div>
+
+          {/* Cell 2: Calculate Summary Statistics */}
+          <div style={{
+            borderBottom: '1px solid #e5e7eb',
+            padding: '20px 24px'
+          }}>
+            <div style={{
+              fontSize: '11px',
+              color: '#6b7280',
+              marginBottom: '8px',
+              fontFamily: 'monospace'
+            }}>
+              [2]:
+            </div>
+            <div style={{
+              background: '#f8f9fa',
+              padding: '16px',
+              borderRadius: '8px',
+              border: '1px solid #e5e7eb',
+              marginBottom: '12px'
+            }}>
+              <pre style={{
+                margin: 0,
+                fontSize: '13px',
+                fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+                color: '#1a1a1a',
+                lineHeight: '1.6',
+                whiteSpace: 'pre-wrap'
+              }}>
+{`# Calculate key metrics
+summary = {
+    'Total Revenue': df['Revenue'].sum(),
+    'Avg Revenue per Sale': df['Revenue'].mean(),
+    'Total Units Sold': df['Units'].sum(),
+    'Top Product': df.groupby('Product')['Revenue'].sum().idxmax()
+}
+summary`}
+              </pre>
+            </div>
+            <div style={{
+              background: '#fafbfc',
+              padding: '16px',
+              borderRadius: '8px',
+              border: '1px solid #e5e7eb',
+              fontFamily: 'monospace',
+              fontSize: '13px'
+            }}>
+              <div style={{ color: '#1a1a1a', lineHeight: '1.8' }}>
+                <div><span style={{ color: '#6b7280' }}>{'{'}</span></div>
+                <div style={{ paddingLeft: '20px' }}>
+                  <span style={{ color: '#ff6b6b' }}>'Total Revenue'</span>: <span style={{ color: '#10b981' }}>$3,247,850</span>,
+                </div>
+                <div style={{ paddingLeft: '20px' }}>
+                  <span style={{ color: '#ff6b6b' }}>'Avg Revenue per Sale'</span>: <span style={{ color: '#10b981' }}>$2,604.33</span>,
+                </div>
+                <div style={{ paddingLeft: '20px' }}>
+                  <span style={{ color: '#ff6b6b' }}>'Total Units Sold'</span>: <span style={{ color: '#10b981' }}>8,452</span>,
+                </div>
+                <div style={{ paddingLeft: '20px' }}>
+                  <span style={{ color: '#ff6b6b' }}>'Top Product'</span>: <span style={{ color: '#3b82f6' }}>'Enterprise'</span>
+                </div>
+                <div><span style={{ color: '#6b7280' }}>{'}'}</span></div>
+              </div>
+            </div>
+          </div>
+
+          {/* Cell 3: Perform Analysis */}
+          <div style={{
+            borderBottom: '1px solid #e5e7eb',
+            padding: '20px 24px'
+          }}>
+            <div style={{
+              fontSize: '11px',
+              color: '#6b7280',
+              marginBottom: '8px',
+              fontFamily: 'monospace'
+            }}>
+              [3]:
+            </div>
+            <div style={{
+              background: '#f8f9fa',
+              padding: '16px',
+              borderRadius: '8px',
+              border: '1px solid #e5e7eb',
+              marginBottom: '12px'
+            }}>
+              <pre style={{
+                margin: 0,
+                fontSize: '13px',
+                fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+                color: '#1a1a1a',
+                lineHeight: '1.6',
+                whiteSpace: 'pre-wrap'
+              }}>
+{`# Analyze growth trends
+monthly_growth = df.groupby(df['Date'].dt.to_period('M'))['Revenue'].sum()
+growth_rate = ((monthly_growth.iloc[-1] - monthly_growth.iloc[0]) / monthly_growth.iloc[0]) * 100
+
+print(f"Overall Revenue Growth: {growth_rate:.1f}%")
+print(f"Best Month: {monthly_growth.idxmax()} (${'$'}{monthly_growth.max():,.0f})")`}
+              </pre>
+            </div>
+            <div style={{
+              background: '#fafbfc',
+              padding: '16px',
+              borderRadius: '8px',
+              border: '1px solid #e5e7eb',
+              fontFamily: 'monospace',
+              fontSize: '13px',
+              color: '#1a1a1a',
+              lineHeight: '1.8'
+            }}>
+              <div>Overall Revenue Growth: <span style={{ color: '#10b981', fontWeight: '600' }}>37.2%</span></div>
+              <div>Best Month: <span style={{ fontWeight: '600' }}>Dec 2024</span> (<span style={{ color: '#10b981' }}>$312,450</span>)</div>
+            </div>
+          </div>
+
+          {/* Cell 4: AI Insight */}
+          <div style={{
+            padding: '20px 24px'
+          }}>
+            <div style={{
+              fontSize: '11px',
+              color: '#6b7280',
+              marginBottom: '8px',
+              fontFamily: 'monospace'
+            }}>
+              [4]:
+            </div>
+            <div style={{
+              background: '#f8f9fa',
+              padding: '16px',
+              borderRadius: '8px',
+              border: '1px solid #e5e7eb',
+              marginBottom: '12px'
+            }}>
+              <pre style={{
+                margin: 0,
+                fontSize: '13px',
+                fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+                color: '#1a1a1a',
+                lineHeight: '1.6',
+                whiteSpace: 'pre-wrap'
+              }}>
+{`# Generate AI insights
+get_insights("What are the key trends in this sales data?")`}
+              </pre>
+            </div>
+            <div style={{
+              background: 'linear-gradient(135deg, #fff7f8 0%, #ffffff 100%)',
+              padding: '20px',
+              borderRadius: '8px',
+              border: '2px solid #ff6b6b20',
+              fontSize: '14px',
+              lineHeight: '1.7',
+              color: '#1a1a1a'
+            }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                marginBottom: '12px',
+                color: '#ff6b6b',
+                fontWeight: '600',
+                fontSize: '13px'
+              }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                  <path d="M2 17l10 5 10-5M2 12l10 5 10-5"/>
+                </svg>
+                AI INSIGHTS
+              </div>
+              <div>
+                <strong>🎯 Key Findings:</strong>
+                <ul style={{ margin: '8px 0', paddingLeft: '20px' }}>
+                  <li>Revenue shows strong <strong>upward trend</strong> with 37.2% growth YoY</li>
+                  <li><strong>Enterprise plan</strong> drives highest revenue despite lower volume</li>
+                  <li>Q4 performance exceptional, suggesting <strong>seasonal demand</strong></li>
+                  <li>Average deal size increased from $2,204 to $3,156 (+43%)</li>
+                </ul>
+                <strong>💡 Recommendations:</strong> Focus sales efforts on Enterprise tier and prepare inventory for Q4 surge.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderTimeSeries = () => {
     return (
       <Plot
@@ -325,6 +643,23 @@ export const DemoVisualization: React.FC = () => {
         >
           Time Series
         </button>
+        <button
+          onClick={() => setActiveTab('analysis')}
+          style={{
+            padding: '8px 20px',
+            fontSize: '14px',
+            fontWeight: '500',
+            border: 'none',
+            background: activeTab === 'analysis' ? 'white' : 'transparent',
+            color: activeTab === 'analysis' ? '#ff6b6b' : '#666',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+            boxShadow: activeTab === 'analysis' ? '0 1px 3px rgba(0, 0, 0, 0.1)' : 'none',
+          }}
+        >
+          Analysis
+        </button>
       </div>
 
       {/* Chart Container */}
@@ -339,6 +674,7 @@ export const DemoVisualization: React.FC = () => {
         {activeTab === 'bar' && renderBarChart()}
         {activeTab === 'scatter' && renderScatterPlot()}
         {activeTab === 'timeseries' && renderTimeSeries()}
+        {activeTab === 'analysis' && renderAnalysisNotebook()}
       </div>
 
       {/* Info Text */}
@@ -349,7 +685,9 @@ export const DemoVisualization: React.FC = () => {
         color: '#666',
         fontSize: '14px'
       }}>
-        Hover over {activeTab === 'bar' ? 'bars' : activeTab === 'scatter' ? 'bubbles' : 'data points'} for detailed insights • Powered by Plotly
+        {activeTab === 'analysis' 
+          ? 'Interactive notebook showing data analysis with AI-powered insights'
+          : `Hover over ${activeTab === 'bar' ? 'bars' : activeTab === 'scatter' ? 'bubbles' : 'data points'} for detailed insights • Powered by Plotly`}
       </div>
     </div>
   );
