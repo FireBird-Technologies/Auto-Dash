@@ -17,7 +17,7 @@ export const NewYearBanner: React.FC = () => {
 
   useEffect(() => {
     const calculateTimeLeft = () => {
-      const newYear = new Date('2026-01-01T00:00:00');
+      const newYear = new Date('2026-02-28T23:59:59');
       const now = new Date();
       const difference = newYear.getTime() - now.getTime();
 
@@ -50,7 +50,7 @@ export const NewYearBanner: React.FC = () => {
     navigate('/pricing?prefilled_promo_code=NEWYEARS');
   };
 
-  // Don't show if dismissed or if it's already past New Year
+  // Don't show if dismissed or if it's already past Feb 28th, 2026
   if (dismissed || (timeLeft.days === 0 && timeLeft.hours === 0 && timeLeft.minutes === 0 && timeLeft.seconds === 0)) {
     return null;
   }
@@ -73,7 +73,7 @@ export const NewYearBanner: React.FC = () => {
       {/* Countdown section */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', zIndex: 1 }}>
         <span style={{ fontSize: '20px' }}>🎆</span>
-        <span style={{ fontWeight: 600, fontSize: '14px', color: '#ff6b6b' }}>New Year Sale!</span>
+        <span style={{ fontWeight: 600, fontSize: '14px', color: '#ff6b6b' }}>New Year Extended Sale!</span>
         <div style={{ display: 'flex', gap: '6px', marginLeft: '8px' }}>
           <TimeBlock value={timeLeft.days} label="d" />
           <span style={{ color: '#ff6b6b', fontWeight: 'bold' }}>:</span>
