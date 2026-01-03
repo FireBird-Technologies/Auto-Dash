@@ -5,10 +5,763 @@ import { MarkdownMessage } from '../MarkdownMessage';
 import { AddChartPopup } from '../AddChartPopup';
 import { SharePopup } from '../SharePopup';
 import { InsufficientBalancePopup } from '../InsufficientBalancePopup';
-import { ChartNotes } from '../ChartNotes';
-import { KPICardsContainer } from '../KPICard';
+import { KPICardsContainer, KPICard } from '../KPICard';
+import { DashboardSkeleton } from '../LoadingSkeleton';
 import { config, getAuthHeaders, checkAuthResponse } from '../../config';
 import { useNotification } from '../../contexts/NotificationContext';
+
+// Chart Item Component
+interface ChartItemProps {
+  chartSpec: any;
+  chartIndex: number;
+  localData: any[];
+  datasetId: string;
+  onChartFixed: (chartIndex: number, fixedCode: string, figureData?: any) => void;
+  onFixingStatusChange: (isFixing: boolean) => void;
+  onZoom: (index: number) => void;
+  onDelete: (index: number) => void;
+  chartNotes: Record<number, string>;
+  editingNotesIndex: number | null;
+  setEditingNotesIndex: (index: number | null) => void;
+  notesVisible: Record<number, boolean>;
+  setNotesVisible: React.Dispatch<React.SetStateAction<Record<number, boolean>>>;
+  generatingInsights: Record<number, boolean>;
+  savingNotes: Record<number, boolean>;
+  savedNotes: Record<number, boolean>;
+  handleGenerateInsights: (index: number) => void;
+  handleSaveNotes: (index: number, notes: string) => void;
+  setChartNotes: React.Dispatch<React.SetStateAction<Record<number, string>>>;
+  setSavedNotes: React.Dispatch<React.SetStateAction<Record<number, boolean>>>;
+  filterPanelOpen: number | null;
+  setFilterPanelOpen: (index: number | null) => void;
+  chartFilters: Record<number, Record<string, any>>;
+  setChartFilters: React.Dispatch<React.SetStateAction<Record<number, Record<string, any>>>>;
+  applyingFilter: number | null;
+  setApplyingFilter: React.Dispatch<React.SetStateAction<number | null>>;
+  applyFilterToChart: (index: number) => void;
+  getFilteredChartSpec: (spec: any, index: number) => any;
+  viewMode: 'list' | 'grid';
+}
+
+const ChartItem: React.FC<ChartItemProps> = ({
+  chartSpec,
+  chartIndex,
+  localData,
+  datasetId,
+  onChartFixed,
+  onFixingStatusChange,
+  onZoom,
+  onDelete,
+  chartNotes,
+  editingNotesIndex,
+  setEditingNotesIndex,
+  notesVisible,
+  setNotesVisible,
+  generatingInsights,
+  savingNotes,
+  savedNotes,
+  handleGenerateInsights,
+  handleSaveNotes,
+  setChartNotes,
+  setSavedNotes,
+  filterPanelOpen,
+  setFilterPanelOpen,
+  chartFilters,
+  setChartFilters,
+  applyingFilter,
+  setApplyingFilter,
+  applyFilterToChart,
+  getFilteredChartSpec,
+  viewMode
+}) => {
+  const notification = useNotification();
+  
+  return (
+    <div
+      style={{ width: '100%' }}
+      key={`chart-wrapper-${chartIndex}`}
+    >
+      <div
+        style={{
+          display: 'flex',
+          gap: '12px',
+          alignItems: 'flex-start',
+          width: '100%'
+        }}
+      >
+
+        {/* Chart */}
+        <div style={{
+          flex: 1,
+          backgroundColor: 'white',
+          borderRadius: '12px',
+          border: '1px solid #e5e7eb',
+          overflow: 'hidden',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+          minHeight: '600px',
+          height: 'auto',
+          display: 'flex',
+          flexDirection: 'column'
+        }}>
+          <PlotlyChartRenderer 
+            chartSpec={getFilteredChartSpec(chartSpec, chartIndex)} 
+            data={localData}
+            chartIndex={chartIndex}
+            datasetId={datasetId}
+            onChartFixed={onChartFixed}
+            onFixingStatusChange={onFixingStatusChange}
+            onZoom={onZoom}
+            viewMode={viewMode}
+          />
+        </div>
+        
+        {/* Action Buttons: Filter, Notes, Duplicate, Delete */}
+        <div 
+          data-notes-dropdown
+          style={{
+            position: 'relative',
+            flexShrink: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px'
+          }}
+        >
+          {/* Delete Button */}
+          <button
+            onClick={() => onDelete(chartIndex)}
+            style={{
+              background: 'rgba(255, 107, 107, 0.1)',
+              backdropFilter: 'blur(4px)',
+              border: '1px solid rgba(255, 107, 107, 0.3)',
+              borderRadius: '50%',
+              width: '40px',
+              height: '40px',
+              padding: '0',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.2s',
+              boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+              color: '#ff6b6b'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(255, 107, 107, 0.2)';
+              e.currentTarget.style.transform = 'scale(1.05)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(255, 107, 107, 0.1)';
+              e.currentTarget.style.transform = 'scale(1)';
+            }}
+            title="Delete chart"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+
+          {/* Filter Button */}
+          <button
+            onClick={() => {
+              setFilterPanelOpen(filterPanelOpen === chartIndex ? null : chartIndex);
+            }}
+            style={{
+              background: filterPanelOpen === chartIndex ? 'rgba(255, 107, 107, 0.2)' : 'rgba(255, 107, 107, 0.1)',
+              backdropFilter: 'blur(4px)',
+              border: '1px solid rgba(255, 107, 107, 0.3)',
+              borderRadius: '50%',
+              width: '40px',
+              height: '40px',
+              padding: '0',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.2s',
+              boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+              color: '#ff6b6b'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(255, 107, 107, 0.2)';
+              e.currentTarget.style.transform = 'scale(1.05)';
+            }}
+            onMouseLeave={(e) => {
+              if (filterPanelOpen !== chartIndex) {
+                e.currentTarget.style.background = 'rgba(255, 107, 107, 0.1)';
+              }
+              e.currentTarget.style.transform = 'scale(1)';
+            }}
+            title="Filter data"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+            </svg>
+          </button>
+
+          {/* Filter Panel */}
+          {filterPanelOpen === chartIndex && (() => {
+            const columnsToFilter = (chartSpec.columns_used && chartSpec.columns_used.length > 0)
+              ? chartSpec.columns_used.slice(0, 6)
+              : Object.keys(localData[0] || {}).slice(0, 4);
+            
+            const getColumnType = (column: string): 'number' | 'date' | 'string' => {
+              if (localData.length === 0) return 'string';
+              const sampleValues = localData.slice(0, 10).map(row => row[column]).filter(v => v != null);
+              if (sampleValues.length === 0) return 'string';
+              
+              if (sampleValues.every(v => typeof v === 'number' || (!isNaN(Number(v)) && v !== ''))) {
+                return 'number';
+              }
+              
+              const datePatterns = [/^\d{4}-\d{2}-\d{2}/, /^\d{2}\/\d{2}\/\d{4}/, /^\d{2}-\d{2}-\d{4}/];
+              if (sampleValues.every(v => datePatterns.some(p => p.test(String(v))) || !isNaN(Date.parse(String(v))))) {
+                return 'date';
+              }
+              
+              return 'string';
+            };
+            
+            const getNumericRange = (column: string) => {
+              const values = localData.map(row => Number(row[column])).filter(v => !isNaN(v));
+              return { min: Math.min(...values), max: Math.max(...values) };
+            };
+            
+            return (
+            <div style={{
+              position: 'absolute',
+              top: '100%',
+              right: 0,
+              marginTop: '8px',
+              width: '320px',
+              backgroundColor: 'white',
+              border: '1px solid rgba(0, 0, 0, 0.08)',
+              borderRadius: '12px',
+              boxShadow: '0 4px 16px rgba(0, 0, 0, 0.12)',
+              zIndex: 100,
+              overflow: 'hidden'
+            }}>
+              <div style={{
+                padding: '12px 16px',
+                borderBottom: '1px solid rgba(0, 0, 0, 0.06)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <span style={{ fontSize: '13px', fontWeight: 600, color: '#374151' }}>
+                  Filter Data
+                </span>
+                <button
+                  onClick={() => setFilterPanelOpen(null)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: '#9ca3af' }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                </button>
+              </div>
+              <div style={{ padding: '16px', maxHeight: '350px', overflowY: 'auto' }}>
+                {columnsToFilter.length > 0 ? columnsToFilter.map((column: string) => {
+                  const colType = getColumnType(column);
+                  const uniqueValues = [...new Set(localData.map(row => row[column]))].filter(v => v != null);
+                  
+                  return (
+                    <div key={column} style={{ marginBottom: '16px' }}>
+                      <label style={{ 
+                        display: 'flex', 
+                        alignItems: 'center',
+                        gap: '6px',
+                        fontSize: '11px', 
+                        fontWeight: 600, 
+                        color: '#ef4444',
+                        marginBottom: '8px',
+                      }}>
+                        {column}
+                        <span style={{ 
+                          fontSize: '9px', 
+                          padding: '2px 6px', 
+                          backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                          color: '#ef4444',
+                          borderRadius: '4px',
+                          textTransform: 'uppercase'
+                        }}>
+                          {colType}
+                        </span>
+                      </label>
+                      
+                      {/* Number: Range slider */}
+                      {colType === 'number' && (() => {
+                        const { min, max } = getNumericRange(column);
+                        const currentMin = chartFilters[chartIndex]?.[`${column}_min`] ?? min;
+                        const currentMax = chartFilters[chartIndex]?.[`${column}_max`] ?? max;
+                        return (
+                          <div>
+                            <div style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
+                              <input
+                                type="number"
+                                placeholder="Min"
+                                value={currentMin}
+                                onChange={(e) => setChartFilters(prev => ({
+                                  ...prev,
+                                  [chartIndex]: { ...prev[chartIndex], [`${column}_min`]: e.target.value ? Number(e.target.value) : undefined }
+                                }))}
+                                style={{ flex: 1, padding: '6px 8px', fontSize: '12px', border: '1px solid #e5e7eb', borderRadius: '6px', width: '100%' }}
+                              />
+                              <span style={{ color: '#9ca3af', alignSelf: 'center' }}>—</span>
+                              <input
+                                type="number"
+                                placeholder="Max"
+                                value={currentMax}
+                                onChange={(e) => setChartFilters(prev => ({
+                                  ...prev,
+                                  [chartIndex]: { ...prev[chartIndex], [`${column}_max`]: e.target.value ? Number(e.target.value) : undefined }
+                                }))}
+                                style={{ flex: 1, padding: '6px 8px', fontSize: '12px', border: '1px solid #e5e7eb', borderRadius: '6px', width: '100%' }}
+                              />
+                            </div>
+                            <input
+                              type="range"
+                              min={min}
+                              max={max}
+                              value={currentMax}
+                              onChange={(e) => setChartFilters(prev => ({
+                                ...prev,
+                                [chartIndex]: { ...prev[chartIndex], [`${column}_max`]: Number(e.target.value) }
+                              }))}
+                              style={{ width: '100%', accentColor: '#ff6b6b' }}
+                            />
+                          </div>
+                        );
+                      })()}
+                      
+                      {/* Date: Date range picker */}
+                      {colType === 'date' && (
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <input
+                            type="date"
+                            value={chartFilters[chartIndex]?.[`${column}_from`] || ''}
+                            onChange={(e) => setChartFilters(prev => ({
+                              ...prev,
+                              [chartIndex]: { ...prev[chartIndex], [`${column}_from`]: e.target.value || undefined }
+                            }))}
+                            style={{ flex: 1, padding: '6px 8px', fontSize: '12px', border: '1px solid #e5e7eb', borderRadius: '6px' }}
+                          />
+                          <span style={{ color: '#9ca3af', alignSelf: 'center' }}>to</span>
+                          <input
+                            type="date"
+                            value={chartFilters[chartIndex]?.[`${column}_to`] || ''}
+                            onChange={(e) => setChartFilters(prev => ({
+                              ...prev,
+                              [chartIndex]: { ...prev[chartIndex], [`${column}_to`]: e.target.value || undefined }
+                            }))}
+                            style={{ flex: 1, padding: '6px 8px', fontSize: '12px', border: '1px solid #e5e7eb', borderRadius: '6px' }}
+                          />
+                        </div>
+                      )}
+                      
+                      {/* String: Category multi-select */}
+                      {colType === 'string' && (
+                        <div style={{ 
+                          display: 'flex', 
+                          flexWrap: 'wrap', 
+                          gap: '6px',
+                          maxHeight: '100px',
+                          overflowY: 'auto',
+                          padding: '4px 0'
+                        }}>
+                          {uniqueValues.slice(0, 15).map((val, i) => {
+                            const isSelected = (chartFilters[chartIndex]?.[column] as string[] || []).includes(String(val));
+                            return (
+                              <button
+                                key={i}
+                                onClick={() => {
+                                  const current = (chartFilters[chartIndex]?.[column] as string[]) || [];
+                                  const newValues = isSelected 
+                                    ? current.filter(v => v !== String(val))
+                                    : [...current, String(val)];
+                                  setChartFilters(prev => ({
+                                    ...prev,
+                                    [chartIndex]: { ...prev[chartIndex], [column]: newValues.length > 0 ? newValues : undefined }
+                                  }));
+                                }}
+                                style={{
+                                  padding: '4px 10px',
+                                  fontSize: '11px',
+                                  border: isSelected ? '1px solid #ff6b6b' : '1px solid #e5e7eb',
+                                  borderRadius: '14px',
+                                  backgroundColor: isSelected ? 'rgba(255, 107, 107, 0.1)' : 'white',
+                                  color: isSelected ? '#ff6b6b' : '#6b7280',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.15s'
+                                }}
+                              >
+                                {String(val).length > 20 ? String(val).slice(0, 20) + '...' : String(val)}
+                              </button>
+                            );
+                          })}
+                          {uniqueValues.length > 15 && (
+                            <span style={{ fontSize: '10px', color: '#9ca3af', alignSelf: 'center' }}>
+                              +{uniqueValues.length - 15} more
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }) : (
+                  <div style={{ fontSize: '12px', color: '#9ca3af', textAlign: 'center', padding: '20px' }}>
+                    No filterable columns detected
+                  </div>
+                )}
+              </div>
+              <div style={{
+                padding: '12px 16px',
+                borderTop: '1px solid rgba(0, 0, 0, 0.06)',
+                display: 'flex',
+                gap: '8px',
+                justifyContent: 'flex-end'
+              }}>
+                <button
+                  onClick={async () => {
+                    setChartFilters(prev => ({ ...prev, [chartIndex]: {} }));
+                    const spec = chartSpec;
+                    if (spec?.chart_spec) {
+                      setApplyingFilter(chartIndex);
+                      try {
+                        const response = await fetch(`${config.backendUrl}/api/data/apply-filter`, {
+                          method: 'POST',
+                          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+                          credentials: 'include',
+                          body: JSON.stringify({
+                            chart_index: chartIndex,
+                            filters: {},
+                            dataset_id: datasetId,
+                            original_code: spec.chart_spec
+                          })
+                        });
+                        await checkAuthResponse(response);
+                        const result = await response.json();
+                        if (result.success && result.figure) {
+                          // Update the chart spec with the new figure
+                          onChartFixed(chartIndex, spec.chart_spec, result.figure);
+                          notification.success('Filters cleared');
+                        }
+                      } catch (error) {
+                        console.error('Error clearing filters:', error);
+                      } finally {
+                        setApplyingFilter(null);
+                        setFilterPanelOpen(null);
+                      }
+                    }
+                  }}
+                  disabled={applyingFilter === chartIndex}
+                  style={{ padding: '6px 12px', fontSize: '12px', border: '1px solid #e5e7eb', borderRadius: '6px', backgroundColor: 'white', color: '#6b7280', cursor: applyingFilter === chartIndex ? 'wait' : 'pointer' }}
+                >
+                  {applyingFilter === chartIndex ? 'Clearing...' : 'Clear'}
+                </button>
+                <button
+                  onClick={() => applyFilterToChart(chartIndex)}
+                  disabled={applyingFilter === chartIndex}
+                  style={{ 
+                    padding: '6px 12px', 
+                    fontSize: '12px', 
+                    border: 'none', 
+                    borderRadius: '6px', 
+                    backgroundColor: applyingFilter === chartIndex ? '#fca5a5' : '#ff6b6b', 
+                    color: 'white', 
+                    cursor: applyingFilter === chartIndex ? 'wait' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  {applyingFilter === chartIndex && (
+                    <div style={{
+                      width: '12px',
+                      height: '12px',
+                      border: '2px solid white',
+                      borderTopColor: 'transparent',
+                      borderRadius: '50%',
+                      animation: 'spin 1s linear infinite'
+                    }} />
+                  )}
+                  {applyingFilter === chartIndex ? 'Applying...' : 'Apply'}
+                </button>
+              </div>
+            </div>
+            );
+          })()}
+          
+          {/* Notes Button */}
+          <button
+            onClick={() => {
+              // Toggle notes visibility
+              if (chartNotes[chartIndex] || editingNotesIndex === chartIndex) {
+                setNotesVisible(prev => ({
+                  ...prev,
+                  [chartIndex]: !prev[chartIndex]
+                }));
+                // If hiding and was editing, stop editing
+                if (notesVisible[chartIndex] && editingNotesIndex === chartIndex) {
+                  setEditingNotesIndex(null);
+                }
+              } else {
+                // If no notes exist, start editing immediately
+                setEditingNotesIndex(chartIndex);
+                setNotesVisible(prev => ({
+                  ...prev,
+                  [chartIndex]: true
+                }));
+              }
+            }}
+            style={{
+              background: 'rgba(255, 107, 107, 0.1)',
+              backdropFilter: 'blur(4px)',
+              border: '1px solid rgba(255, 107, 107, 0.3)',
+              borderRadius: '8px',
+              padding: '8px 12px',
+              fontSize: '12px',
+              color: '#ff6b6b',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              transition: 'all 0.2s',
+              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+              whiteSpace: 'nowrap'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(255, 107, 107, 0.2)';
+              e.currentTarget.style.color = '#ef4444';
+              e.currentTarget.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.15)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(255, 107, 107, 0.1)';
+              e.currentTarget.style.color = '#ff6b6b';
+              e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.1)';
+            }}
+            title={chartNotes[chartIndex] ? (notesVisible[chartIndex] ? "Hide notes" : "Show notes") : "Add notes"}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="12" y1="18" x2="12" y2="12" />
+              <line x1="9" y1="15" x2="15" y2="15" />
+            </svg>
+            {chartNotes[chartIndex] ? (notesVisible[chartIndex] ? 'Hide notes' : 'Show notes') : 'Add notes'}
+          </button>
+
+          {/* Notes Panel */}
+          {notesVisible[chartIndex] && (editingNotesIndex === chartIndex || chartNotes[chartIndex]) && (
+            <div style={{
+              position: 'absolute',
+              top: '100%',
+              right: 0,
+              marginTop: '8px',
+              width: '350px',
+              maxHeight: '600px',
+              backgroundColor: 'white',
+              border: '1px solid rgba(0, 0, 0, 0.08)',
+              borderRadius: '12px',
+              boxShadow: '0 4px 16px rgba(0, 0, 0, 0.1)',
+              zIndex: 100,
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden'
+            }}>
+              <div style={{
+                padding: '12px 16px',
+                borderBottom: '1px solid rgba(0, 0, 0, 0.06)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                backgroundColor: 'white'
+              }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px'
+                }}>
+                  <span style={{
+                    fontSize: '13px',
+                    fontWeight: 500,
+                    color: '#374151'
+                  }}>
+                    Notes
+                  </span>
+                  {editingNotesIndex === chartIndex && (
+                    <button
+                      onClick={async () => handleGenerateInsights(chartIndex)}
+                      disabled={generatingInsights[chartIndex]}
+                      style={{
+                        padding: '4px 10px',
+                        background: 'rgba(220, 38, 38, 0.1)',
+                        border: '1px solid rgba(220, 38, 38, 0.2)',
+                        borderRadius: '6px',
+                        fontSize: '11px',
+                        color: '#dc2626',
+                        cursor: generatingInsights[chartIndex] ? 'wait' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        transition: 'all 0.2s',
+                        opacity: generatingInsights[chartIndex] ? 0.6 : 1
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!generatingInsights[chartIndex]) {
+                          e.currentTarget.style.background = 'rgba(220, 38, 38, 0.15)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'rgba(220, 38, 38, 0.1)';
+                      }}
+                    >
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                      </svg>
+                      {generatingInsights[chartIndex] ? 'Generating...' : 'Generate with AI'}
+                    </button>
+                  )}
+                </div>
+                <button
+                  onClick={() => {
+                    setEditingNotesIndex(null);
+                    setNotesVisible(prev => ({
+                      ...prev,
+                      [chartIndex]: false
+                    }));
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: '4px',
+                    color: '#9ca3af',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: '4px',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#f3f4f6';
+                    e.currentTarget.style.color = '#6b7280';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                    e.currentTarget.style.color = '#9ca3af';
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+              <div style={{
+                flex: 1,
+                overflow: 'auto',
+                padding: '16px',
+                minHeight: '200px',
+                backgroundColor: 'white',
+                position: 'relative'
+              }}>
+                {editingNotesIndex === chartIndex ? (
+                  <div style={{ position: 'relative', width: '100%', flex: 1 }}>
+                    <textarea
+                      value={chartNotes[chartIndex] || ''}
+                      onChange={(e) => {
+                        setChartNotes(prev => ({ ...prev, [chartIndex]: e.target.value }));
+                        setSavedNotes(prev => ({ ...prev, [chartIndex]: false }));
+                      }}
+                      placeholder="Add your notes here... (Markdown supported)"
+                      disabled={generatingInsights[chartIndex]}
+                      style={{
+                        width: '100%',
+                        flex: 1,
+                        minHeight: '200px',
+                        padding: '12px',
+                        border: '1px solid rgba(0, 0, 0, 0.1)',
+                        borderRadius: '6px',
+                        fontSize: '13px',
+                        fontFamily: 'inherit',
+                        lineHeight: '1.6',
+                        resize: 'vertical',
+                        outline: 'none',
+                        backgroundColor: 'white',
+                        opacity: generatingInsights[chartIndex] ? 0.7 : 1,
+                        transition: 'opacity 0.2s'
+                      }}
+                      autoFocus
+                    />
+                  </div>
+                ) : (
+                  <MarkdownMessage content={chartNotes[chartIndex] || 'No notes yet. Click "Add notes" to add some.'} />
+                )}
+              </div>
+              {editingNotesIndex === chartIndex && (
+                <div style={{
+                  padding: '12px 16px',
+                  borderTop: '1px solid rgba(0, 0, 0, 0.06)',
+                  backgroundColor: 'white',
+                  display: 'flex',
+                  justifyContent: 'flex-end'
+                }}>
+                  <button
+                    onClick={() => handleSaveNotes(chartIndex, chartNotes[chartIndex] || '')}
+                    disabled={savingNotes[chartIndex] || savedNotes[chartIndex]}
+                    style={{
+                      padding: '6px 16px',
+                      background: savedNotes[chartIndex] ? 'rgba(34, 197, 94, 0.15)' : 'rgba(34, 197, 94, 0.1)',
+                      border: savedNotes[chartIndex] ? '1px solid rgba(34, 197, 94, 0.3)' : '1px solid rgba(34, 197, 94, 0.2)',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      fontWeight: 500,
+                      color: '#22c55e',
+                      cursor: savingNotes[chartIndex] || savedNotes[chartIndex] ? 'default' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      transition: 'all 0.2s',
+                      opacity: savingNotes[chartIndex] ? 0.6 : 1
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!savingNotes[chartIndex] && !savedNotes[chartIndex]) {
+                        e.currentTarget.style.background = 'rgba(34, 197, 94, 0.15)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = savedNotes[chartIndex] ? 'rgba(34, 197, 94, 0.15)' : 'rgba(34, 197, 94, 0.1)';
+                    }}
+                  >
+                    {savedNotes[chartIndex] ? (
+                      <>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                        Saved
+                      </>
+                    ) : (
+                      <>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                          <polyline points="17 21 17 13 7 13 7 21" />
+                          <polyline points="7 3 7 8 15 8" />
+                        </svg>
+                        {savingNotes[chartIndex] ? 'Saving...' : 'Save Notes'}
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // Guide Tour Overlay Component
 interface GuideTourOverlayProps {
@@ -202,7 +955,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   const [isLoading, setIsLoading] = useState(false);
   const [isFirstChartLoading, setIsFirstChartLoading] = useState(false);
   const [guideStep, setGuideStep] = useState<number | null>(null); // 0=chat, 1=download, 2=publish
-  const [loadingMessage, setLoadingMessage] = useState('Crafting beautiful insights from your data...');
+  const [, setLoadingMessage] = useState('Crafting beautiful insights from your data...');
   const [chartSpecs, setChartSpecs] = useState<any[]>([]);  // Changed to array
   const chatButtonRef = useRef<HTMLButtonElement>(null);
   const downloadButtonRef = useRef<HTMLButtonElement>(null);
@@ -267,6 +1020,15 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   const [isAddingKPI, setIsAddingKPI] = useState(false);
   const [showAddKPIPopup, setShowAddKPIPopup] = useState(false);
   const [addKPIInput, setAddKPIInput] = useState('');
+  const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>(() => {
+    return (localStorage.getItem('chart_view_mode') as 'list' | 'grid') || 'list';
+  });
+  
+  // Undo/Redo state
+  const [chartHistory, setChartHistory] = useState<any[][]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const MAX_HISTORY = 10;
 
   // Update local data when prop changes
   useEffect(() => {
@@ -285,7 +1047,40 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     setContextPrepared(false);
     setFullDataFetched(false);
     hasGeneratedInitialChart.current = false;
+    setChartHistory([]);
+    setHistoryIndex(-1);
   }, []);
+  
+  // Save chart state to history when charts change
+  const saveToHistory = (newChartSpecs: any[]) => {
+    setChartHistory(prev => {
+      // Remove any history after current index (when making new changes after undo)
+      const newHistory = prev.slice(0, historyIndex + 1);
+      // Add new state
+      newHistory.push(JSON.parse(JSON.stringify(newChartSpecs)));
+      // Keep only last MAX_HISTORY states
+      return newHistory.slice(-MAX_HISTORY);
+    });
+    setHistoryIndex(prev => Math.min(prev + 1, MAX_HISTORY - 1));
+  };
+  
+  // Undo function
+  const handleUndo = () => {
+    if (historyIndex > 0) {
+      const newIndex = historyIndex - 1;
+      setHistoryIndex(newIndex);
+      setChartSpecs(JSON.parse(JSON.stringify(chartHistory[newIndex])));
+    }
+  };
+  
+  // Redo function
+  const handleRedo = () => {
+    if (historyIndex < chartHistory.length - 1) {
+      const newIndex = historyIndex + 1;
+      setHistoryIndex(newIndex);
+      setChartSpecs(JSON.parse(JSON.stringify(chartHistory[newIndex])));
+    }
+  };
 
   // Save chat visibility preference
   useEffect(() => {
@@ -435,6 +1230,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
           execution_error: figureData ? undefined : newSpecs[chartIndex].execution_error
         };
       }
+      saveToHistory(newSpecs);
       return newSpecs;
     });
   };
@@ -466,17 +1262,6 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
             const updatedCharts = prev
               .filter((_, idx) => idx !== chartIndexToDelete)
               .map((chart, newIdx) => ({ ...chart, chart_index: newIdx }));
-            
-            // Also re-index notes
-            const newChartNotes: Record<number, string> = {};
-            Object.entries(chartNotes).forEach(([oldIdxStr, note]) => {
-              const oldIdx = parseInt(oldIdxStr);
-              if (oldIdx !== chartIndexToDelete) {
-                const newIdx = oldIdx > chartIndexToDelete ? oldIdx - 1 : oldIdx;
-                newChartNotes[newIdx] = note;
-              }
-            });
-            setChartNotes(newChartNotes);
 
             return updatedCharts;
           });
@@ -490,6 +1275,40 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     });
   };
 
+  const handleChartZoom = (chartIndex: number) => {
+    setZoomedChartIndex(chartIndex);
+  };
+
+  // Generate insights for chart notes
+  const handleGenerateInsights = async (chartIndex: number) => {
+    if (!datasetId) return;
+    
+    setGeneratingInsights(prev => ({ ...prev, [chartIndex]: true }));
+    try {
+      const response = await fetch(
+        `${config.backendUrl}/api/data/datasets/${datasetId}/charts/${chartIndex}/insights`,
+        {
+          method: 'POST',
+          headers: getAuthHeaders({
+            'Content-Type': 'application/json',
+          }),
+          credentials: 'include',
+        }
+      );
+      await checkAuthResponse(response);
+      if (!response.ok) throw new Error('Failed to generate insights');
+      const result = await response.json();
+      const newNotes = chartNotes[chartIndex] ? `${chartNotes[chartIndex]}\n\n${result.insights}` : result.insights;
+      setChartNotes(prev => ({ ...prev, [chartIndex]: newNotes }));
+    } catch (error) {
+      console.error('Error generating insights:', error);
+      notification.error('Failed to generate insights');
+    } finally {
+      setGeneratingInsights(prev => ({ ...prev, [chartIndex]: false }));
+    }
+  };
+
+  // Save chart notes
   const handleSaveNotes = async (chartIndex: number, notes: string) => {
     if (!datasetId) return;
     
@@ -514,8 +1333,10 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
         throw new Error(errorData.detail || 'Failed to save notes');
       }
       
-      // Mark as saved on success
+      // Mark as saved on success and switch to markdown view
       setSavedNotes(prev => ({ ...prev, [chartIndex]: true }));
+      setEditingNotesIndex(null); // Switch to markdown view
+      notification.success('Notes saved successfully');
     } catch (error) {
       console.error('Error saving notes:', error);
       notification.error('Failed to save notes');
@@ -524,8 +1345,59 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     }
   };
 
-  const handleChartZoom = (chartIndex: number) => {
-    setZoomedChartIndex(chartIndex);
+  // Apply filter to chart
+  const applyFilterToChart = async (chartIndex: number) => {
+    const filters = chartFilters[chartIndex];
+    const spec = chartSpecs[chartIndex];
+    
+    if (!filters || Object.keys(filters).length === 0 || !spec?.chart_spec) {
+      notification.info('No filters to apply');
+      return;
+    }
+    
+    setApplyingFilter(chartIndex);
+    
+    try {
+      const response = await fetch(`${config.backendUrl}/api/data/apply-filter`, {
+        method: 'POST',
+        headers: getAuthHeaders({
+          'Content-Type': 'application/json'
+        }),
+        credentials: 'include',
+        body: JSON.stringify({
+          chart_index: chartIndex,
+          filters: filters,
+          dataset_id: datasetId,
+          original_code: spec.chart_spec
+        })
+      });
+      
+      await checkAuthResponse(response);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      
+      if (result.success && result.figure) {
+        // Update the chart spec with the new filtered figure
+        setChartSpecs(prev => prev.map((s, idx) => 
+          idx === chartIndex 
+            ? { ...s, figure: result.figure, filtered_code: result.filtered_code }
+            : s
+        ));
+        notification.success('Filters applied successfully');
+      } else {
+        notification.error(result.error || 'Failed to apply filters');
+      }
+    } catch (error) {
+      console.error('Error applying filter:', error);
+      notification.error('Failed to apply filters');
+    } finally {
+      setApplyingFilter(null);
+      setFilterPanelOpen(null);
+    }
   };
 
   // Execute analysis code
@@ -909,59 +1781,6 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   };
 
   // Apply filter via backend API - re-executes chart code with filter prepended
-  const applyFilterToChart = async (chartIndex: number) => {
-    const filters = chartFilters[chartIndex];
-    const spec = chartSpecs[chartIndex];
-    
-    if (!filters || Object.keys(filters).length === 0 || !spec?.chart_spec) {
-      notification.info('No filters to apply');
-      return;
-    }
-    
-    setApplyingFilter(chartIndex);
-    
-    try {
-      const response = await fetch(`${config.backendUrl}/api/data/apply-filter`, {
-        method: 'POST',
-        headers: getAuthHeaders({
-          'Content-Type': 'application/json'
-        }),
-        credentials: 'include',
-        body: JSON.stringify({
-          chart_index: chartIndex,
-          filters: filters,
-          dataset_id: datasetId,
-          original_code: spec.chart_spec
-        })
-      });
-      
-      await checkAuthResponse(response);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const result = await response.json();
-      
-      if (result.success && result.figure) {
-        // Update the chart spec with the new filtered figure
-        setChartSpecs(prev => prev.map((s, idx) => 
-          idx === chartIndex 
-            ? { ...s, figure: result.figure, filtered_code: result.filtered_code }
-            : s
-        ));
-        notification.success('Filters applied successfully');
-      } else {
-        notification.error(result.error || 'Failed to apply filters');
-      }
-    } catch (error) {
-      console.error('Error applying filter:', error);
-      notification.error('Failed to apply filters');
-    } finally {
-      setApplyingFilter(null);
-      setFilterPanelOpen(null);
-    }
-  };
 
   // KPI Edit Handler
   const handleEditKPI = async (kpiIndex: number, editRequest: string) => {
@@ -1047,7 +1866,9 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     });
     
     if (actualIndex !== -1) {
-      setChartSpecs(prev => prev.filter((_, i) => i !== actualIndex));
+      const newSpecs = chartSpecs.filter((_, i) => i !== actualIndex);
+      saveToHistory(newSpecs);
+      setChartSpecs(newSpecs);
       notification.info('KPI card removed');
     }
   };
@@ -1090,7 +1911,9 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
           figure: result.figure,
           chart_index: chartSpecs.length
         };
-        setChartSpecs(prev => [...prev, newKPI]);
+        const newSpecs = [...chartSpecs, newKPI];
+        saveToHistory(newSpecs);
+        setChartSpecs(newSpecs);
         notification.success('KPI card added successfully');
         setAddKPIInput('');
       } else {
@@ -1514,7 +2337,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    // Ctrl+Enter or just Enter (without Shift) to send
+    if ((e.key === 'Enter' && (e.ctrlKey || e.metaKey)) || (e.key === 'Enter' && !e.shiftKey)) {
       e.preventDefault();
       handleSubmit();
     }
@@ -1757,19 +2581,73 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     }
   }, [guideStep]);
 
-  // Close fullscreen on ESC key
+  // Global Keyboard Shortcuts
   useEffect(() => {
-    const handleEscKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isFullscreen) {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Esc key - Close any open popups
+      if (e.key === 'Escape') {
+        if (isFullscreen) {
         setIsFullscreen(false);
+        } else if (showSharePopup) {
+          setShowSharePopup(false);
+        } else if (showAddChartPopup) {
+          setShowAddChartPopup(false);
+        } else if (showAddKPIPopup) {
+          setShowAddKPIPopup(false);
+        } else if (zoomedChartIndex !== null) {
+          setZoomedChartIndex(null);
+        } else if (showDatasetPreview) {
+          setShowDatasetPreview(false);
+        } else if (showDownloadMenu) {
+          setShowDownloadMenu(false);
+        }
+        return;
+      }
+
+      // Ctrl/Cmd + D - Download charts
+      if ((e.ctrlKey || e.metaKey) && e.key === 'd' && chartSpecs.length > 0) {
+        e.preventDefault();
+        downloadChart('png-zip');
+        return;
+      }
+
+      // Ctrl/Cmd + S - Open share popup
+      if ((e.ctrlKey || e.metaKey) && e.key === 's' && chartSpecs.length > 0) {
+        e.preventDefault();
+        handleShareDashboard();
+        return;
+      }
+
+      // ? key - Show keyboard shortcuts help
+      if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        setShowKeyboardHelp(true);
+        return;
+      }
+
+      // Ctrl/Cmd + Z - Undo
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey && historyIndex > 0) {
+        e.preventDefault();
+        handleUndo();
+        return;
+      }
+
+      // Ctrl/Cmd + Shift + Z or Ctrl/Cmd + Y - Redo
+      if (((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'z') || 
+          ((e.ctrlKey || e.metaKey) && e.key === 'y')) {
+        if (historyIndex < chartHistory.length - 1) {
+          e.preventDefault();
+          handleRedo();
+        }
+        return;
       }
     };
 
-    document.addEventListener('keydown', handleEscKey);
+    document.addEventListener('keydown', handleGlobalKeyDown);
     return () => {
-      document.removeEventListener('keydown', handleEscKey);
+      document.removeEventListener('keydown', handleGlobalKeyDown);
     };
-  }, [isFullscreen]);
+  }, [isFullscreen, showSharePopup, showAddChartPopup, showAddKPIPopup, zoomedChartIndex, showDatasetPreview, showDownloadMenu, chartSpecs.length, historyIndex, chartHistory.length]);
 
   // Handle sidebar resizing
   const startResizing = () => {
@@ -1807,6 +2685,121 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
         show={showFixNotification} 
         onDismiss={() => setShowFixNotification(false)} 
       />
+
+      {/* Keyboard Shortcuts Help Modal */}
+      {showKeyboardHelp && (
+        <div 
+          className="fullscreen-modal" 
+          onClick={() => setShowKeyboardHelp(false)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10000
+          }}
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: 'white',
+              borderRadius: '16px',
+              padding: '32px',
+              maxWidth: '600px',
+              width: '90%',
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)'
+            }}
+          >
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '24px'
+            }}>
+              <h2 style={{
+                margin: 0,
+                fontSize: '24px',
+                fontWeight: 700,
+                color: '#1f2937'
+              }}>
+                ⌨️ Keyboard Shortcuts
+              </h2>
+              <button
+                onClick={() => setShowKeyboardHelp(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '28px',
+                  cursor: 'pointer',
+                  color: '#6b7280',
+                  padding: '0',
+                  lineHeight: 1
+                }}
+              >
+                ×
+              </button>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', backgroundColor: '#f9fafb', borderRadius: '8px' }}>
+                <span style={{ fontWeight: 500, color: '#374151' }}>Send message</span>
+                <kbd style={{ padding: '4px 8px', backgroundColor: 'white', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '13px', fontFamily: 'monospace' }}>Enter</kbd>
+              </div>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', backgroundColor: '#f9fafb', borderRadius: '8px' }}>
+                <span style={{ fontWeight: 500, color: '#374151' }}>Send message (alternative)</span>
+                <kbd style={{ padding: '4px 8px', backgroundColor: 'white', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '13px', fontFamily: 'monospace' }}>Ctrl + Enter</kbd>
+              </div>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', backgroundColor: '#f9fafb', borderRadius: '8px' }}>
+                <span style={{ fontWeight: 500, color: '#374151' }}>Download charts</span>
+                <kbd style={{ padding: '4px 8px', backgroundColor: 'white', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '13px', fontFamily: 'monospace' }}>Ctrl + D</kbd>
+              </div>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', backgroundColor: '#f9fafb', borderRadius: '8px' }}>
+                <span style={{ fontWeight: 500, color: '#374151' }}>Share dashboard</span>
+                <kbd style={{ padding: '4px 8px', backgroundColor: 'white', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '13px', fontFamily: 'monospace' }}>Ctrl + S</kbd>
+              </div>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', backgroundColor: '#f9fafb', borderRadius: '8px' }}>
+                <span style={{ fontWeight: 500, color: '#374151' }}>Close popups</span>
+                <kbd style={{ padding: '4px 8px', backgroundColor: 'white', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '13px', fontFamily: 'monospace' }}>Esc</kbd>
+              </div>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', backgroundColor: '#f9fafb', borderRadius: '8px' }}>
+                <span style={{ fontWeight: 500, color: '#374151' }}>Undo</span>
+                <kbd style={{ padding: '4px 8px', backgroundColor: 'white', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '13px', fontFamily: 'monospace' }}>Ctrl + Z</kbd>
+              </div>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', backgroundColor: '#f9fafb', borderRadius: '8px' }}>
+                <span style={{ fontWeight: 500, color: '#374151' }}>Redo</span>
+                <kbd style={{ padding: '4px 8px', backgroundColor: 'white', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '13px', fontFamily: 'monospace' }}>Ctrl + Shift + Z</kbd>
+              </div>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', backgroundColor: '#f9fafb', borderRadius: '8px' }}>
+                <span style={{ fontWeight: 500, color: '#374151' }}>Show this help</span>
+                <kbd style={{ padding: '4px 8px', backgroundColor: 'white', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '13px', fontFamily: 'monospace' }}>?</kbd>
+              </div>
+            </div>
+            
+            <div style={{
+              marginTop: '24px',
+              padding: '12px',
+              backgroundColor: '#fef3c7',
+              borderRadius: '8px',
+              fontSize: '13px',
+              color: '#92400e'
+            }}>
+              💡 <strong>Tip:</strong> Use Shift + Enter to add a new line in chat without sending
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Fullscreen Modal */}
       {isFullscreen && (
@@ -1818,107 +2811,167 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
             </button>
-                    <div className="fullscreen-chart">
-                      {chartSpecs.map((spec, index) => (
-                        <PlotlyChartRenderer 
-                          key={`chart-${index}`}
-                          chartSpec={spec} 
-                          data={localData}
-                          chartIndex={index}
-                          datasetId={datasetId}
-                          onChartFixed={handleChartFixed}
-                          onFixingStatusChange={(isFixing) => setShowFixNotification(isFixing)}
-                        />
+            <div className="fullscreen-chart">
+              {/* KPI Cards - Keep them small and in a grid */}
+              {chartSpecs.some(spec => spec.chart_type === 'kpi_card') && (
+                <>
+                  <div style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: '16px',
+                    marginBottom: '32px',
+                    justifyContent: 'center',
+                    padding: '0 20px'
+                  }}>
+                    {chartSpecs
+                      .map((spec, index) => ({ spec, index }))
+                      .filter(({ spec }) => spec.chart_type === 'kpi_card')
+                      .map(({ spec, index }) => (
+                        <div 
+                          key={`kpi-${index}`} 
+                          style={{ 
+                            width: '280px', 
+                            height: '100px',
+                            flexShrink: 0
+                          }}
+                        >
+                          <KPICard
+                            title={spec.title || `KPI ${index + 1}`}
+                            chartSpec={spec}
+                            chartIndex={index}
+                          />
+                        </div>
                       ))}
-                    </div>
+                  </div>
+                  
+                  {/* Separator if there are regular charts */}
+                  {chartSpecs.some(spec => spec.chart_type !== 'kpi_card') && (
+                    <div style={{
+                      width: '100%',
+                      height: '1px',
+                      background: 'linear-gradient(to right, transparent, rgba(229, 231, 235, 0.6), transparent)',
+                      marginBottom: '40px'
+                    }} />
+                  )}
+                </>
+              )}
+              
+              {/* Regular Charts */}
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '30px'
+              }}>
+                {chartSpecs
+                  .map((spec, index) => ({ spec, index }))
+                  .filter(({ spec }) => spec.chart_type !== 'kpi_card')
+                  .map(({ spec, index }) => (
+                    <PlotlyChartRenderer 
+                      key={`chart-${index}`}
+                      chartSpec={spec} 
+                      data={localData}
+                      chartIndex={index}
+                      datasetId={datasetId}
+                      onChartFixed={handleChartFixed}
+                      onFixingStatusChange={(isFixing) => setShowFixNotification(isFixing)}
+                    />
+                  ))}
+              </div>
+            </div>
           </div>
         </div>
       )}
 
       {/* Chart Zoom Modal */}
-      {zoomedChartIndex !== null && chartSpecs[zoomedChartIndex] && (
-        <div 
-          className="fullscreen-modal" 
-          onClick={() => setZoomedChartIndex(null)}
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-            zIndex: 10000,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '40px'
-          }}
-        >
-          <button 
-            className="fullscreen-close" 
+      {zoomedChartIndex !== null && chartSpecs[zoomedChartIndex] && (() => {
+        const isKPICard = chartSpecs[zoomedChartIndex].chart_type === 'kpi_card';
+        return (
+          <div 
+            className="fullscreen-modal" 
             onClick={() => setZoomedChartIndex(null)}
             style={{
               position: 'fixed',
-              top: '20px',
-              right: '20px',
-              background: 'rgba(255, 107, 107, 0.1)',
-              backdropFilter: 'blur(4px)',
-              border: '1px solid rgba(255, 107, 107, 0.3)',
-              borderRadius: '50%',
-              width: '48px',
-              height: '48px',
-              cursor: 'pointer',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.8)',
+              zIndex: 10000,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              zIndex: 10001,
-              color: '#ff6b6b',
-              transition: 'all 0.2s',
-              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'rgba(255, 107, 107, 0.2)';
-              e.currentTarget.style.transform = 'scale(1.1)';
-              e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.3)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'rgba(255, 107, 107, 0.1)';
-              e.currentTarget.style.transform = 'scale(1)';
-              e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.2)';
+              padding: '40px'
             }}
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-          <div 
-            className="fullscreen-content" 
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: '90%',
-              height: '90%',
-              backgroundColor: '#ffffff',
-              borderRadius: '12px',
-              padding: '20px',
-              position: 'relative',
-              maxWidth: '1400px',
-              maxHeight: '900px'
-            }}
-          >
-            <div style={{ width: '100%', height: '100%' }}>
-              <PlotlyChartRenderer 
-                chartSpec={chartSpecs[zoomedChartIndex]} 
-                data={localData}
-                chartIndex={zoomedChartIndex}
-                datasetId={datasetId}
-                onChartFixed={handleChartFixed}
-                onFixingStatusChange={(isFixing) => setShowFixNotification(isFixing)}
-              />
+            <button 
+              className="fullscreen-close" 
+              onClick={() => setZoomedChartIndex(null)}
+              style={{
+                position: 'fixed',
+                top: '20px',
+                right: '20px',
+                background: 'rgba(255, 107, 107, 0.1)',
+                backdropFilter: 'blur(4px)',
+                border: '1px solid rgba(255, 107, 107, 0.3)',
+                borderRadius: '50%',
+                width: '48px',
+                height: '48px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 10001,
+                color: '#ff6b6b',
+                transition: 'all 0.2s',
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 107, 107, 0.2)';
+                e.currentTarget.style.transform = 'scale(1.1)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.3)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 107, 107, 0.1)';
+                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.2)';
+              }}
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+            <div 
+              className="fullscreen-content" 
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: isKPICard ? 'fit-content' : '90%',
+                height: isKPICard ? 'fit-content' : '90%',
+                backgroundColor: '#ffffff',
+                borderRadius: '12px',
+                padding: isKPICard ? '40px 60px' : '20px',
+                position: 'relative',
+                maxWidth: isKPICard ? 'none' : '1400px',
+                maxHeight: isKPICard ? 'none' : '900px'
+              }}
+            >
+              <div style={{ 
+                width: isKPICard ? '350px' : '100%', 
+                height: isKPICard ? '120px' : '100%'
+              }}>
+                <PlotlyChartRenderer 
+                  chartSpec={chartSpecs[zoomedChartIndex]} 
+                  data={localData}
+                  chartIndex={zoomedChartIndex}
+                  datasetId={datasetId}
+                  onChartFixed={handleChartFixed}
+                  onFixingStatusChange={(isFixing) => setShowFixNotification(isFixing)}
+                />
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Dataset Preview Modal */}
       {showDatasetPreview && previewData && (
@@ -2361,6 +3414,52 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
               <p className="step-description">Ask questions to generate visualizations</p>
             </div>
             <div className="dashboard-controls">
+              {/* Undo/Redo Buttons */}
+              <div style={{ display: 'flex', gap: '4px', marginRight: '8px' }}>
+                <button 
+                  onClick={handleUndo}
+                  disabled={historyIndex <= 0}
+                  className="control-button"
+                  title={`Undo (Ctrl+Z) - ${historyIndex > 0 ? `${historyIndex} step${historyIndex > 1 ? 's' : ''} available` : 'No history'}`}
+                  style={{
+                    opacity: historyIndex <= 0 ? 0.5 : 1,
+                    cursor: historyIndex <= 0 ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M3 7v6h6" />
+                    <path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13" />
+                  </svg>
+                </button>
+                <button 
+                  onClick={handleRedo}
+                  disabled={historyIndex >= chartHistory.length - 1}
+                  className="control-button"
+                  title={`Redo (Ctrl+Shift+Z) - ${historyIndex < chartHistory.length - 1 ? `${chartHistory.length - historyIndex - 1} step${chartHistory.length - historyIndex - 1 > 1 ? 's' : ''} available` : 'No history'}`}
+                  style={{
+                    opacity: historyIndex >= chartHistory.length - 1 ? 0.5 : 1,
+                    cursor: historyIndex >= chartHistory.length - 1 ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 7v6h-6" />
+                    <path d="M3 17a9 9 0 019-9 9 9 0 016 2.3l3 2.7" />
+                  </svg>
+                </button>
+                {chartHistory.length > 0 && (
+                  <span style={{
+                    fontSize: '11px',
+                    color: '#6b7280',
+                    padding: '4px 8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    whiteSpace: 'nowrap'
+                  }}>
+                    {historyIndex + 1}/{chartHistory.length}
+                  </span>
+                )}
+              </div>
+              
               {/* Reupload Button */}
               <button 
                 onClick={handleReuploadClick} 
@@ -2483,38 +3582,10 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
 
           <div className="visualization-container-large" ref={visualizationRef}>
 
-            {/* Loading Message in Dashboard Area - Show when loading first chart */}
+            {/* Loading Skeleton in Dashboard Area - Show when loading first chart */}
             {isFirstChartLoading && chartSpecs.length === 0 && (
-              <div style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '80px 20px',
-                gap: '16px',
-                minHeight: '400px'
-              }}>
-                <div className="magic-sparkles" style={{ marginBottom: 0 }}>
-                  <span className="sparkle">*</span>
-                  <span className="sparkle">*</span>
-                  <span className="sparkle">*</span>
-                  <span className="sparkle">*</span>
-                  <span className="sparkle">*</span>
-                </div>
-                <p style={{
-                  fontSize: '24px',
-                  fontWeight: 600,
-                  textAlign: 'center',
-                  letterSpacing: '0.5px',
-                  background: 'linear-gradient(135deg, #ff6b6b 0%, #ff8787 100%)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text',
-                  margin: 0,
-                  animation: 'pulse 2s ease-in-out infinite'
-                }}>
-                  {loadingMessage}
-                </p>
+              <div style={{ padding: '20px' }}>
+                <DashboardSkeleton />
               </div>
             )}
 
@@ -2870,801 +3941,126 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                             </div>
                           )}
                           
-                          {/* Charts Grid with Notes Icons */}
+                          {/* View Mode Toggle */}
+                          {chartSpecs.filter(spec => spec.chart_type !== 'kpi_card').length > 0 && (
                           <div style={{
-                            display: 'grid',
-                            gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 1000px), 1fr))',
-                            gap: '24px',
+                              padding: '0 20px 12px 20px',
+                              display: 'flex',
+                              justifyContent: 'flex-end',
+                              alignItems: 'center',
+                              gap: '8px'
+                            }}>
+                              <span style={{ fontSize: '14px', color: '#6b7280', marginRight: '8px' }}>View:</span>
+                              <button
+                                onClick={() => {
+                                  setViewMode('list');
+                                  localStorage.setItem('chart_view_mode', 'list');
+                                }}
+                                style={{
+                                  padding: '6px 12px',
+                                  border: viewMode === 'list' ? '2px solid #ff6b6b' : '1px solid #e5e7eb',
+                                  borderRadius: '6px',
+                                  background: viewMode === 'list' ? '#fff5f5' : 'white',
+                                  color: viewMode === 'list' ? '#ff6b6b' : '#6b7280',
+                                  cursor: 'pointer',
+                                  fontSize: '13px',
+                                  fontWeight: viewMode === 'list' ? 600 : 400,
+                                  transition: 'all 0.2s',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}
+                              >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <line x1="8" y1="6" x2="21" y2="6" />
+                                  <line x1="8" y1="12" x2="21" y2="12" />
+                                  <line x1="8" y1="18" x2="21" y2="18" />
+                                  <line x1="3" y1="6" x2="3.01" y2="6" />
+                                  <line x1="3" y1="12" x2="3.01" y2="12" />
+                                  <line x1="3" y1="18" x2="3.01" y2="18" />
+                                </svg>
+                                List
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setViewMode('grid');
+                                  localStorage.setItem('chart_view_mode', 'grid');
+                                }}
+                                style={{
+                                  padding: '6px 12px',
+                                  border: viewMode === 'grid' ? '2px solid #ff6b6b' : '1px solid #e5e7eb',
+                                  borderRadius: '6px',
+                                  background: viewMode === 'grid' ? '#fff5f5' : 'white',
+                                  color: viewMode === 'grid' ? '#ff6b6b' : '#6b7280',
+                                  cursor: 'pointer',
+                                  fontSize: '13px',
+                                  fontWeight: viewMode === 'grid' ? 600 : 400,
+                                  transition: 'all 0.2s',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}
+                              >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <rect x="3" y="3" width="7" height="7" />
+                                  <rect x="14" y="3" width="7" height="7" />
+                                  <rect x="14" y="14" width="7" height="7" />
+                                  <rect x="3" y="14" width="7" height="7" />
+                                </svg>
+                                Grid
+                              </button>
+                            </div>
+                          )}
+
+                          {/* Charts Grid/List with Notes Icons */}
+                          <div style={{
+                            display: viewMode === 'grid' ? 'grid' : 'flex',
+                            flexDirection: viewMode === 'list' ? 'column' : undefined,
+                            gridTemplateColumns: viewMode === 'grid' ? 'repeat(auto-fit, minmax(500px, 1fr))' : undefined,
+                            gap: viewMode === 'grid' ? '20px' : '24px',
                             padding: '20px',
-                            alignItems: 'start',
-                            position: 'relative'
+                            alignItems: viewMode === 'list' ? 'stretch' : 'stretch',
+                            position: 'relative',
+                            width: '100%'
                           }}>
                             {chartSpecs.filter(spec => spec.chart_type !== 'kpi_card').map((spec) => {
                               // Find the actual index in chartSpecs array
                               const actualIndex = chartSpecs.findIndex(s => s === spec);
                               return (
-                              <div
-                                key={`chart-wrapper-${actualIndex}`}
-                                style={{
-                                  display: 'flex',
-                                  gap: '12px',
-                                  alignItems: 'flex-start'
-                                }}
-                              >
-                                {/* Chart */}
-                                <div style={{
-                                  flex: 1,
-                                  backgroundColor: 'white',
-                                  borderRadius: '12px',
-                                  border: '1px solid #e5e7eb',
-                                  overflow: 'hidden',
-                                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-                                  minHeight: '600px'
-                                }}>
-                                  <PlotlyChartRenderer 
-                                    chartSpec={getFilteredChartSpec(spec, actualIndex)} 
-                                    data={localData}
-                                    chartIndex={actualIndex}
-                                    datasetId={datasetId}
-                                    onChartFixed={handleChartFixed}
-                                    onFixingStatusChange={(isFixing) => setShowFixNotification(isFixing)}
-                                    onZoom={handleChartZoom}
-                                  />
-                                </div>
-                                
-                                {/* Notes Icon and Delete Button - Outside, to the right */}
-                                <div 
-                                  data-notes-dropdown
-                                  style={{
-                                    position: 'relative',
-                                    flexShrink: 0,
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    gap: '8px'
-                                  }}
-                                >
-                                  {/* Delete Button */}
-                                  <button
-                                    onClick={() => handleDeleteChart(actualIndex)}
-                                    style={{
-                                      background: 'rgba(255, 107, 107, 0.1)',
-                                      backdropFilter: 'blur(4px)',
-                                      border: '1px solid rgba(255, 107, 107, 0.3)',
-                                      borderRadius: '50%',
-                                      width: '40px',
-                                      height: '40px',
-                                      padding: '0',
-                                      cursor: 'pointer',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      transition: 'all 0.2s',
-                                      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-                                      color: '#ff6b6b'
-                                    }}
-                                    onMouseEnter={(e) => {
-                                      e.currentTarget.style.background = 'rgba(255, 107, 107, 0.2)';
-                                      e.currentTarget.style.transform = 'scale(1.05)';
-                                      e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.15)';
-                                    }}
-                                    onMouseLeave={(e) => {
-                                      e.currentTarget.style.background = 'rgba(255, 107, 107, 0.1)';
-                                      e.currentTarget.style.transform = 'scale(1)';
-                                      e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1)';
-                                    }}
-                                    title="Delete chart"
-                                  >
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                      <line x1="18" y1="6" x2="6" y2="18"></line>
-                                      <line x1="6" y1="6" x2="18" y2="18"></line>
-                                    </svg>
-                                  </button>
-                                  
-                                  {/* Filter Button */}
-                                  <button
-                                    onClick={() => {
-                                      setFilterPanelOpen(filterPanelOpen === actualIndex ? null : actualIndex);
-                                    }}
-                                    style={{
-                                      background: filterPanelOpen === actualIndex ? 'rgba(255, 107, 107, 0.2)' : 'rgba(255, 107, 107, 0.1)',
-                                      backdropFilter: 'blur(4px)',
-                                      border: '1px solid rgba(255, 107, 107, 0.3)',
-                                      borderRadius: '50%',
-                                      width: '40px',
-                                      height: '40px',
-                                      padding: '0',
-                                      cursor: 'pointer',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      transition: 'all 0.2s',
-                                      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-                                      color: '#ff6b6b'
-                                    }}
-                                    onMouseEnter={(e) => {
-                                      e.currentTarget.style.background = 'rgba(255, 107, 107, 0.2)';
-                                      e.currentTarget.style.transform = 'scale(1.05)';
-                                      e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.15)';
-                                    }}
-                                    onMouseLeave={(e) => {
-                                      if (filterPanelOpen !== actualIndex) {
-                                        e.currentTarget.style.background = 'rgba(255, 107, 107, 0.1)';
-                                      }
-                                      e.currentTarget.style.transform = 'scale(1)';
-                                      e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1)';
-                                    }}
-                                    title="Filter data"
-                                  >
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-                                    </svg>
-                                  </button>
-                                  
-                                  {/* Filter Panel */}
-                                  {filterPanelOpen === actualIndex && (() => {
-                                    // Use columns_used from the chart spec (extracted by backend from code)
-                                    // Fallback to first 4 columns if not available
-                                    const columnsToFilter = (spec.columns_used && spec.columns_used.length > 0)
-                                      ? spec.columns_used.slice(0, 6)
-                                      : Object.keys(localData[0] || {}).slice(0, 4);
-                                    
-                                    // Helper to detect column type
-                                    const getColumnType = (column: string): 'number' | 'date' | 'string' => {
-                                      if (localData.length === 0) return 'string';
-                                      const sampleValues = localData.slice(0, 10).map(row => row[column]).filter(v => v != null);
-                                      if (sampleValues.length === 0) return 'string';
-                                      
-                                      // Check if all values are numbers
-                                      if (sampleValues.every(v => typeof v === 'number' || (!isNaN(Number(v)) && v !== ''))) {
-                                        return 'number';
-                                      }
-                                      
-                                      // Check if values look like dates
-                                      const datePatterns = [/^\d{4}-\d{2}-\d{2}/, /^\d{2}\/\d{2}\/\d{4}/, /^\d{2}-\d{2}-\d{4}/];
-                                      if (sampleValues.every(v => datePatterns.some(p => p.test(String(v))) || !isNaN(Date.parse(String(v))))) {
-                                        return 'date';
-                                      }
-                                      
-                                      return 'string';
-                                    };
-                                    
-                                    // Get min/max for numeric columns
-                                    const getNumericRange = (column: string) => {
-                                      const values = localData.map(row => Number(row[column])).filter(v => !isNaN(v));
-                                      return { min: Math.min(...values), max: Math.max(...values) };
-                                    };
-                                    
-                                    return (
-                                    <div style={{
-                                      position: 'absolute',
-                                      top: '100%',
-                                      right: 0,
-                                      marginTop: '8px',
-                                      width: '320px',
-                                      backgroundColor: 'white',
-                                      border: '1px solid rgba(0, 0, 0, 0.08)',
-                                      borderRadius: '12px',
-                                      boxShadow: '0 4px 16px rgba(0, 0, 0, 0.12)',
-                                      zIndex: 100,
-                                      overflow: 'hidden'
-                                    }}>
-                                      <div style={{
-                                        padding: '12px 16px',
-                                        borderBottom: '1px solid rgba(0, 0, 0, 0.06)',
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        alignItems: 'center'
-                                      }}>
-                                        <span style={{ fontSize: '13px', fontWeight: 600, color: '#374151' }}>
-                                          Filter Data
-                                        </span>
-                                        <button
-                                          onClick={() => setFilterPanelOpen(null)}
-                                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: '#9ca3af' }}
-                                        >
-                                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                            <line x1="18" y1="6" x2="6" y2="18"></line>
-                                            <line x1="6" y1="6" x2="18" y2="18"></line>
-                                          </svg>
-                                        </button>
-                                      </div>
-                                      <div style={{ padding: '16px', maxHeight: '350px', overflowY: 'auto' }}>
-                                        {columnsToFilter.length > 0 ? columnsToFilter.map((column: string) => {
-                                          const colType = getColumnType(column);
-                                          const uniqueValues = [...new Set(localData.map(row => row[column]))].filter(v => v != null);
-                                          
-                                          return (
-                                            <div key={column} style={{ marginBottom: '16px' }}>
-                                              <label style={{ 
-                                                display: 'flex', 
-                                                alignItems: 'center',
-                                                gap: '6px',
-                                                fontSize: '11px', 
-                                                fontWeight: 600, 
-                                                color: '#ef4444',
-                                                marginBottom: '8px',
-                                              }}>
-                                                {column}
-                                                <span style={{ 
-                                                  fontSize: '9px', 
-                                                  padding: '2px 6px', 
-                                                  backgroundColor: 'rgba(239, 68, 68, 0.08)',
-                                                  color: '#ef4444',
-                                                  borderRadius: '4px',
-                                                  textTransform: 'uppercase'
-                                                }}>
-                                                  {colType}
-                                                </span>
-                                              </label>
-                                              
-                                              {/* Number: Range slider */}
-                                              {colType === 'number' && (() => {
-                                                const { min, max } = getNumericRange(column);
-                                                const currentMin = chartFilters[actualIndex]?.[`${column}_min`] ?? min;
-                                                const currentMax = chartFilters[actualIndex]?.[`${column}_max`] ?? max;
-                                                return (
-                                                  <div>
-                                                    <div style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
-                                                      <input
-                                                        type="number"
-                                                        placeholder="Min"
-                                                        value={currentMin}
-                                                        onChange={(e) => setChartFilters(prev => ({
-                                                          ...prev,
-                                                          [actualIndex]: { ...prev[actualIndex], [`${column}_min`]: e.target.value ? Number(e.target.value) : undefined }
-                                                        }))}
-                                                        style={{ flex: 1, padding: '6px 8px', fontSize: '12px', border: '1px solid #e5e7eb', borderRadius: '6px', width: '100%' }}
-                                                      />
-                                                      <span style={{ color: '#9ca3af', alignSelf: 'center' }}>—</span>
-                                                      <input
-                                                        type="number"
-                                                        placeholder="Max"
-                                                        value={currentMax}
-                                                        onChange={(e) => setChartFilters(prev => ({
-                                                          ...prev,
-                                                          [actualIndex]: { ...prev[actualIndex], [`${column}_max`]: e.target.value ? Number(e.target.value) : undefined }
-                                                        }))}
-                                                        style={{ flex: 1, padding: '6px 8px', fontSize: '12px', border: '1px solid #e5e7eb', borderRadius: '6px', width: '100%' }}
-                                                      />
-                                                    </div>
-                                                    <input
-                                                      type="range"
-                                                      min={min}
-                                                      max={max}
-                                                      value={currentMax}
-                                                      onChange={(e) => setChartFilters(prev => ({
-                                                        ...prev,
-                                                        [actualIndex]: { ...prev[actualIndex], [`${column}_max`]: Number(e.target.value) }
-                                                      }))}
-                                                      style={{ width: '100%', accentColor: '#ff6b6b' }}
-                                                    />
-                                                  </div>
-                                                );
-                                              })()}
-                                              
-                                              {/* Date: Date range picker */}
-                                              {colType === 'date' && (
-                                                <div style={{ display: 'flex', gap: '8px' }}>
-                                                  <input
-                                                    type="date"
-                                                    value={chartFilters[actualIndex]?.[`${column}_from`] || ''}
-                                                    onChange={(e) => setChartFilters(prev => ({
-                                                      ...prev,
-                                                      [actualIndex]: { ...prev[actualIndex], [`${column}_from`]: e.target.value || undefined }
-                                                    }))}
-                                                    style={{ flex: 1, padding: '6px 8px', fontSize: '12px', border: '1px solid #e5e7eb', borderRadius: '6px' }}
-                                                  />
-                                                  <span style={{ color: '#9ca3af', alignSelf: 'center' }}>to</span>
-                                                  <input
-                                                    type="date"
-                                                    value={chartFilters[actualIndex]?.[`${column}_to`] || ''}
-                                                    onChange={(e) => setChartFilters(prev => ({
-                                                      ...prev,
-                                                      [actualIndex]: { ...prev[actualIndex], [`${column}_to`]: e.target.value || undefined }
-                                                    }))}
-                                                    style={{ flex: 1, padding: '6px 8px', fontSize: '12px', border: '1px solid #e5e7eb', borderRadius: '6px' }}
-                                                  />
-                                                </div>
-                                              )}
-                                              
-                                              {/* String: Category multi-select */}
-                                              {colType === 'string' && (
-                                                <div style={{ 
-                                                  display: 'flex', 
-                                                  flexWrap: 'wrap', 
-                                                  gap: '6px',
-                                                  maxHeight: '100px',
-                                                  overflowY: 'auto',
-                                                  padding: '4px 0'
-                                                }}>
-                                                  {uniqueValues.slice(0, 15).map((val, i) => {
-                                                    const isSelected = (chartFilters[actualIndex]?.[column] as string[] || []).includes(String(val));
-                                                    return (
-                                                      <button
-                                                        key={i}
-                                                        onClick={() => {
-                                                          const current = (chartFilters[actualIndex]?.[column] as string[]) || [];
-                                                          const newValues = isSelected 
-                                                            ? current.filter(v => v !== String(val))
-                                                            : [...current, String(val)];
-                                                          setChartFilters(prev => ({
-                                                            ...prev,
-                                                            [actualIndex]: { ...prev[actualIndex], [column]: newValues.length > 0 ? newValues : undefined }
-                                                          }));
-                                                        }}
-                                                        style={{
-                                                          padding: '4px 10px',
-                                                          fontSize: '11px',
-                                                          border: isSelected ? '1px solid #ff6b6b' : '1px solid #e5e7eb',
-                                                          borderRadius: '14px',
-                                                          backgroundColor: isSelected ? 'rgba(255, 107, 107, 0.1)' : 'white',
-                                                          color: isSelected ? '#ff6b6b' : '#6b7280',
-                                                          cursor: 'pointer',
-                                                          transition: 'all 0.15s'
-                                                        }}
-                                                      >
-                                                        {String(val).length > 20 ? String(val).slice(0, 20) + '...' : String(val)}
-                                                      </button>
-                                                    );
-                                                  })}
-                                                  {uniqueValues.length > 15 && (
-                                                    <span style={{ fontSize: '10px', color: '#9ca3af', alignSelf: 'center' }}>
-                                                      +{uniqueValues.length - 15} more
-                                                    </span>
-                                                  )}
-                                                </div>
-                                              )}
-                                            </div>
-                                          );
-                                        }) : (
-                                          <div style={{ fontSize: '12px', color: '#9ca3af', textAlign: 'center', padding: '20px' }}>
-                                            No filterable columns detected
-                                          </div>
-                                        )}
-                                      </div>
-                                      <div style={{
-                                        padding: '12px 16px',
-                                        borderTop: '1px solid rgba(0, 0, 0, 0.06)',
-                                        display: 'flex',
-                                        gap: '8px',
-                                        justifyContent: 'flex-end'
-                                      }}>
-                                        <button
-                                          onClick={async () => {
-                                            setChartFilters(prev => ({ ...prev, [actualIndex]: {} }));
-                                            // Re-execute original code with no filters
-                                            const spec = chartSpecs[actualIndex];
-                                            if (spec?.chart_spec) {
-                                              setApplyingFilter(actualIndex);
-                                              try {
-                                                const response = await fetch(`${config.backendUrl}/api/data/apply-filter`, {
-                                                  method: 'POST',
-                                                  headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-                                                  credentials: 'include',
-                                                  body: JSON.stringify({
-                                                    chart_index: actualIndex,
-                                                    filters: {},
-                                                    dataset_id: datasetId,
-                                                    original_code: spec.chart_spec
-                                                  })
-                                                });
-                                                await checkAuthResponse(response);
-                                                const result = await response.json();
-                                                if (result.success && result.figure) {
-                                                  setChartSpecs(prev => prev.map((s, idx) => 
-                                                    idx === actualIndex ? { ...s, figure: result.figure } : s
-                                                  ));
-                                                  notification.success('Filters cleared');
-                                                }
-                                              } catch (error) {
-                                                console.error('Error clearing filters:', error);
-                                              } finally {
-                                                setApplyingFilter(null);
-                                                setFilterPanelOpen(null);
-                                              }
-                                            }
-                                          }}
-                                          disabled={applyingFilter === actualIndex}
-                                          style={{ padding: '6px 12px', fontSize: '12px', border: '1px solid #e5e7eb', borderRadius: '6px', backgroundColor: 'white', color: '#6b7280', cursor: applyingFilter === actualIndex ? 'wait' : 'pointer' }}
-                                        >
-                                          {applyingFilter === actualIndex ? 'Clearing...' : 'Clear'}
-                                        </button>
-                                        <button
-                                          onClick={() => applyFilterToChart(actualIndex)}
-                                          disabled={applyingFilter === actualIndex}
-                                          style={{ 
-                                            padding: '6px 12px', 
-                                            fontSize: '12px', 
-                                            border: 'none', 
-                                            borderRadius: '6px', 
-                                            backgroundColor: applyingFilter === actualIndex ? '#fca5a5' : '#ff6b6b', 
-                                            color: 'white', 
-                                            cursor: applyingFilter === actualIndex ? 'wait' : 'pointer',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '6px'
-                                          }}
-                                        >
-                                          {applyingFilter === actualIndex && (
-                                            <div style={{
-                                              width: '12px',
-                                              height: '12px',
-                                              border: '2px solid white',
-                                              borderTopColor: 'transparent',
-                                              borderRadius: '50%',
-                                              animation: 'spin 1s linear infinite'
-                                            }} />
-                                          )}
-                                          {applyingFilter === actualIndex ? 'Applying...' : 'Apply'}
-                                        </button>
-                                      </div>
-                                    </div>
-                                    );
-                                  })()}
-                                  
-                                  {/* Notes Button */}
-                                  <button
-                                    onClick={() => {
-                                      // Toggle notes visibility
-                                      if (chartNotes[actualIndex] || editingNotesIndex === actualIndex) {
-                                        setNotesVisible(prev => ({
-                                          ...prev,
-                                          [actualIndex]: !prev[actualIndex]
-                                        }));
-                                        // If hiding and was editing, stop editing
-                                        if (notesVisible[actualIndex] && editingNotesIndex === actualIndex) {
-                                          setEditingNotesIndex(null);
-                                        }
-                                      } else {
-                                        // If no notes exist, start editing immediately
-                                        setEditingNotesIndex(actualIndex);
-                                        setNotesVisible(prev => ({
-                                          ...prev,
-                                          [actualIndex]: true
-                                        }));
-                                      }
-                                    }}
-                                    style={{
-                                      background: 'rgba(255, 107, 107, 0.1)',
-                                      backdropFilter: 'blur(4px)',
-                                      border: '1px solid rgba(255, 107, 107, 0.3)',
-                                      borderRadius: '8px',
-                                      padding: '8px 12px',
-                                      fontSize: '12px',
-                                      color: '#ff6b6b',
-                                      cursor: 'pointer',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '6px',
-                                      transition: 'all 0.2s',
-                                      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-                                      whiteSpace: 'nowrap'
-                                    }}
-                                    onMouseEnter={(e) => {
-                                      e.currentTarget.style.backgroundColor = 'rgba(255, 107, 107, 0.2)';
-                                      e.currentTarget.style.color = '#ef4444';
-                                      e.currentTarget.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.15)';
-                                    }}
-                                    onMouseLeave={(e) => {
-                                      e.currentTarget.style.backgroundColor = 'rgba(255, 107, 107, 0.1)';
-                                      e.currentTarget.style.color = '#ff6b6b';
-                                      e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.1)';
-                                    }}
-                                    title={chartNotes[actualIndex] ? (notesVisible[actualIndex] ? "Hide notes" : "Show notes") : "Add notes"}
-                                  >
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                                      <polyline points="14 2 14 8 20 8" />
-                                      <line x1="12" y1="18" x2="12" y2="12" />
-                                      <line x1="9" y1="15" x2="15" y2="15" />
-                                    </svg>
-                                    {chartNotes[actualIndex] ? (notesVisible[actualIndex] ? 'Hide notes' : 'Show notes') : 'Add notes'}
-                                  </button>
-                                  
-                                  {/* Notes Panel - Subtle area on the right */}
-                                  {notesVisible[actualIndex] && (editingNotesIndex === actualIndex || chartNotes[actualIndex]) && (
-                                    <div style={{
-                                      position: 'absolute',
-                                      top: '100%',
-                                      right: 0,
-                                      marginTop: '8px',
-                                      width: '350px',
-                                      maxHeight: '600px',
-                                      backgroundColor: 'white',
-                                      border: '1px solid rgba(0, 0, 0, 0.08)',
-                                      borderRadius: '12px',
-                                      boxShadow: '0 4px 16px rgba(0, 0, 0, 0.1)',
-                                      zIndex: 100,
-                                      display: 'flex',
-                                      flexDirection: 'column',
-                                      overflow: 'hidden'
-                                    }}>
-                                      <div style={{
-                                        padding: '12px 16px',
-                                        borderBottom: '1px solid rgba(0, 0, 0, 0.06)',
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        alignItems: 'center',
-                                        backgroundColor: 'white'
-                                      }}>
-                                        <div style={{
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: '12px'
-                                        }}>
-                                          <span style={{
-                                            fontSize: '13px',
-                                            fontWeight: 500,
-                                            color: '#374151'
-                                          }}>
-                                            Notes
-                                          </span>
-                                          {editingNotesIndex === actualIndex && (
-                                            <button
-                                              onClick={async () => {
-                                                if (!datasetId) return;
-                                                setGeneratingInsights(prev => ({ ...prev, [actualIndex]: true }));
-                                                try {
-                                                  const response = await fetch(
-                                                    `${config.backendUrl}/api/data/datasets/${datasetId}/charts/${actualIndex}/insights`,
-                                                    {
-                                                      method: 'POST',
-                                                      headers: getAuthHeaders({
-                                                        'Content-Type': 'application/json',
-                                                      }),
-                                                      credentials: 'include',
-                                                    }
-                                                  );
-                                                  await checkAuthResponse(response);
-                                                  if (!response.ok) throw new Error('Failed to generate insights');
-                                                  const result = await response.json();
-                                                  const newNotes = chartNotes[actualIndex] ? `${chartNotes[actualIndex]}\n\n${result.insights}` : result.insights;
-                                                  setChartNotes(prev => ({ ...prev, [actualIndex]: newNotes }));
-                                                } catch (error) {
-                                                  console.error('Error generating insights:', error);
-                                                  notification.error('Failed to generate insights');
-                                                } finally {
-                                                  setGeneratingInsights(prev => ({ ...prev, [actualIndex]: false }));
-                                                }
-                                              }}
-                                              disabled={generatingInsights[actualIndex]}
-                                              style={{
-                                                padding: '4px 10px',
-                                                background: 'rgba(220, 38, 38, 0.1)',
-                                                border: '1px solid rgba(220, 38, 38, 0.2)',
-                                                borderRadius: '6px',
-                                                fontSize: '11px',
-                                                color: '#dc2626',
-                                                cursor: generatingInsights[actualIndex] ? 'wait' : 'pointer',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '4px',
-                                                transition: 'all 0.2s',
-                                                opacity: generatingInsights[actualIndex] ? 0.6 : 1
-                                              }}
-                                              onMouseEnter={(e) => {
-                                                if (!generatingInsights[actualIndex]) {
-                                                  e.currentTarget.style.background = 'rgba(220, 38, 38, 0.15)';
-                                                }
-                                              }}
-                                              onMouseLeave={(e) => {
-                                                e.currentTarget.style.background = 'rgba(220, 38, 38, 0.1)';
-                                              }}
-                                            >
-                                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
-                                              </svg>
-                                              {generatingInsights[actualIndex] ? 'Generating...' : 'Generate with AI'}
-                                            </button>
-                                          )}
-                                        </div>
-                                        <button
-                                          onClick={() => {
-                                            setEditingNotesIndex(null);
-                                            setNotesVisible(prev => ({
-                                              ...prev,
-                                              [actualIndex]: false
-                                            }));
-                                          }}
-                                          style={{
-                                            background: 'none',
-                                            border: 'none',
-                                            cursor: 'pointer',
-                                            padding: '4px',
-                                            color: '#9ca3af',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            borderRadius: '4px',
-                                            transition: 'all 0.2s'
-                                          }}
-                                          onMouseEnter={(e) => {
-                                            e.currentTarget.style.backgroundColor = '#f3f4f6';
-                                            e.currentTarget.style.color = '#6b7280';
-                                          }}
-                                          onMouseLeave={(e) => {
-                                            e.currentTarget.style.backgroundColor = 'transparent';
-                                            e.currentTarget.style.color = '#9ca3af';
-                                          }}
-                                        >
-                                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                            <line x1="18" y1="6" x2="6" y2="18" />
-                                            <line x1="6" y1="6" x2="18" y2="18" />
-                                          </svg>
-                                        </button>
-                                      </div>
-                                      <div style={{
-                                        flex: 1,
-                                        overflow: 'auto',
-                                        padding: '16px',
-                                        minHeight: '200px',
-                                        backgroundColor: 'white',
-                                        position: 'relative'
-                                      }}>
-                                        {editingNotesIndex === actualIndex ? (
-                                          <div style={{ position: 'relative', width: '100%', flex: 1 }}>
-                                            {generatingInsights[actualIndex] && (
-                                              <div className="magic-sparkles" style={{
-                                                position: 'absolute',
-                                                top: '12px',
-                                                left: '12px',
-                                                zIndex: 10,
-                                                pointerEvents: 'none'
-                                              }}>
-                                                <span className="sparkle">*</span>
-                                                <span className="sparkle">*</span>
-                                                <span className="sparkle">*</span>
-                                                <span className="sparkle">*</span>
-                                                <span className="sparkle">*</span>
-                                              </div>
-                                            )}
-                                            <textarea
-                                              value={chartNotes[actualIndex] || ''}
-                                              onChange={(e) => {
-                                                setChartNotes(prev => ({ ...prev, [actualIndex]: e.target.value }));
-                                                // Reset saved state when user edits
-                                                setSavedNotes(prev => ({ ...prev, [actualIndex]: false }));
-                                              }}
-                                              placeholder="Add your notes here... (Markdown supported)"
-                                              disabled={generatingInsights[actualIndex]}
-                                              style={{
-                                                width: '100%',
-                                                flex: 1,
-                                                minHeight: '200px',
-                                                padding: '12px',
-                                                border: '1px solid rgba(0, 0, 0, 0.1)',
-                                                borderRadius: '6px',
-                                                fontSize: '13px',
-                                                fontFamily: 'inherit',
-                                                lineHeight: '1.6',
-                                                resize: 'vertical',
-                                                outline: 'none',
-                                                backgroundColor: 'white',
-                                                opacity: generatingInsights[actualIndex] ? 0.7 : 1,
-                                                transition: 'opacity 0.2s'
-                                              }}
-                                              autoFocus
-                                            />
-                                          </div>
-                                        ) : (
-                                          <ChartNotes
-                                            chartIndex={actualIndex}
-                                            datasetId={datasetId}
-                                            initialNotes={chartNotes[actualIndex] || ''}
-                                            forceEdit={false}
-                                            onNotesChange={(notes) => {
-                                              setChartNotes(prev => ({ ...prev, [actualIndex]: notes }));
-                                            }}
-                                            onEditStart={() => {
-                                              setEditingNotesIndex(actualIndex);
-                                            }}
-                                          />
-                                        )}
-                                      </div>
-                                      {editingNotesIndex === actualIndex && (
-                                        <div style={{
-                                          padding: '12px 16px',
-                                          borderTop: '1px solid rgba(0, 0, 0, 0.06)',
-                                          backgroundColor: 'white',
-                                          display: 'flex',
-                                          justifyContent: 'flex-end'
-                                        }}>
-                                          <button
-                                            onClick={() => handleSaveNotes(actualIndex, chartNotes[actualIndex] || '')}
-                                            disabled={savingNotes[actualIndex] || savedNotes[actualIndex]}
-                                            style={{
-                                              padding: '6px 16px',
-                                              background: savedNotes[actualIndex] ? 'rgba(34, 197, 94, 0.15)' : 'rgba(34, 197, 94, 0.1)',
-                                              border: savedNotes[actualIndex] ? '1px solid rgba(34, 197, 94, 0.3)' : '1px solid rgba(34, 197, 94, 0.2)',
-                                              borderRadius: '6px',
-                                              fontSize: '12px',
-                                              fontWeight: 500,
-                                              color: '#22c55e',
-                                              cursor: savingNotes[actualIndex] || savedNotes[actualIndex] ? 'default' : 'pointer',
-                                              display: 'flex',
-                                              alignItems: 'center',
-                                              gap: '6px',
-                                              transition: 'all 0.2s',
-                                              opacity: savingNotes[actualIndex] ? 0.6 : 1
-                                            }}
-                                            onMouseEnter={(e) => {
-                                              if (!savingNotes[actualIndex] && !savedNotes[actualIndex]) {
-                                                e.currentTarget.style.background = 'rgba(34, 197, 94, 0.15)';
-                                              }
-                                            }}
-                                            onMouseLeave={(e) => {
-                                              e.currentTarget.style.background = savedNotes[actualIndex] ? 'rgba(34, 197, 94, 0.15)' : 'rgba(34, 197, 94, 0.1)';
-                                            }}
-                                          >
-                                            {savedNotes[actualIndex] ? (
-                                              <>
-                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                  <polyline points="20 6 9 17 4 12" />
-                                                </svg>
-                                                Saved
-                                              </>
-                                            ) : (
-                                              <>
-                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-                                                  <polyline points="17 21 17 13 7 13 7 21" />
-                                                  <polyline points="7 3 7 8 15 8" />
-                                                </svg>
-                                                {savingNotes[actualIndex] ? 'Saving...' : 'Save Notes'}
-                                              </>
-                                            )}
-                                          </button>
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            );
+                                <ChartItem
+                                  key={`chart-${actualIndex}`}
+                                  chartSpec={spec}
+                                  chartIndex={actualIndex}
+                                  localData={localData}
+                                  datasetId={datasetId}
+                                  onChartFixed={handleChartFixed}
+                                  onFixingStatusChange={(isFixing) => setShowFixNotification(isFixing)}
+                                  onZoom={handleChartZoom}
+                                  onDelete={handleDeleteChart}
+                                  chartNotes={chartNotes}
+                                  editingNotesIndex={editingNotesIndex}
+                                  setEditingNotesIndex={setEditingNotesIndex}
+                                  notesVisible={notesVisible}
+                                  setNotesVisible={setNotesVisible}
+                                  generatingInsights={generatingInsights}
+                                  savingNotes={savingNotes}
+                                  savedNotes={savedNotes}
+                                  handleGenerateInsights={handleGenerateInsights}
+                                  handleSaveNotes={handleSaveNotes}
+                                  setChartNotes={setChartNotes}
+                                  setSavedNotes={setSavedNotes}
+                                  filterPanelOpen={filterPanelOpen}
+                                  setFilterPanelOpen={setFilterPanelOpen}
+                                  chartFilters={chartFilters}
+                                  setChartFilters={setChartFilters}
+                                  applyingFilter={applyingFilter}
+                                  setApplyingFilter={setApplyingFilter}
+                                  applyFilterToChart={applyFilterToChart}
+                                  getFilteredChartSpec={getFilteredChartSpec}
+                                  viewMode={viewMode}
+                                />
+                              );
                             })}
-                          </div>
-                          
-                          {/* Add Chart Button */}
-                          <div style={{
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center',
-                            minHeight: '400px',
-                            width: '100%',
-                            padding: '20px'
-                          }}>
-                            <button
-                              onClick={() => setShowAddChartPopup(true)}
-                              className="add-chart-button"
-                              style={{
-                                width: '60px',
-                                height: '60px',
-                                borderRadius: '50%',
-                                border: '2px solid #ff6b6b',
-                                backgroundColor: 'white',
-                                color: '#ff6b6b',
-                                fontSize: '32px',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                transition: 'all 0.2s',
-                                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.backgroundColor = '#ff6b6b';
-                                e.currentTarget.style.color = 'white';
-                                e.currentTarget.style.transform = 'scale(1.1)';
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.backgroundColor = 'white';
-                                e.currentTarget.style.color = '#ff6b6b';
-                                e.currentTarget.style.transform = 'scale(1)';
-                              }}
-                              title="Add new chart to dashboard"
-                            >
-                              +
-                            </button>
                           </div>
                         </React.Fragment>
                       ) : (
@@ -3704,227 +4100,227 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                               e.currentTarget.style.transform = 'scale(1)';
                               e.currentTarget.style.boxShadow = '0 4px 12px rgba(255, 107, 107, 0.2)';
                             }}
-                            title="Create Your Dashboard"
                           >
                             +
                           </button>
-                          <p style={{ fontSize: '1.2rem', fontWeight: 500, color: '#374151', marginTop: '1rem' }}>
-                            Create Your Dashboard
+                          <p style={{
+                            fontSize: '1.2rem',
+                            color: '#6b7280',
+                            fontWeight: 500,
+                            margin: 0
+                          }}>
+                            No charts yet
                           </p>
-                          <p style={{ fontSize: '0.9rem', color: '#6b7280', textAlign: 'center', maxWidth: '400px' }}>
-                            Click the + button to start building your dashboard with AI-powered visualizations
+                          <p style={{
+                            fontSize: '0.9rem',
+                            color: '#9ca3af',
+                            margin: 0
+                          }}>
+                            Ask me to create visualizations from your data
                           </p>
                         </div>
                       )}
-              </div>
-            )}
+                    </div>
+                  )}
           </div>
         </main>
       </div>
-      </div>
+    </div>
 
-      {/* Add Chart Popup */}
-      <AddChartPopup
-        isOpen={showAddChartPopup}
-        onClose={() => setShowAddChartPopup(false)}
-        onAddChart={handleAddChart}
-        datasetId={datasetId}
-        addingChart={addingChart}
-      />
-
-      {/* Insufficient Balance Popup */}
-      <InsufficientBalancePopup
-        isOpen={showInsufficientBalance}
-        onClose={() => setShowInsufficientBalance(false)}
-        required={insufficientBalanceData.required}
-        balance={insufficientBalanceData.balance}
-        plan={insufficientBalanceData.plan}
-      />
-      
-      <SharePopup
-        isOpen={showSharePopup}
-        onClose={() => setShowSharePopup(false)}
-        shareUrl={shareUrl}
-        expiresAt={shareExpiresAt}
-      />
-
-      {/* Guided Tour Overlay */}
-      {guideStep !== null && (
-        <GuideTourOverlay
-          step={guideStep}
-          chatButtonRef={chatButtonRef}
-          downloadButtonRef={downloadButtonRef}
-          publishButtonRef={publishButtonRef}
-          onNext={() => {
-            if (guideStep < 2) {
-              setGuideStep(guideStep + 1);
-            } else {
-              setGuideStep(null);
-            }
-          }}
+    {/* Add Chart Popup */}
+        <AddChartPopup
+          isOpen={showAddChartPopup}
+          onClose={() => setShowAddChartPopup(false)}
+          onAddChart={handleAddChart}
+          datasetId={datasetId}
+          addingChart={addingChart}
         />
-      )}
 
-      {/* Chart Preview Modal */}
-      {chartPreview && (
-        <div 
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 10000,
-            padding: '20px'
-          }}
-          onClick={discardChartPreview}
-        >
-          <div 
-            style={{
-              backgroundColor: 'white',
-              borderRadius: '16px',
-              maxWidth: '1600px',
-              width: '100%',
-              maxHeight: '90vh',
-              overflow: 'auto',
-              padding: '32px',
-              position: 'relative'
+        {/* Insufficient Balance Popup */}
+        <InsufficientBalancePopup
+          isOpen={showInsufficientBalance}
+          onClose={() => setShowInsufficientBalance(false)}
+          required={insufficientBalanceData.required}
+          balance={insufficientBalanceData.balance}
+          plan={insufficientBalanceData.plan}
+        />
+
+        {/* Share Popup */}
+        <SharePopup
+          isOpen={showSharePopup}
+          onClose={() => setShowSharePopup(false)}
+          shareUrl={shareUrl}
+          expiresAt={shareExpiresAt}
+        />
+
+        {/* Guide Tour Overlay */}
+        {guideStep !== null && (
+          <GuideTourOverlay
+            step={guideStep}
+            chatButtonRef={chatButtonRef}
+            downloadButtonRef={downloadButtonRef}
+            publishButtonRef={publishButtonRef}
+            onNext={() => {
+              if (guideStep < 2) {
+                setGuideStep(guideStep + 1);
+              } else {
+                setGuideStep(null);
+              }
             }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ marginBottom: '24px' }}>
-              <h2 style={{ margin: '0 0 8px 0', fontSize: '24px', fontWeight: 600 }}>
-                Chart Preview
-              </h2>
-              <p style={{ margin: 0, color: '#666', fontSize: '14px' }}>
-                Preview the updated chart before applying changes
-              </p>
-            </div>
+          />
+        )}
 
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(500px, 1fr))',
-              gap: '24px',
-              marginBottom: '24px'
-            }}>
-              {/* Original Chart */}
+        {/* Chart Preview Modal */}
+        {chartPreview && (
+          <div
+                                style={{
+              position: 'fixed',
+              inset: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                                  display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 10000,
+              padding: '20px'
+            }}
+            onClick={discardChartPreview}
+          >
+            <div
+              style={{
+                backgroundColor: 'white',
+                borderRadius: '16px',
+                maxWidth: '1200px',
+                width: '100%',
+                maxHeight: '90vh',
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+                boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
               <div style={{
-                border: '2px solid #e5e7eb',
-                borderRadius: '12px',
-                padding: '16px',
-                backgroundColor: '#f9fafb'
+                padding: '20px',
+                borderBottom: '1px solid #e5e7eb',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
               }}>
-                <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: 600, color: '#6b7280' }}>
-                  Original Chart
-                </h3>
-                <div style={{ minHeight: '400px' }}>
-                  {chartSpecs[chartPreview.chartIndex] && (
-                    <PlotlyChartRenderer 
-                      chartSpec={chartSpecs[chartPreview.chartIndex]} 
-                      data={localData}
-                      chartIndex={chartPreview.chartIndex}
-                      datasetId={datasetId}
-                      onChartFixed={handleChartFixed}
-                      onFixingStatusChange={() => {}}
-                      onZoom={() => {}}
-                    />
-                  )}
-                </div>
+                <h2 style={{
+                  margin: 0,
+                  fontSize: '20px',
+                  fontWeight: 600,
+                  color: '#1f2937'
+                }}>
+                  Preview Chart
+                </h2>
+                <button
+                  onClick={discardChartPreview}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    fontSize: '24px',
+                    cursor: 'pointer',
+                    color: '#6b7280',
+                    padding: '0',
+                    lineHeight: 1
+                  }}
+                >
+                  ×
+                </button>
               </div>
 
-              {/* Preview Chart */}
-              <div style={{
-                border: '2px solid #6366f1',
-                borderRadius: '12px',
-                padding: '16px',
-                backgroundColor: '#eef2ff'
+                                {/* Chart */}
+                                <div style={{
+                                  flex: 1,
+                overflow: 'auto',
+                padding: '20px'
               }}>
-                <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: 600, color: '#6366f1' }}>
-                  Preview (New)
-                </h3>
-                <div style={{ minHeight: '400px' }}>
-                  <PlotlyChartRenderer 
-                    chartSpec={{
-                      ...chartSpecs[chartPreview.chartIndex],
-                      figure: chartPreview.figure,
-                      chart_spec: chartPreview.code
-                    }} 
+                {chartSpecs[chartPreview.chartIndex] && (
+                                  <PlotlyChartRenderer 
+                    chartSpec={chartSpecs[chartPreview.chartIndex]}
                     data={localData}
                     chartIndex={chartPreview.chartIndex}
                     datasetId={datasetId}
                     onChartFixed={handleChartFixed}
-                    onFixingStatusChange={() => {}}
-                    onZoom={() => {}}
+                    onFixingStatusChange={(isFixing) => setShowFixNotification(isFixing)}
                   />
-                </div>
+                )}
+                {!chartSpecs[chartPreview.chartIndex] && (
+                  <PlotlyChartRenderer
+                    chartSpec={{ figure: chartPreview.figure }}
+                    data={localData}
+                    chartIndex={chartPreview.chartIndex}
+                    datasetId={datasetId}
+                    onChartFixed={handleChartFixed}
+                    onFixingStatusChange={(isFixing) => setShowFixNotification(isFixing)}
+                  />
+                )}
+              </div>
+
+              {/* Actions */}
+              <div style={{
+                padding: '20px',
+                borderTop: '1px solid #e5e7eb',
+                display: 'flex',
+                gap: '12px',
+                justifyContent: 'flex-end'
+              }}>
+                <button
+                  onClick={discardChartPreview}
+                  style={{
+                    padding: '12px 24px',
+                    backgroundColor: 'white',
+                    color: '#6b7280',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#f3f4f6';
+                    e.currentTarget.style.borderColor = '#d1d5db';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'white';
+                    e.currentTarget.style.borderColor = '#e5e7eb';
+                  }}
+                >
+                  Discard
+                </button>
+                <button
+                  onClick={applyChartPreview}
+                  style={{
+                    padding: '12px 24px',
+                    background: 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    boxShadow: '0 2px 8px rgba(239, 68, 68, 0.2)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.3)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 2px 8px rgba(239, 68, 68, 0.2)';
+                  }}
+                >
+                  Apply Changes
+                </button>
               </div>
             </div>
-
-            {/* Action Buttons */}
-            <div style={{
-              display: 'flex',
-              gap: '12px',
-              justifyContent: 'flex-end',
-              paddingTop: '16px',
-              borderTop: '1px solid #e5e7eb'
-            }}>
-              <button
-                onClick={discardChartPreview}
-                style={{
-                  padding: '12px 24px',
-                  backgroundColor: 'white',
-                  color: '#374151',
-                  border: '2px solid #e5e7eb',
-                  borderRadius: '8px',
-                  fontSize: '14px',
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = '#f3f4f6';
-                  e.currentTarget.style.borderColor = '#d1d5db';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'white';
-                  e.currentTarget.style.borderColor = '#e5e7eb';
-                }}
-              >
-                Discard
-              </button>
-              <button
-                onClick={applyChartPreview}
-                style={{
-                  padding: '12px 24px',
-                  background: 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontSize: '14px',
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  boxShadow: '0 2px 8px rgba(239, 68, 68, 0.2)'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)';
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.3)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)';
-                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(239, 68, 68, 0.2)';
-                }}
-              >
-                Apply Changes
-              </button>
-            </div>
           </div>
-        </div>
-      )}
+        )}
+
     </>
   );
 };

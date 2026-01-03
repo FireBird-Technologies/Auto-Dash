@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { config, getAuthHeaders, checkAuthResponse } from '../config';
 import { useCreditsContext } from '../contexts/CreditsContext';
 import { useNotification } from '../contexts/NotificationContext';
+import { RecentDashboards } from './RecentDashboards';
 
 interface NavbarProps {
   onAccountClick?: () => void;
@@ -131,36 +132,39 @@ export const Navbar: React.FC<NavbarProps> = ({ onAccountClick }) => {
         )}
 
         {user && (
-          <button
-            onClick={() => navigate('/visualize')}
-            className="navbar-analyze-link"
-            style={{
-              background: isVisualizePage ? '#fee2e2' : 'none',
-              border: 'none',
-              color: '#dc2626',
-              cursor: 'pointer',
-              fontSize: '16px',
-              fontWeight: isVisualizePage ? 600 : 500,
-              padding: '8px 16px',
-              borderRadius: '6px',
-              transition: 'background-color 0.2s',
-              marginRight: '12px'
-            }}
-            onMouseOver={(e) => {
-              if (!isVisualizePage) {
-                e.currentTarget.style.backgroundColor = '#fee2e2';
-              }
-            }}
-            onMouseOut={(e) => {
-              if (!isVisualizePage) {
-                e.currentTarget.style.backgroundColor = 'transparent';
-              } else {
-                e.currentTarget.style.backgroundColor = '#fee2e2';
-              }
-            }}
-          >
-            Visualize
-          </button>
+          <>
+            <button
+              onClick={() => navigate('/visualize')}
+              className="navbar-analyze-link"
+              style={{
+                background: isVisualizePage ? '#fee2e2' : 'none',
+                border: 'none',
+                color: '#dc2626',
+                cursor: 'pointer',
+                fontSize: '16px',
+                fontWeight: isVisualizePage ? 600 : 500,
+                padding: '8px 16px',
+                borderRadius: '6px',
+                transition: 'background-color 0.2s',
+                marginRight: '12px'
+              }}
+              onMouseOver={(e) => {
+                if (!isVisualizePage) {
+                  e.currentTarget.style.backgroundColor = '#fee2e2';
+                }
+              }}
+              onMouseOut={(e) => {
+                if (!isVisualizePage) {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                } else {
+                  e.currentTarget.style.backgroundColor = '#fee2e2';
+                }
+              }}
+            >
+              Visualize
+            </button>
+            <RecentDashboards />
+          </>
         )}
 
         {user && credits && (

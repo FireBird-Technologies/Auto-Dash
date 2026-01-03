@@ -11,6 +11,7 @@ interface PlotlyChartRendererProps {
   onChartFixed?: (chartIndex: number, fixedCode: string, figureData?: any) => void;
   onFixingStatusChange?: (isFixing: boolean) => void;
   onZoom?: (chartIndex: number) => void;
+  viewMode?: 'list' | 'grid';
 }
 
 // Helper function to sanitize verbose Plotly error messages
@@ -57,7 +58,8 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
   datasetId,
   onChartFixed,
   onFixingStatusChange,
-  onZoom
+  onZoom,
+  viewMode = 'list'
 }) => {
   const notification = useNotification();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -596,7 +598,9 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
               autosize: true,
               width: undefined,
               height: undefined,
-              margin: figureData.layout?.margin || { l: 60, r: 30, t: 80, b: 60 }
+              margin: figureData.layout?.margin || (viewMode === 'grid' 
+                ? { l: 50, r: 25, t: 60, b: 50 }
+                : { l: 60, r: 30, t: 80, b: 60 })
             }}
             config={{
               responsive: true,
