@@ -1139,9 +1139,9 @@ async def analyze_data(
                     charts_data_for_db.append({
                         "chart_index": chart['chart_index'],
                         "code": chart['chart_spec'],
-                        "figure": chart['figure'],
+                        "figure": chart.get('figure'),  # Use .get() to handle missing figure
                         "title": chart['title'],
-                        "chart_type": chart['chart_type'],
+                        "chart_type": chart.get('chart_type', 'visualization'),  # Default to 'visualization' if not specified
                         "plan": chart['plan']
                     })
                     

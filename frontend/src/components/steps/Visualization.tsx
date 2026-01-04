@@ -4062,6 +4062,47 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                               );
                             })}
                           </div>
+                          
+                          {/* Floating Add Chart Button */}
+                          <div style={{
+                            display: 'flex',
+                            justifyContent: 'center',
+                            padding: '30px 20px',
+                            width: '100%'
+                          }}>
+                            <button
+                              onClick={() => setShowAddChartPopup(true)}
+                              style={{
+                                width: '60px',
+                                height: '60px',
+                                borderRadius: '50%',
+                                border: '2px solid #ff6b6b',
+                                background: 'rgba(255, 107, 107, 0.1)',
+                                color: '#ff6b6b',
+                                fontSize: '32px',
+                                fontWeight: 'bold',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                transition: 'all 0.3s ease',
+                                boxShadow: '0 4px 12px rgba(255, 107, 107, 0.2)'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.background = 'rgba(255, 107, 107, 0.2)';
+                                e.currentTarget.style.transform = 'scale(1.1)';
+                                e.currentTarget.style.boxShadow = '0 6px 20px rgba(255, 107, 107, 0.3)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = 'rgba(255, 107, 107, 0.1)';
+                                e.currentTarget.style.transform = 'scale(1)';
+                                e.currentTarget.style.boxShadow = '0 4px 12px rgba(255, 107, 107, 0.2)';
+                              }}
+                              title="Add New Chart"
+                            >
+                              +
+                            </button>
+                          </div>
                         </React.Fragment>
                       ) : (
                         <div className="empty-state" style={{ 
