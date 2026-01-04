@@ -2572,6 +2572,55 @@ body::before {
   }
 }
 
+/* Skeleton sparkles */
+.skeleton-sparkles {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.skeleton-sparkle {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  opacity: 0;
+  animation: skeletonSparkle 2.5s infinite;
+  color: rgba(255, 107, 107, 0.6);
+}
+
+@keyframes skeletonSparkle {
+  0%, 100% {
+    opacity: 0;
+    transform: translateY(-50%) scale(0.3);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-50%) scale(1);
+  }
+}
+
+/* Loading Skeleton Styles */
+.skeleton {
+  display: inline-block;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+.chart-skeleton,
+.kpi-skeleton,
+.chat-message-skeleton,
+.dashboard-skeleton {
+  animation: fadeIn 0.3s ease-in;
+}
+
 /* Larger Chart Display */
 .chart-display {
   flex: 1;
