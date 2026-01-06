@@ -2782,50 +2782,6 @@ async def share_dashboard(
         raise HTTPException(status_code=500, detail=f"Failed to create share link: {str(e)}")
 
 
-@router.put("/datasets/{dataset_id}/dashboard/colors")
-async def update_dashboard_colors(
-    dataset_id: str,
-    request: dict,  # Expecting {"background_color": "#ffffff", "text_color": "#1a1a1a"}
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """
-    Update colors for the latest dashboard query.
-    
-    Args:
-        dataset_id: Dataset identifier
-        request: Dict with "background_color" and "text_color" (hex codes)
-    
-    Returns:
-        Dict with success status
-    """
-    try:
-        background_color = request.get("background_color", "#ffffff")
-        text_color = request.get("text_color", "#1a1a1a")
-        
-        updated = dataset_service.update_dashboard_colors(
-            db,
-            current_user.id,
-            dataset_id,
-            background_color,
-            text_color
-        )
-        
-        if not updated:
-            raise HTTPException(status_code=404, detail="No dashboard found to update")
-        
-        return {
-            "success": True,
-            "background_color": updated.background_color,
-            "text_color": updated.text_color
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error updating dashboard colors: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to update dashboard colors: {str(e)}")
-
-
 @router.get("/public/dashboard/{token}")
 async def get_public_dashboard(
     token: str,
