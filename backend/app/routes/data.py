@@ -1162,28 +1162,34 @@ async def analyze_data(
                 
                 logger.info("Used pre-built visualizations - credits will still be charged")
             else:
-                # Generate charts using regular function
-                from ..services.chart_creator import generate_chart_spec
+                # Generate charts using streaming function - charts streamed as they complete!
+                from ..services.chart_creator import generate_chart_spec_streaming
                 from ..services.dataset_service import dataset_service
                 
                 query = request.query + "/n use these colors " + str(request.color_theme)
                 
-                # Generate all charts (including KPI cards separately)
-                chart_specs, full_plan, dashboard_title, kpi_cards = await generate_chart_spec(
+                # Track dashboard info for DB storage
+                dashboard_title = "Dashboard"
+                full_plan = {}
+                
+                # Stream charts as they are generated (truly async!)
+                async for event_type, chart_data, metadata in generate_chart_spec_streaming(
                     df=df,
                     query=query,
                     dataset_context=dataset_context,
                     user_id=current_user.id,
                     dataset_id=dataset_id
-                )
-                
-                # Yield dashboard_info event with KPI cards count
-                yield f"data: {json.dumps({'type': 'dashboard_info', 'dashboard_title': dashboard_title, 'full_plan': full_plan, 'kpi_count': len(kpi_cards)})}\n\n"
-                
-                # Stream KPI cards first (if any)
-                if kpi_cards:
-                    for idx, kpi in enumerate(kpi_cards):
-                        kpi_index = kpi.get('chart_index', idx)
+                ):
+                    if event_type == 'dashboard_info':
+                        dashboard_title = chart_data.get('dashboard_title', 'Dashboard')
+                        full_plan = chart_data.get('full_plan', {})
+                        
+                        # Yield dashboard info event
+                        yield f"data: {json.dumps({'type': 'dashboard_info', 'dashboard_title': dashboard_title, 'full_plan': full_plan, 'kpi_count': chart_data.get('kpi_count', 0)})}\n\n"
+                    
+                    elif event_type == 'kpi_card':
+                        kpi = chart_data
+                        kpi_index = kpi.get('chart_index', 0)
                         
                         # Store KPI metadata
                         try:
@@ -1210,14 +1216,13 @@ async def analyze_data(
                             "is_kpi": True
                         })
                         
-                        # Yield KPI card event
-                        yield f"data: {json.dumps({'type': 'kpi_card', 'kpi': kpi, 'index': idx})}\n\n"
-                
-                # Stream regular charts
-                if isinstance(chart_specs, list):
-                    total_charts = len(chart_specs)
-                    for idx, chart in enumerate(chart_specs):
-                        chart_index = chart.get('chart_index', idx + len(kpi_cards))
+                        # Yield KPI card event AS SOON AS IT'S READY
+                        yield f"data: {json.dumps({'type': 'kpi_card', 'kpi': kpi, 'index': kpi_index})}\n\n"
+                    
+                    elif event_type == 'chart':
+                        chart = chart_data
+                        chart_index = chart.get('chart_index', 0)
+                        progress = metadata.get('progress', 0)
                         
                         # Store chart metadata
                         try:
@@ -1243,14 +1248,19 @@ async def analyze_data(
                             "plan": chart.get('plan', full_plan)
                         })
                         
-                        # Yield chart event
-                        yield f"data: {json.dumps({'type': 'chart', 'chart': chart, 'progress': int(((idx + 1) / total_charts) * 100)})}\n\n"
+                        # Yield chart event AS SOON AS IT'S READY (no waiting for other charts!)
+                        yield f"data: {json.dumps({'type': 'chart', 'chart': chart, 'progress': progress})}\n\n"
                     
-                    # Yield complete event
-                    total_items = len(kpi_cards) + total_charts
-                    yield f"data: {json.dumps({'type': 'complete', 'message': f'Generated {len(kpi_cards)} KPI cards and {total_charts} chart(s)', 'total_charts': total_items, 'kpi_count': len(kpi_cards), 'progress': 100})}\n\n"
-                else:
-                    yield f"data: {json.dumps({'type': 'error', 'message': 'Unexpected result format'})}\n\n"
+                    elif event_type == 'complete':
+                        # Yield completion event
+                        total_charts = chart_data.get('total_charts', len(charts_data_for_db))
+                        kpi_count = chart_data.get('kpi_count', 0)
+                        message = chart_data.get('message', f'Generated {kpi_count} KPI cards and {total_charts - kpi_count} chart(s)')
+                        
+                        yield f"data: {json.dumps({'type': 'complete', 'message': message, 'total_charts': total_charts, 'kpi_count': kpi_count, 'progress': 100})}\n\n"
+                    
+                    elif event_type == 'error':
+                        yield f"data: {json.dumps({'type': 'error', 'message': chart_data.get('message', 'Error generating charts')})}\n\n"
             
             # Save dashboard query to DB (after all charts)
             if charts_data_for_db:
@@ -2724,6 +2734,8 @@ async def share_dashboard(
     try:
         figures_data = request.get("figures_data", [])
         dashboard_title = request.get("dashboard_title")
+        background_color = request.get("background_color", "#ffffff")
+        text_color = request.get("text_color", "#1a1a1a")
         
         if not figures_data:
             raise HTTPException(status_code=400, detail="No figures data provided")
@@ -2749,7 +2761,9 @@ async def share_dashboard(
             dataset_id,
             figures_data,
             dashboard_title,
-            hours_valid
+            hours_valid,
+            background_color,
+            text_color
         )
         
         # Build public URL

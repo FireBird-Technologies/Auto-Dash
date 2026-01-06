@@ -111,7 +111,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded }) => {
 
   return (
     <div className="upload-section">
-      <h3 className="section-title">Upload CSV / Excel</h3>
+      <h3 className="section-title">Upload Your Dataset</h3>
       <div className="upload">
         <div className="upload-zone">
           <input 
@@ -123,7 +123,10 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded }) => {
           />
           <div className="upload-info">
             <p>{uploading ? 'Uploading...' : 'Drop your file here or click to browse'}</p>
-            <span className="upload-formats">Supports .csv, .xls, .xlsx</span>
+            <span className="upload-formats">Supports CSV and Excel files (.csv, .xls, .xlsx)</span>
+            <p style={{ marginTop: '8px', fontSize: '13px', color: '#6b7280', lineHeight: '1.5' }}>
+              Tabular data with headers • Works best with numeric, date, and categorical data
+            </p>
           </div>
         </div>
         

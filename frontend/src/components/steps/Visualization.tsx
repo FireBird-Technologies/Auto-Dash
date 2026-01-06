@@ -32,6 +32,8 @@ interface ChartItemProps {
   handleSaveNotes: (index: number, notes: string) => void;
   setChartNotes: React.Dispatch<React.SetStateAction<Record<number, string>>>;
   setSavedNotes: React.Dispatch<React.SetStateAction<Record<number, boolean>>>;
+  backgroundColor?: string;
+  textColor?: string;
   filterPanelOpen: number | null;
   setFilterPanelOpen: (index: number | null) => void;
   chartFilters: Record<number, Record<string, any>>;
@@ -72,7 +74,9 @@ const ChartItem: React.FC<ChartItemProps> = ({
   setApplyingFilter,
   applyFilterToChart,
   getFilteredChartSpec,
-  viewMode
+  viewMode,
+  backgroundColor = '#ffffff',
+  textColor = '#1a1a1a'
 }) => {
   const notification = useNotification();
   
@@ -93,7 +97,8 @@ const ChartItem: React.FC<ChartItemProps> = ({
         {/* Chart */}
         <div style={{
           flex: 1,
-          backgroundColor: 'white',
+          backgroundColor: backgroundColor,
+          color: textColor,
           borderRadius: '12px',
           border: '1px solid #e5e7eb',
           overflow: 'hidden',
@@ -109,6 +114,8 @@ const ChartItem: React.FC<ChartItemProps> = ({
             chartIndex={chartIndex}
             datasetId={datasetId}
             onChartFixed={onChartFixed}
+            backgroundColor={backgroundColor}
+            textColor={textColor}
             onFixingStatusChange={onFixingStatusChange}
             onZoom={onZoom}
             viewMode={viewMode}
@@ -957,6 +964,12 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   const [guideStep, setGuideStep] = useState<number | null>(null); // 0=chat, 1=download, 2=publish
   const [, setLoadingMessage] = useState('Crafting beautiful insights from your data...');
   const [chartSpecs, setChartSpecs] = useState<any[]>([]);  // Changed to array
+  const [expectedKPICount, setExpectedKPICount] = useState<number | null>(null); // Track expected KPI count
+  const [expectedChartCount, setExpectedChartCount] = useState<number | null>(null); // Track expected chart count
+  const [streamingComplete, setStreamingComplete] = useState(false); // Track if streaming is done
+  const [dashboardBgColor, setDashboardBgColor] = useState('#ffffff'); // Dashboard background color
+  const [dashboardTextColor, setDashboardTextColor] = useState('#1a1a1a'); // Dashboard text color
+  const [showColorPicker, setShowColorPicker] = useState(false); // Color picker dropdown visibility
   const chatButtonRef = useRef<HTMLButtonElement>(null);
   const downloadButtonRef = useRef<HTMLButtonElement>(null);
   const publishButtonRef = useRef<HTMLButtonElement>(null);
@@ -1932,6 +1945,9 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     
     setIsLoading(true);
     setError(null);
+    setStreamingComplete(false); // Reset streaming state
+    setExpectedKPICount(null); // Reset to null until we get dashboard_info
+    setExpectedChartCount(null); // Reset to null until we get dashboard_info
     
     // Use /analyze for first chart, /chat for subsequent queries
     const isFirstChart = chartSpecs.length === 0;
@@ -2035,7 +2051,20 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                         if (event.dashboard_title) {
                           setDashboardTitle(event.dashboard_title);
                         }
-                        console.log(`Dashboard info received. KPI count: ${event.kpi_count || 0}`);
+                        // Set expected counts for loading skeletons
+                        const expectedKpis = event.kpi_count || 0;
+                        setExpectedKPICount(expectedKpis);
+                        
+                        // Estimate chart count from plan structure
+                        // Count all visualization types except kpi_cards, filters, data_source, interconnected
+                        const planKeys = Object.keys(event.full_plan || {});
+                        const excludedKeys = ['kpi_cards', 'data_source', 'filters', 'interconnected'];
+                        const estimatedCharts = planKeys.filter(k => !excludedKeys.includes(k)).length;
+                        
+                        // Set estimated count (will be corrected when 'complete' event arrives)
+                        setExpectedChartCount(Math.max(estimatedCharts, 1));
+                        setStreamingComplete(false);
+                        console.log(`Dashboard info received. Expected KPIs: ${expectedKpis}, Estimated charts: ${estimatedCharts}`);
                         break;
                       
                       case 'kpi_card':
@@ -2067,9 +2096,13 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                         break;
                       
                       case 'complete':
-                        // All charts received
+                        // All charts received - stop showing skeletons
+                        setStreamingComplete(true);
                         const kpiCount = event.kpi_count || 0;
                         const chartCount = (event.total_charts || totalCharts) - kpiCount;
+                        // Update expected counts with actual counts
+                        setExpectedKPICount(kpiCount);
+                        setExpectedChartCount(chartCount);
                         const message = kpiCount > 0 
                           ? `Dashboard created successfully! Generated ${kpiCount} KPI card(s) and ${chartCount} chart(s).`
                           : `Dashboard created successfully! Generated ${event.total_charts || totalCharts} chart(s).`;
@@ -2475,7 +2508,9 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
         credentials: 'include',
         body: JSON.stringify({
           figures_data: figuresData,
-          dashboard_title: titleToShare
+          dashboard_title: titleToShare,
+          background_color: dashboardBgColor,
+          text_color: dashboardTextColor
         })
       });
 
@@ -2679,8 +2714,70 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     };
   }, [isResizing]);
 
+  // Close color picker when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showColorPicker) {
+        const target = event.target as HTMLElement;
+        if (!target.closest('[data-color-picker]')) {
+          setShowColorPicker(false);
+        }
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showColorPicker]);
+
+  // Calculate how many skeletons to show
+  const getSkeletonCounts = () => {
+    if (!isLoading || streamingComplete) {
+      return { kpiSkeletons: 0, chartSkeletons: 0 };
+    }
+
+    const loadedKPIs = chartSpecs.filter(spec => spec.chart_type === 'kpi_card').length;
+    const loadedCharts = chartSpecs.filter(spec => spec.chart_type !== 'kpi_card').length;
+
+    // If we know the expected counts from dashboard_info
+    if (expectedKPICount !== null && expectedChartCount !== null) {
+      const kpiSkeletons = Math.max(expectedKPICount - loadedKPIs, 0);
+      const chartSkeletons = Math.max(expectedChartCount - loadedCharts, 0);
+      
+      console.log(`Skeleton counts - KPIs: ${kpiSkeletons} (expected: ${expectedKPICount}, loaded: ${loadedKPIs}), Charts: ${chartSkeletons} (expected: ${expectedChartCount}, loaded: ${loadedCharts})`);
+      
+      return { kpiSkeletons, chartSkeletons };
+    }
+
+    // If we haven't received dashboard_info yet but are loading
+    // Show default skeletons (but reduce as items arrive)
+    const defaultKPIs = 3;
+    const defaultCharts = 2;
+    
+    const counts = {
+      kpiSkeletons: Math.max(defaultKPIs - loadedKPIs, loadedKPIs === 0 ? defaultKPIs : 1),
+      chartSkeletons: Math.max(defaultCharts - loadedCharts, loadedCharts === 0 ? defaultCharts : 1)
+    };
+    
+    console.log(`Skeleton counts (default) - KPIs: ${counts.kpiSkeletons} (loaded: ${loadedKPIs}), Charts: ${counts.chartSkeletons} (loaded: ${loadedCharts})`);
+    
+    return counts;
+  };
+
+  const { kpiSkeletons, chartSkeletons } = getSkeletonCounts();
+
   return (
     <>
+      <style>{`
+        @keyframes shimmer {
+          0% {
+            background-position: -200% 0;
+          }
+          100% {
+            background-position: 200% 0;
+          }
+        }
+      `}</style>
+      
       <FixNotification 
         show={showFixNotification} 
         onDismiss={() => setShowFixNotification(false)} 
@@ -2813,7 +2910,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
             </button>
             <div className="fullscreen-chart">
               {/* KPI Cards - Keep them small and in a grid */}
-              {chartSpecs.some(spec => spec.chart_type === 'kpi_card') && (
+              {(chartSpecs.some(spec => spec.chart_type === 'kpi_card') || kpiSkeletons > 0) && (
                 <>
                   <div style={{
                     display: 'flex',
@@ -2829,6 +2926,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                       .map(({ spec, index }) => (
                         <div 
                           key={`kpi-${index}`} 
+                          className="kpi-fade-in"
                           style={{ 
                             width: '280px', 
                             height: '100px',
@@ -2839,13 +2937,36 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                             title={spec.title || `KPI ${index + 1}`}
                             chartSpec={spec}
                             chartIndex={index}
+                            backgroundColor={dashboardBgColor}
+                            textColor={dashboardTextColor}
                           />
                         </div>
                       ))}
+                    
+                    {/* Show loading skeletons for KPIs still being generated */}
+                    {kpiSkeletons > 0 && (
+                      <>
+                        {[...Array(kpiSkeletons)].map((_, i) => (
+                          <div 
+                            key={`kpi-skeleton-${i}`} 
+                            style={{ 
+                              width: '280px', 
+                              height: '100px',
+                              flexShrink: 0,
+                              background: 'linear-gradient(90deg, #f3f4f6 0%, #e5e7eb 50%, #f3f4f6 100%)',
+                              backgroundSize: '200% 100%',
+                              animation: 'shimmer 1.5s infinite',
+                              borderRadius: '12px',
+                              border: '1px solid #e5e7eb'
+                            }}
+                          />
+                        ))}
+                      </>
+                    )}
                   </div>
                   
-                  {/* Separator if there are regular charts */}
-                  {chartSpecs.some(spec => spec.chart_type !== 'kpi_card') && (
+                  {/* Separator if there are regular charts or still loading */}
+                  {(chartSpecs.some(spec => spec.chart_type !== 'kpi_card') || chartSkeletons > 0) && (
                     <div style={{
                       width: '100%',
                       height: '1px',
@@ -2866,16 +2987,53 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                   .map((spec, index) => ({ spec, index }))
                   .filter(({ spec }) => spec.chart_type !== 'kpi_card')
                   .map(({ spec, index }) => (
-                    <PlotlyChartRenderer 
-                      key={`chart-${index}`}
-                      chartSpec={spec} 
-                      data={localData}
-                      chartIndex={index}
-                      datasetId={datasetId}
-                      onChartFixed={handleChartFixed}
-                      onFixingStatusChange={(isFixing) => setShowFixNotification(isFixing)}
-                    />
+                    <div key={`chart-${index}`} className="chart-fade-in">
+                      <PlotlyChartRenderer 
+                        chartSpec={spec} 
+                        data={localData}
+                        chartIndex={index}
+                        datasetId={datasetId}
+                        onChartFixed={handleChartFixed}
+                        onFixingStatusChange={(isFixing) => setShowFixNotification(isFixing)}
+                        backgroundColor={dashboardBgColor}
+                        textColor={dashboardTextColor}
+                      />
+                    </div>
                   ))}
+                
+                {/* Show loading skeletons for charts still being generated */}
+                {chartSkeletons > 0 && (
+                  <>
+                    {[...Array(chartSkeletons)].map((_, i) => (
+                      <div 
+                        key={`chart-skeleton-${i}`} 
+                        style={{ 
+                          width: '100%', 
+                          height: '400px',
+                          background: 'linear-gradient(90deg, #f3f4f6 0%, #e5e7eb 50%, #f3f4f6 100%)',
+                          backgroundSize: '200% 100%',
+                          animation: 'shimmer 1.5s infinite',
+                          borderRadius: '16px',
+                          border: '1px solid #e5e7eb',
+                          padding: '20px'
+                        }}
+                      >
+                        <div style={{
+                          height: '24px',
+                          width: '200px',
+                          background: 'rgba(255,255,255,0.5)',
+                          borderRadius: '8px',
+                          marginBottom: '16px'
+                        }} />
+                        <div style={{
+                          height: '100%',
+                          background: 'rgba(255,255,255,0.3)',
+                          borderRadius: '8px'
+                        }} />
+                      </div>
+                    ))}
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -2947,7 +3105,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
               style={{
                 width: isKPICard ? 'fit-content' : '90%',
                 height: isKPICard ? 'fit-content' : '90%',
-                backgroundColor: '#ffffff',
+                backgroundColor: dashboardBgColor,
+                color: dashboardTextColor,
                 borderRadius: '12px',
                 padding: isKPICard ? '40px 60px' : '20px',
                 position: 'relative',
@@ -2966,6 +3125,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                   datasetId={datasetId}
                   onChartFixed={handleChartFixed}
                   onFixingStatusChange={(isFixing) => setShowFixNotification(isFixing)}
+                  backgroundColor={dashboardBgColor}
+                  textColor={dashboardTextColor}
                 />
               </div>
             </div>
@@ -3582,24 +3743,24 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
 
           <div className="visualization-container-large" ref={visualizationRef}>
 
-            {/* Loading Skeleton in Dashboard Area - Show when loading first chart */}
-            {isFirstChartLoading && chartSpecs.length === 0 && (
-              <div style={{ padding: '20px' }}>
-                <DashboardSkeleton />
-              </div>
-            )}
-
-            {/* Chart Display - Show when charts exist (even if loading) */}
-            {(chartSpecs.length > 0 || (!isLoading && chartSpecs.length === 0)) && (
-              <div className="chart-display">
-                {chartSpecs.length > 0 ? (
+            {/* Chart Display - Show when charts exist or loading */}
+            {(chartSpecs.length > 0 || isLoading || (!isLoading && chartSpecs.length === 0)) && (
+              <div 
+                className={`chart-display ${isLoading && !streamingComplete ? 'loading' : ''}`}
+                style={{
+                  background: isLoading && !streamingComplete ? 'transparent' : dashboardBgColor,
+                  color: dashboardTextColor
+                }}
+              >
+                {(chartSpecs.length > 0 || isLoading) ? (
                   <React.Fragment>
                           {/* Dashboard Title - Editable */}
                           <div style={{ 
                             padding: '24px 20px 0 20px',
                             display: 'flex',
                             alignItems: 'center',
-                            justifyContent: 'center'
+                            justifyContent: 'center',
+                            position: 'relative'
                           }}>
                             {isEditingTitle ? (
                               <input
@@ -3643,7 +3804,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                 style={{
                                   fontSize: '2rem',
                                   fontWeight: 700,
-                                  color: '#1f2937',
+                                  color: dashboardTextColor,
                                   margin: 0,
                                   cursor: 'pointer',
                                   display: 'inline-flex',
@@ -3675,6 +3836,172 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                 </svg>
                               </h2>
                             )}
+                            
+                            {/* Color Picker - Near Title, Above KPI Cards */}
+                            {!isEditingTitle && chartSpecs.length > 0 && (
+                              <div style={{ 
+                                position: 'absolute',
+                                left: '20px',
+                                top: '40%',
+                                transform: 'translateY(-50%)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'flex-start',
+                                zIndex: 10
+                              }} data-color-picker>
+                                {/* Three Color Dots */}
+                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                  {/* White */}
+                                  <button
+                                    onClick={() => {
+                                      setDashboardBgColor('#ffffff');
+                                      setDashboardTextColor('#1a1a1a');
+                                    }}
+                                    title="White background"
+                                    style={{
+                                      width: '24px',
+                                      height: '24px',
+                                      borderRadius: '50%',
+                                      background: '#ffffff',
+                                      border: dashboardBgColor === '#ffffff' ? '3px solid #ff6b6b' : '2px solid #d1d5db',
+                                      cursor: 'pointer',
+                                      transition: 'all 0.2s',
+                                      boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                                    }}
+                                  />
+                                  
+                                  {/* Black */}
+                                  <button
+                                    onClick={() => {
+                                      setDashboardBgColor('#1a1a1a');
+                                      setDashboardTextColor('#ffffff');
+                                    }}
+                                    title="Black background"
+                                    style={{
+                                      width: '24px',
+                                      height: '24px',
+                                      borderRadius: '50%',
+                                      background: '#1a1a1a',
+                                      border: dashboardBgColor === '#1a1a1a' || dashboardBgColor === '#000000' ? '3px solid #ff6b6b' : '2px solid #d1d5db',
+                                      cursor: 'pointer',
+                                      transition: 'all 0.2s',
+                                      boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                                    }}
+                                  />
+                                  
+                                  {/* Blue */}
+                                  <button
+                                    onClick={() => {
+                                      setDashboardBgColor('#1e3a5f');
+                                      setDashboardTextColor('#ffffff');
+                                    }}
+                                    title="Blue background"
+                                    style={{
+                                      width: '24px',
+                                      height: '24px',
+                                      borderRadius: '50%',
+                                      background: '#1e3a5f',
+                                      border: dashboardBgColor === '#1e3a5f' ? '3px solid #ff6b6b' : '2px solid #d1d5db',
+                                      cursor: 'pointer',
+                                      transition: 'all 0.2s',
+                                      boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                                    }}
+                                  />
+                                  
+                                  {/* More Options Button */}
+                                  <button
+                                    onClick={() => setShowColorPicker(!showColorPicker)}
+                                    title="More colors"
+                                    style={{
+                                      width: '24px',
+                                      height: '24px',
+                                      borderRadius: '50%',
+                                      background: 'linear-gradient(135deg, #ff6b6b, #ffa500, #4ade80, #60a5fa)',
+                                      border: '2px solid #d1d5db',
+                                      cursor: 'pointer',
+                                      transition: 'all 0.2s',
+                                      boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      fontSize: '10px',
+                                      color: 'white',
+                                      fontWeight: 'bold'
+                                    }}
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                                
+                                {/* Custom Color Picker Dropdown */}
+                                {showColorPicker && (
+                                  <div
+                                    style={{
+                                      position: 'absolute',
+                                      top: '100%',
+                                      left: '0',
+                                      marginTop: '12px',
+                                      background: 'white',
+                                      borderRadius: '12px',
+                                      padding: '16px',
+                                      boxShadow: '0 10px 40px rgba(0, 0, 0, 0.15)',
+                                      zIndex: 1000,
+                                      minWidth: '180px'
+                                    }}
+                                  >
+                                    {/* Background Color */}
+                                    <div style={{ marginBottom: '12px' }}>
+                                      <label style={{ display: 'block', marginBottom: '6px', fontSize: '12px', fontWeight: 500, color: '#6b7280' }}>
+                                        Background
+                                      </label>
+                                      <input
+                                        type="color"
+                                        value={dashboardBgColor}
+                                        onChange={(e) => setDashboardBgColor(e.target.value)}
+                                        style={{
+                                          width: '100%',
+                                          height: '36px',
+                                          border: '1px solid #e5e7eb',
+                                          borderRadius: '8px',
+                                          cursor: 'pointer'
+                                        }}
+                                      />
+                                    </div>
+                                    
+                                    {/* Text Color */}
+                                    <div>
+                                      <label style={{ display: 'block', marginBottom: '6px', fontSize: '12px', fontWeight: 500, color: '#6b7280' }}>
+                                        Text
+                                      </label>
+                                      <div style={{ display: 'flex', gap: '8px' }}>
+                                        <button
+                                          onClick={() => setDashboardTextColor('#1a1a1a')}
+                                          style={{
+                                            flex: 1,
+                                            padding: '8px',
+                                            borderRadius: '6px',
+                                            border: dashboardTextColor === '#1a1a1a' ? '2px solid #ff6b6b' : '1px solid #e5e7eb',
+                                            background: '#1a1a1a',
+                                            cursor: 'pointer'
+                                          }}
+                                        />
+                                        <button
+                                          onClick={() => setDashboardTextColor('#ffffff')}
+                                          style={{
+                                            flex: 1,
+                                            padding: '8px',
+                                            borderRadius: '6px',
+                                            border: dashboardTextColor === '#ffffff' ? '2px solid #ff6b6b' : '1px solid #e5e7eb',
+                                            background: '#ffffff',
+                                            cursor: 'pointer'
+                                          }}
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                           
                           {/* KPI Cards Row - Displayed at top, wraps after 3 cards */}
@@ -3684,6 +4011,9 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                             onRemoveKPI={handleRemoveKPI}
                             onAddKPI={() => setShowAddKPIPopup(true)}
                             editingKPIIndex={editingKPIIndex}
+                            backgroundColor={dashboardBgColor}
+                            textColor={dashboardTextColor}
+                            hideAddButton={isLoading && !streamingComplete}
                             isAddingKPI={isAddingKPI}
                           />
                           
@@ -4058,51 +4388,62 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                   applyFilterToChart={applyFilterToChart}
                                   getFilteredChartSpec={getFilteredChartSpec}
                                   viewMode={viewMode}
+                                  backgroundColor={dashboardBgColor}
+                                  textColor={dashboardTextColor}
                                 />
                               );
                             })}
+                            
+                            {/* Skeleton Loading for Charts */}
+                            {isLoading && !streamingComplete && chartSpecs.filter(spec => spec.chart_type !== 'kpi_card').length === 0 && (
+                              <div style={{ width: '100%', padding: '20px' }}>
+                                <DashboardSkeleton />
+                              </div>
+                            )}
                           </div>
                           
-                          {/* Floating Add Chart Button */}
-                          <div style={{
-                            display: 'flex',
-                            justifyContent: 'center',
-                            padding: '30px 20px',
-                            width: '100%'
-                          }}>
-                            <button
-                              onClick={() => setShowAddChartPopup(true)}
-                              style={{
-                                width: '60px',
-                                height: '60px',
-                                borderRadius: '50%',
-                                border: '2px solid #ff6b6b',
-                                background: 'rgba(255, 107, 107, 0.1)',
-                                color: '#ff6b6b',
-                                fontSize: '32px',
-                                fontWeight: 'bold',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                transition: 'all 0.3s ease',
-                                boxShadow: '0 4px 12px rgba(255, 107, 107, 0.2)'
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.background = 'rgba(255, 107, 107, 0.2)';
-                                e.currentTarget.style.transform = 'scale(1.1)';
-                                e.currentTarget.style.boxShadow = '0 6px 20px rgba(255, 107, 107, 0.3)';
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.background = 'rgba(255, 107, 107, 0.1)';
-                                e.currentTarget.style.transform = 'scale(1)';
-                                e.currentTarget.style.boxShadow = '0 4px 12px rgba(255, 107, 107, 0.2)';
-                              }}
-                              title="Add New Chart"
-                            >
-                              +
-                            </button>
-                          </div>
+                          {/* Floating Add Chart Button - Hidden while loading */}
+                          {!(isLoading && !streamingComplete) && (
+                            <div style={{
+                              display: 'flex',
+                              justifyContent: 'center',
+                              padding: '30px 20px',
+                              width: '100%'
+                            }}>
+                              <button
+                                onClick={() => setShowAddChartPopup(true)}
+                                style={{
+                                  width: '60px',
+                                  height: '60px',
+                                  borderRadius: '50%',
+                                  border: '2px solid #ff6b6b',
+                                  background: 'rgba(255, 107, 107, 0.1)',
+                                  color: '#ff6b6b',
+                                  fontSize: '32px',
+                                  fontWeight: 'bold',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  transition: 'all 0.3s ease',
+                                  boxShadow: '0 4px 12px rgba(255, 107, 107, 0.2)'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.background = 'rgba(255, 107, 107, 0.2)';
+                                  e.currentTarget.style.transform = 'scale(1.1)';
+                                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(255, 107, 107, 0.3)';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.background = 'rgba(255, 107, 107, 0.1)';
+                                  e.currentTarget.style.transform = 'scale(1)';
+                                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(255, 107, 107, 0.2)';
+                                }}
+                                title="Add New Chart"
+                              >
+                                +
+                              </button>
+                            </div>
+                          )}
                         </React.Fragment>
                       ) : (
                         <div className="empty-state" style={{ 

@@ -12,6 +12,8 @@ interface PlotlyChartRendererProps {
   onFixingStatusChange?: (isFixing: boolean) => void;
   onZoom?: (chartIndex: number) => void;
   viewMode?: 'list' | 'grid';
+  backgroundColor?: string;
+  textColor?: string;
 }
 
 // Helper function to sanitize verbose Plotly error messages
@@ -59,7 +61,9 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
   onChartFixed,
   onFixingStatusChange,
   onZoom,
-  viewMode = 'list'
+  viewMode = 'list',
+  backgroundColor = '#ffffff',
+  textColor = '#1a1a1a'
 }) => {
   const notification = useNotification();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -75,6 +79,9 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
   const [editInput, setEditInput] = useState('');
   const [isLoadingEdit, setIsLoadingEdit] = useState(false);
   const [editPreview, setEditPreview] = useState<{code: string, figure: any, reasoning: string} | null>(null);
+  
+  // Show plan/description toggle
+  const [showPlan, setShowPlan] = useState(false);
 
   useEffect(() => {
     if (!chartSpec) return;
@@ -300,7 +307,8 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
         minHeight: '600px',
         position: 'relative',
         padding: '12px',
-        backgroundColor: '#ffffff',
+        backgroundColor: backgroundColor,
+        color: textColor,
         cursor: 'pointer',
         transition: 'all 0.2s ease',
         display: 'flex',
@@ -585,33 +593,129 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
       
       {/* Render chart */}
       {figureData && (
-        <div style={{
-          width: '100%',
-          height: '100%',
-          flex: 1,
-          minHeight: 0
-        }}>
-          <Plot
-            data={figureData.data || []}
-            layout={{
-              ...figureData.layout,
-              autosize: true,
-              width: undefined,
-              height: undefined,
-              margin: figureData.layout?.margin || (viewMode === 'grid' 
-                ? { l: 50, r: 25, t: 60, b: 50 }
-                : { l: 60, r: 30, t: 80, b: 60 })
-            }}
-            config={{
-              responsive: true,
-              displayModeBar: true,
-              displaylogo: false,
-              modeBarButtonsToRemove: ['sendDataToCloud']
-            }}
-            style={{ width: '100%', height: '100%' }}
-            useResizeHandler={true}
-          />
-        </div>
+        <>
+          <div style={{
+            width: '100%',
+            height: '100%',
+            flex: 1,
+            minHeight: 0
+          }}>
+            <Plot
+              data={figureData.data || []}
+              layout={{
+                ...figureData.layout,
+                autosize: true,
+                width: undefined,
+                height: undefined,
+                paper_bgcolor: backgroundColor,
+                plot_bgcolor: backgroundColor,
+                font: { 
+                  ...figureData.layout?.font,
+                  color: textColor 
+                },
+                margin: figureData.layout?.margin || (viewMode === 'grid' 
+                  ? { l: 50, r: 25, t: 60, b: 50 }
+                  : { l: 60, r: 30, t: 80, b: 60 })
+              }}
+              config={{
+                responsive: true,
+                displayModeBar: true,
+                displaylogo: false,
+                modeBarButtonsToRemove: ['sendDataToCloud']
+              }}
+              style={{ width: '100%', height: '100%' }}
+              useResizeHandler={true}
+            />
+          </div>
+          
+          {/* Chart Plan/Description Section */}
+          {chartSpec?.plan && (typeof chartSpec.plan === 'object' || typeof chartSpec.plan === 'string') && (
+            <div style={{
+              marginTop: '12px',
+              borderTop: '1px solid #e5e7eb',
+              paddingTop: '8px'
+            }}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowPlan(!showPlan);
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  padding: '6px 8px',
+                  cursor: 'pointer',
+                  color: '#6b7280',
+                  fontSize: '12px',
+                  fontWeight: 500,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  transition: 'color 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = '#374151';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = '#6b7280';
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{
+                  transform: showPlan ? 'rotate(90deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.2s'
+                }}>
+                  <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+                {showPlan ? 'Hide' : 'Show'} Chart Details
+              </button>
+              
+              {showPlan && (
+                <div style={{
+                  padding: '12px',
+                  backgroundColor: '#f9fafb',
+                  borderRadius: '6px',
+                  marginTop: '8px',
+                  fontSize: '13px',
+                  color: '#374151',
+                  lineHeight: '1.6'
+                }}>
+                  {typeof chartSpec.plan === 'string' ? (
+                    <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{chartSpec.plan}</p>
+                  ) : (
+                    <div>
+                      {chartSpec.plan.title && (
+                        <div style={{ marginBottom: '8px' }}>
+                          <strong>Title:</strong> {chartSpec.plan.title}
+                        </div>
+                      )}
+                      {chartSpec.plan.instructions && (
+                        <div style={{ marginBottom: '8px' }}>
+                          <strong>Description:</strong> {chartSpec.plan.instructions}
+                        </div>
+                      )}
+                      {chartSpec.plan.metric && (
+                        <div style={{ marginBottom: '8px' }}>
+                          <strong>Metric:</strong> {chartSpec.plan.metric}
+                        </div>
+                      )}
+                      {/* Display any other plan fields */}
+                      {Object.entries(chartSpec.plan).map(([key, value]) => {
+                        if (!['title', 'instructions', 'metric'].includes(key) && value) {
+                          return (
+                            <div key={key} style={{ marginBottom: '8px' }}>
+                              <strong style={{ textTransform: 'capitalize' }}>{key.replace(/_/g, ' ')}:</strong> {String(value)}
+                            </div>
+                          );
+                        }
+                        return null;
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </>
       )}
       
       {/* Preview Comparison Modal */}

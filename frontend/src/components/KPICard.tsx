@@ -8,6 +8,8 @@ interface KPICardProps {
   onEdit?: (index: number, editRequest: string) => Promise<void>;
   onRemove?: (index: number) => void;
   isEditing?: boolean;
+  backgroundColor?: string;
+  textColor?: string;
 }
 
 export const KPICard: React.FC<KPICardProps> = ({ 
@@ -15,6 +17,8 @@ export const KPICard: React.FC<KPICardProps> = ({
   chartSpec, 
   chartIndex,
   onEdit,
+  backgroundColor = '#ffffff',
+  textColor = '#1a1a1a',
   onRemove,
   isEditing = false
 }) => {
@@ -56,7 +60,8 @@ export const KPICard: React.FC<KPICardProps> = ({
       <div 
         ref={containerRef}
         style={{
-          backgroundColor: 'white',
+          backgroundColor: backgroundColor,
+          color: textColor,
           borderRadius: '12px',
           border: '1px solid #e5e7eb',
           width: '100%',
@@ -239,7 +244,8 @@ export const KPICard: React.FC<KPICardProps> = ({
         onMouseEnter={() => setShowActions(true)}
         onMouseLeave={() => setShowActions(false)}
         style={{
-          backgroundColor: 'white',
+          backgroundColor: backgroundColor,
+          color: textColor,
           borderRadius: '12px',
           border: '1px solid #e5e7eb',
           overflow: 'hidden',
@@ -277,7 +283,8 @@ export const KPICard: React.FC<KPICardProps> = ({
         <div style={{ 
           fontSize: '11px', 
           fontWeight: 500, 
-          color: '#6b7280', 
+          color: textColor, 
+          opacity: 0.7,
           marginBottom: '6px',
           textAlign: 'center',
           textTransform: 'uppercase',
@@ -292,7 +299,7 @@ export const KPICard: React.FC<KPICardProps> = ({
         <div style={{ 
           fontSize: '28px', 
           fontWeight: 700, 
-          color: '#111827',
+          color: textColor,
           lineHeight: 1.1
         }}>
           {formatValue(value)}
@@ -308,7 +315,8 @@ export const KPICard: React.FC<KPICardProps> = ({
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}
       style={{
-        backgroundColor: 'white',
+        backgroundColor: backgroundColor,
+        color: textColor,
         borderRadius: '12px',
         border: '1px solid #e5e7eb',
         overflow: 'hidden',
@@ -343,8 +351,9 @@ export const KPICard: React.FC<KPICardProps> = ({
           width: dimensions.width,
           height: dimensions.height,
           margin: { l: 8, r: 8, t: 30, b: 8 },
-          paper_bgcolor: 'white',
-          plot_bgcolor: 'white',
+          paper_bgcolor: backgroundColor,
+          plot_bgcolor: backgroundColor,
+          font: { color: textColor },
           showlegend: false,
         }}
         config={{
@@ -366,6 +375,9 @@ interface KPICardsContainerProps {
   onAddKPI?: () => void;
   editingKPIIndex?: number | null;
   isAddingKPI?: boolean;
+  backgroundColor?: string;
+  textColor?: string;
+  hideAddButton?: boolean;
 }
 
 export const KPICardsContainer: React.FC<KPICardsContainerProps> = ({ 
@@ -374,7 +386,10 @@ export const KPICardsContainer: React.FC<KPICardsContainerProps> = ({
   onRemoveKPI,
   onAddKPI,
   editingKPIIndex,
-  isAddingKPI = false
+  isAddingKPI = false,
+  backgroundColor = '#ffffff',
+  textColor = '#1a1a1a',
+  hideAddButton = false
 }) => {
   const kpis = kpiSpecs || [];
   const [addButtonHovered, setAddButtonHovered] = useState(false);
@@ -412,13 +427,15 @@ export const KPICardsContainer: React.FC<KPICardsContainerProps> = ({
               onEdit={onEditKPI}
               onRemove={onRemoveKPI}
               isEditing={editingKPIIndex === index}
+              backgroundColor={backgroundColor}
+              textColor={textColor}
             />
           </div>
         ))}
       </div>
       
       {/* Floating Add KPI Button - Similar to filter button style */}
-      {onAddKPI && (
+      {onAddKPI && !hideAddButton && (
         <button
           onClick={onAddKPI}
           disabled={isAddingKPI}

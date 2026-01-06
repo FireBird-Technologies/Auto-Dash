@@ -2572,6 +2572,26 @@ body::before {
   }
 }
 
+/* Fade-in animation for charts as they load */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.chart-fade-in {
+  animation: fadeIn 0.5s ease-out;
+}
+
+.kpi-fade-in {
+  animation: fadeIn 0.4s ease-out;
+}
+
 /* Skeleton sparkles */
 .skeleton-sparkles {
   position: absolute;
@@ -2629,10 +2649,20 @@ body::before {
   flex-direction: column;
   align-items: stretch;
   justify-content: flex-start;
-  background: white;
+  background: var(--dashboard-bg-color, white);
   border-radius: 12px;
   padding: 32px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+  transition: background-color 0.3s ease;
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: calc(100vh - 200px);
+}
+
+.chart-display.loading {
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 20px !important;
   overflow: auto;
   max-height: 100%;
 }

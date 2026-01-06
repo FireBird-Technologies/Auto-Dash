@@ -221,11 +221,26 @@ async def generate_chart_spec(
     )
     dataset_context += execution_info
     
-    # Generate the visualization with dataset context
-    result, full_plan, dashboard_title, kpi_cards = await viz_module.aforward(
+    # Generate the visualization with dataset context using streaming
+    # Collect all results from the stream
+    chart_specs = []
+    kpi_cards = []
+    full_plan = {}
+    dashboard_title = "Dashboard"
+    
+    async for event_type, chart_data, metadata in viz_module.aforward(
         query=query,
         dataset_context=dataset_context
-    )
+    ):
+        if event_type == 'dashboard_info':
+            dashboard_title = chart_data.get('dashboard_title', 'Dashboard')
+            full_plan = chart_data.get('full_plan', {})
+        elif event_type == 'kpi_card':
+            kpi_cards.append(chart_data)
+        elif event_type == 'chart':
+            chart_specs.append(chart_data)
+    
+    result = chart_specs
     
     # Handle array of chart specs
     if isinstance(result, list):
@@ -274,32 +289,66 @@ async def generate_chart_spec(
     
     return result, full_plan or {}, dashboard_title, kpi_cards
 
-#     except Exception as e:
-#         logger.error(f"Failed to generate visualization: {e}")
-#         # Return error response with a simple error figure
-#         error_code = f"""
-# import plotly.graph_objects as go
 
-# fig = go.Figure()
-# fig.add_annotation(
-#     text="Error: {str(e)}",
-#     xref="paper", yref="paper",
-#     x=0.5, y=0.5, showarrow=False,
-#     font=dict(size=14, color="red")
-# )
-# fig.update_layout(title="Visualization Error")
-# fig
-# """
-#         execution_result = execute_plotly_code(error_code, df)
-
-#         figure = execution_result.get('figure') if isinstance(execution_result, dict) else None
-
-#         return [{
-#             "chart_type": "error",
-#             "title": "Error",
-#             "chart_index": 0,
-#             "chart_spec": error_code,
-#             "figure": figure,
-#             "execution_success": False,
-#             "execution_error": f"Failed to generate visualization: {str(e)}"
-#         }]
+async def generate_chart_spec_streaming(
+    df: pd.DataFrame | Dict[str, pd.DataFrame], 
+    query: str, 
+    dataset_context: str = None,
+    user_id: int = None,
+    dataset_id: str = None
+):
+    """
+    Streaming version of generate_chart_spec that yields charts as they complete.
+    
+    Yields:
+        tuple: (event_type, data, metadata)
+        - event_type: 'dashboard_info', 'kpi_card', 'chart', 'complete', 'error'
+        - data: dict with chart information
+        - metadata: additional context (plan, progress, etc.)
+    """
+    # Get or initialize the visualization module
+    viz_module = PlotlyVisualizationModule(user_id=user_id, dataset_id=dataset_id)
+    
+    # Data is always dict format now
+    sheet_names = list(df.keys())
+    first_sheet = df[sheet_names[0]]
+    
+    # Use dataset context or provide fallback
+    if not dataset_context:
+        columns = [str(col) for col in first_sheet.columns.tolist()]
+        dataset_context = f"Dataset with {len(first_sheet)} rows and {len(first_sheet.columns)} columns. Columns: {', '.join(columns)}"
+    
+    # Always add execution environment info
+    execution_info = (
+        "\n\nIMPORTANT - Available DataFrames:\n"
+        f"- Available sheets: {', '.join(sheet_names)}\n"
+        f"- Default DataFrame 'df' contains: '{sheet_names[0]}'\n"
+        f"- Access sheets by name: {', '.join([repr(name) for name in sheet_names])}\n"
+        "- Use 'df' for default data or access specific sheets directly"
+    )
+    dataset_context += execution_info
+    
+    # Use the aforward method which always streams
+    async for event_type, chart_data, metadata in viz_module.aforward(query, dataset_context):
+        if event_type == 'dashboard_info':
+            # Just yield the dashboard info
+            yield (event_type, chart_data, metadata)
+        
+        elif event_type in ('kpi_card', 'chart'):
+            # Execute the chart spec and add the figure
+            code = chart_data.get('chart_spec', '')
+            execution_result = execute_plotly_code(code, df)
+            
+            chart_data['figure'] = execution_result.get('figure')
+            chart_data['execution_success'] = execution_result.get('success')
+            if not execution_result.get('success'):
+                chart_data['execution_error'] = execution_result.get('error')
+                logger.warning(f"Chart execution failed: {execution_result.get('error')}")
+            
+            yield (event_type, chart_data, metadata)
+        
+        elif event_type == 'complete':
+            yield (event_type, chart_data, metadata)
+        
+        elif event_type == 'error':
+            yield (event_type, chart_data, metadata)
