@@ -17,6 +17,8 @@ export const PublicDashboard: React.FC = () => {
     dataset_id: string;
     filename: string;
     dashboard_title: string | null;
+    background_color?: string;
+    text_color?: string;
     figures_data: Array<{
       chart_index: number;
       figure: any;
@@ -287,7 +289,10 @@ export const PublicDashboard: React.FC = () => {
         flex: 1,
         overflow: 'auto'
       }}>
-        <div className="chart-display">
+        <div className="chart-display" style={{
+          background: dashboardData.background_color || '#ffffff',
+          color: dashboardData.text_color || '#1a1a1a'
+        }}>
           {/* Dashboard Title */}
           <div style={{ 
             padding: '24px 20px 0 20px',
@@ -298,7 +303,7 @@ export const PublicDashboard: React.FC = () => {
             <h2 style={{
               fontSize: '2rem',
               fontWeight: 700,
-              color: '#1f2937',
+              color: dashboardData.text_color || '#1a1a1a',
               margin: 0,
               display: 'inline-flex',
               alignItems: 'center',
@@ -317,7 +322,9 @@ export const PublicDashboard: React.FC = () => {
               ...spec,
               chart_spec: '',
               chart_index: spec.chart_index
-            }))} 
+            }))}
+            backgroundColor={dashboardData.background_color || '#ffffff'}
+            textColor={dashboardData.text_color || '#1a1a1a'}
           />
           
           {/* Charts Grid - Same layout as dashboard with notes icon */}
@@ -341,7 +348,7 @@ export const PublicDashboard: React.FC = () => {
                 {/* Chart */}
                 <div style={{
                   flex: 1,
-                  backgroundColor: 'white',
+                  backgroundColor: dashboardData.background_color || '#ffffff',
                   borderRadius: '12px',
                   border: '1px solid #e5e7eb',
                   overflow: 'hidden',
@@ -358,6 +365,8 @@ export const PublicDashboard: React.FC = () => {
                     }}
                     data={[]}
                     chartIndex={spec.chart_index}
+                    backgroundColor={dashboardData.background_color || '#ffffff'}
+                    textColor={dashboardData.text_color || '#1a1a1a'}
                   />
                 </div>
                 

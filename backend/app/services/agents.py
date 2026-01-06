@@ -1316,8 +1316,20 @@ class PlotlyVisualizationModule(dspy.Module):
                 logger.warning(f"Could not load dataset {self.dataset_id} for user {self.user_id}")
 
     async def aforward(self, query, dataset_context):
+        """
+        Generate charts from a query, streaming results as they complete.
+        
+        Args:
+            query: Natural language query
+            dataset_context: Context about the dataset
+        
+        Yields:
+            (event_type, data, metadata) tuples as charts complete
+            - event_type: 'dashboard_info', 'kpi_card', 'chart', 'complete', 'error'
+            - data: dict with chart/info data
+            - metadata: additional context
+        """
         # Load dataset from dataset_service and set in context variable for metric function
-
         self._load_dataset()
         if self.dataset:
             _dataset_context.set(self.dataset)
@@ -1335,9 +1347,18 @@ class PlotlyVisualizationModule(dspy.Module):
                 plan_output = json.loads(plan_output)
             except json.JSONDecodeError:
                 logger.error("Failed to parse plan JSON: %s", plan.plan)
-                return self.fail, None, "Unable to generate", []
+                yield ('error', {'message': 'Failed to parse plan'}, {})
+                return
 
         logger.info("GenerateVisualizationPlan result: %s", plan_output)
+        
+        # Get all available column names from the dataset(s)
+        available_columns = []
+        if self.dataset:
+            for sheet_name, sheet_df in self.dataset.items():
+                if hasattr(sheet_df, 'columns'):
+                    available_columns.extend([str(col) for col in sheet_df.columns.tolist()])
+            available_columns = list(set(available_columns))
         
         # Extract dashboard title from plan
         dashboard_title = getattr(plan, 'dashboard_title', 'Dashboard Analysis')
@@ -1441,80 +1462,112 @@ class PlotlyVisualizationModule(dspy.Module):
                 provider = "UNKNOWN"
             # medium_lm = dspy.LM(default_model, max_tokens=2950,api_key=os.getenv(provider+'_API_KEY'), temperature=1, cache=False)
 
-            # Execute KPI tasks and regular chart tasks separately
-            kpi_results = await asyncio.gather(*kpi_tasks) if kpi_tasks else []
-            chart_results = await asyncio.gather(*tasks)
+            # Yield dashboard info
+            yield ('dashboard_info', {
+                'dashboard_title': dashboard_title,
+                'full_plan': plan_output,
+                'kpi_count': len(kpi_tasks)
+            }, {'plan_output': plan_output})
             
-            # Get all available column names from the dataset(s)
-            available_columns = []
-            if self.dataset:
-                for sheet_name, sheet_df in self.dataset.items():
-                    if hasattr(sheet_df, 'columns'):
-                        available_columns.extend([str(col) for col in sheet_df.columns.tolist()])
-                available_columns = list(set(available_columns))  # Remove duplicates
-                logger.info(f"Available columns for filtering: {available_columns}")
+            # STREAMING: Process KPIs as they complete
+            kpi_count = 0
+            if kpi_tasks:
+                # Create tuples of (task, idx, plan) for tracking
+                task_infos = [(task, idx, kpi_plans[idx]) for idx, task in enumerate(kpi_tasks)]
+                for coro in asyncio.as_completed([t[0] for t in task_infos]):
+                    try:
+                        result = await coro
+                        # Find the matching task info
+                        idx, kpi_plan = None, None
+                        for task, task_idx, task_plan in task_infos:
+                            # as_completed returns the same coroutine objects
+                            if task is coro:
+                                idx, kpi_plan = task_idx, task_plan
+                                break
+                        
+                        if idx is None:
+                            # Fallback: just use the count
+                            idx = kpi_count
+                            kpi_plan = kpi_plans[idx] if idx < len(kpi_plans) else {}
+                        
+                        raw_code = getattr(result, 'plotly_code', str(result))
+                        cleaned = clean_plotly_code(raw_code)
+                        columns_used = extract_columns_from_code(cleaned, available_columns)
+                        
+                        kpi_data = {
+                            'chart_spec': cleaned,
+                            'chart_type': 'kpi_card',
+                            'title': kpi_plan.get('title', f'KPI {idx + 1}'),
+                            'chart_index': idx,
+                            'plan': kpi_plan,
+                            'is_kpi': True,
+                            'columns_used': columns_used
+                        }
+                        
+                        kpi_count += 1
+                        yield ('kpi_card', kpi_data, {'completed': kpi_count, 'total_kpis': len(kpi_tasks)})
+                    except Exception as e:
+                        logger.error(f"Error generating KPI: {e}")
             
-            # Process KPI card results
-            for i, r in enumerate(kpi_results):
-                raw_code = getattr(r, 'plotly_code', str(r))
-                cleaned = clean_plotly_code(raw_code)
+            # STREAMING: Process charts as they complete
+            chart_count = 0
+            if tasks:
+                # Create tuples of (task, idx, type, plan) for tracking
+                task_infos = []
+                for idx, task in enumerate(tasks):
+                    chart_type = chart_types_order[idx] if idx < len(chart_types_order) else 'bar_chart'
+                    chart_plan = chart_plans.get(chart_type, plan_output)
+                    task_infos.append((task, idx, chart_type, chart_plan))
                 
-                # Extract columns_used by checking which DataFrame columns appear in the code
-                columns_used = extract_columns_from_code(cleaned, available_columns)
-                
-                kpi_plan = kpi_plans[i] if i < len(kpi_plans) else {}
-                title = kpi_plan.get('title', f'KPI {i + 1}')
-                
-                kpi_cards_specs.append({
-                    'chart_spec': cleaned,
-                    'chart_type': 'kpi_card',
-                    'title': title,
-                    'chart_index': i,
-                    'plan': kpi_plan,
-                    'is_kpi': True,
-                    'columns_used': columns_used
-                })
-                
-                logger.info(f"KPI {i+1}: {title} - columns_used: {columns_used} - cleaned successfully")
+                for coro in asyncio.as_completed([t[0] for t in task_infos]):
+                    try:
+                        result = await coro
+                        # Find the matching task info
+                        idx, chart_type, chart_plan = None, None, None
+                        for task, task_idx, task_type, task_plan in task_infos:
+                            if task is coro:
+                                idx, chart_type, chart_plan = task_idx, task_type, task_plan
+                                break
+                        
+                        if idx is None:
+                            # Fallback
+                            idx = chart_count
+                            chart_type = chart_types_order[idx] if idx < len(chart_types_order) else 'bar_chart'
+                            chart_plan = chart_plans.get(chart_type, plan_output)
+                        
+                        raw_code = getattr(result, 'plotly_code', str(result))
+                        cleaned = clean_plotly_code(raw_code)
+                        columns_used = extract_columns_from_code(cleaned, available_columns)
+                        
+                        title = "Visualization"
+                        try:
+                            if isinstance(chart_plan, dict) and 'title' in chart_plan:
+                                title = chart_plan['title']
+                        except:
+                            pass
+                        
+                        chart_data = {
+                            'chart_spec': cleaned,
+                            'chart_type': chart_type,
+                            'title': title,
+                            'chart_index': kpi_count + idx,
+                            'plan': chart_plan,
+                            'is_kpi': False,
+                            'columns_used': columns_used
+                        }
+                        
+                        chart_count += 1
+                        progress = int((chart_count / len(tasks)) * 100)
+                        yield ('chart', chart_data, {'completed': chart_count, 'total_charts': len(tasks), 'progress': progress})
+                    except Exception as e:
+                        logger.error(f"Error generating chart: {e}")
             
-            # Process regular chart results
-            for i, r in enumerate(chart_results):
-                raw_code = getattr(r, 'plotly_code', str(r))
-                cleaned = clean_plotly_code(raw_code)
-                
-                # Extract columns_used by checking which DataFrame columns appear in the code
-                columns_used = extract_columns_from_code(cleaned, available_columns)
-                
-                # Get chart type and title from the order we tracked
-                chart_type = chart_types_order[i] if i < len(chart_types_order) else list(self.chart_sigs.keys())[min(i, len(self.chart_sigs) - 1)]
-                title = "Visualization"
-                
-                # Get the plan for this specific chart
-                chart_plan = chart_plans.get(chart_type, plan_output)
-                
-                try:
-                    if chart_type in plan_output:
-                        chart_info = plan_output[chart_type]
-                        if isinstance(chart_info, dict) and 'title' in chart_info:
-                            title = chart_info['title']
-                except:
-                    pass
-                
-                chart_specs.append({
-                    'chart_spec': cleaned,
-                    'chart_type': chart_type,
-                    'title': title,
-                    'chart_index': len(kpi_cards_specs) + i,  # Offset by KPI count
-                    'plan': chart_plan,
-                    'is_kpi': False,
-                    'columns_used': columns_used
-                })
-                
-                logger.info(f"Chart {i+1} ({chart_type}): {title} - columns_used: {columns_used} - cleaned successfully")
-            
-            logger.info(f"Generated {len(kpi_cards_specs)} KPI cards and {len(chart_specs)} charts")
-            # Return tuple: (chart_specs, full_plan_output, dashboard_title, kpi_cards_specs)
-            return chart_specs, plan_output, dashboard_title, kpi_cards_specs
+            # Yield completion
+            yield ('complete', {
+                'message': f'Generated {kpi_count} KPI cards and {chart_count} chart(s)',
+                'total_charts': chart_count + kpi_count,
+                'kpi_count': kpi_count
+            }, {})
         else:
-            logger.info("Query not relevant for visualization. Returning FAIL_MESSAGE.")
-            return self.fail + str(plan.relevant_query), None, "Unable to generate", []
+            logger.info("Query not relevant for visualization")
+            yield ('complete', {'message': 'Query not relevant for visualization'}, {})
