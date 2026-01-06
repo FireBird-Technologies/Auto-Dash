@@ -100,6 +100,8 @@ class DashboardQuery(Base):
     query_type: Mapped[str] = mapped_column(String(50))  # "analyze", "edit", "add"
     dashboard_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     charts_data: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)  # Array of chart objects with code, figure, etc.
+    background_color: Mapped[str | None] = mapped_column(String(7), nullable=True, default="#ffffff")  # Hex color code
+    text_color: Mapped[str | None] = mapped_column(String(7), nullable=True, default="#1a1a1a")  # Hex color code for text
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
     
     dataset: Mapped["Dataset"] = relationship(back_populates="dashboard_queries")

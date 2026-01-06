@@ -520,7 +520,9 @@ class DatasetService:
         query: str,
         query_type: str,
         charts_data: List[Dict[str, Any]],
-        dashboard_title: Optional[str] = None
+        dashboard_title: Optional[str] = None,
+        background_color: Optional[str] = None,
+        text_color: Optional[str] = None
     ) -> DashboardQuery:
         """
         Save a dashboard query (analyze/edit/add) with per-chart code breakdown.
@@ -533,6 +535,8 @@ class DatasetService:
             query_type: "analyze", "edit", or "add"
             charts_data: List of chart objects with code, figure, title, chart_type, chart_index
             dashboard_title: Optional dashboard title
+            background_color: Optional dashboard background color (hex code)
+            text_color: Optional dashboard text color (hex code)
         """
         # Find dataset by dataset_id string
         dataset = db.query(Dataset).filter(
@@ -551,7 +555,9 @@ class DatasetService:
             query=query,
             query_type=query_type,
             dashboard_title=dashboard_title,
-            charts_data=charts_data
+            charts_data=charts_data,
+            background_color=background_color,
+            text_color=text_color
         )
         
         db.add(dashboard_query)
@@ -588,10 +594,57 @@ class DatasetService:
                 "query_type": q.query_type,
                 "dashboard_title": q.dashboard_title,
                 "charts_data": q.charts_data,
+                "background_color": q.background_color,
+                "text_color": q.text_color,
                 "created_at": q.created_at.isoformat()
             }
             for q in queries
         ]
+    
+    def update_dashboard_colors(
+        self,
+        db: Session,
+        user_id: int,
+        dataset_id: str,
+        background_color: str,
+        text_color: str
+    ) -> Optional[DashboardQuery]:
+        """
+        Update colors for the latest dashboard query.
+        
+        Args:
+            db: Database session
+            user_id: User ID
+            dataset_id: Dataset identifier (string)
+            background_color: Dashboard background color (hex code)
+            text_color: Dashboard text color (hex code)
+        
+        Returns:
+            Updated DashboardQuery or None if not found
+        """
+        dataset = db.query(Dataset).filter(
+            and_(
+                Dataset.user_id == user_id,
+                Dataset.dataset_id == dataset_id
+            )
+        ).first()
+        
+        if not dataset:
+            return None
+        
+        # Get the latest dashboard query
+        latest_query = db.query(DashboardQuery).filter(
+            DashboardQuery.dataset_id == dataset.id
+        ).order_by(DashboardQuery.created_at.desc()).first()
+        
+        if latest_query:
+            latest_query.background_color = background_color
+            latest_query.text_color = text_color
+            db.commit()
+            db.refresh(latest_query)
+            return latest_query
+        
+        return None
     
     # ==================== Chat Message Persistence ====================
     

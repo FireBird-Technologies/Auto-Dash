@@ -2729,6 +2729,36 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showColorPicker]);
 
+  // Save dashboard colors to database when they change
+  useEffect(() => {
+    // Only save if we have charts (dashboard exists) and colors are not default
+    if (chartSpecs.length === 0 || !datasetId) return;
+
+    const saveColors = async () => {
+      try {
+        const response = await fetch(`${config.backendUrl}/api/data/datasets/${datasetId}/dashboard/colors`, {
+          method: 'PUT',
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          credentials: 'include',
+          body: JSON.stringify({
+            background_color: dashboardBgColor,
+            text_color: dashboardTextColor
+          })
+        });
+
+        if (!response.ok) {
+          console.error('Failed to save dashboard colors');
+        }
+      } catch (error) {
+        console.error('Error saving dashboard colors:', error);
+      }
+    };
+
+    // Debounce the save operation
+    const timeoutId = setTimeout(saveColors, 1000);
+    return () => clearTimeout(timeoutId);
+  }, [dashboardBgColor, dashboardTextColor, chartSpecs.length, datasetId]);
+
   // Calculate how many skeletons to show
   const getSkeletonCounts = () => {
     if (!isLoading || streamingComplete) {
