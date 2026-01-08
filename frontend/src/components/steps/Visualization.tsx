@@ -169,7 +169,7 @@ const ChartItem: React.FC<ChartItemProps> = ({
       const figureData = chartSpec.figure.data;
       const colors: string[] = [];
       
-      figureData.forEach((trace: any, index: number) => {
+      figureData.forEach((trace: any) => {
         // Extract color based on trace type
         if (trace.type === 'bar') {
           if (trace.marker?.color) {
@@ -1560,7 +1560,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   const [, setLoadingMessage] = useState('Crafting beautiful insights from your data...');
   const [chartSpecs, setChartSpecs] = useState<any[]>([]);  // Changed to array
   const [expectedKPICount, setExpectedKPICount] = useState<number | null>(null); // Track expected KPI count
-  const [expectedChartCount, setExpectedChartCount] = useState<number | null>(null); // Track expected chart count
+  const [_expectedChartCount, setExpectedChartCount] = useState<number | null>(null); // Track expected chart count
   const [streamingComplete, setStreamingComplete] = useState(false); // Track if streaming is done
   const [dashboardBgColor, setDashboardBgColor] = useState('#ffffff'); // Dashboard background color
   const [dashboardTextColor, setDashboardTextColor] = useState('#1a1a1a'); // Dashboard text color
@@ -1607,7 +1607,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   const [chartPreview, setChartPreview] = useState<{chartIndex: number, figure: any, code: string} | null>(null);
   const [isExecutingCode, setIsExecutingCode] = useState(false);
   const [dashboardTitle, setDashboardTitle] = useState<string>('');
-  const [titleSetFromBackend, setTitleSetFromBackend] = useState<boolean>(false);
+  const [_titleSetFromBackend, setTitleSetFromBackend] = useState<boolean>(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [showAddChartPopup, setShowAddChartPopup] = useState(false);
   const [addingChart, setAddingChart] = useState(false);
