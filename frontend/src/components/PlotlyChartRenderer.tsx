@@ -14,6 +14,8 @@ interface PlotlyChartRendererProps {
   viewMode?: 'list' | 'grid';
   backgroundColor?: string;
   textColor?: string;
+  chartColors?: string[];
+  chartOpacities?: number[];
 }
 
 // Helper function to sanitize verbose Plotly error messages
@@ -53,6 +55,56 @@ const sanitizeErrorMessage = (error: string): string => {
   return firstLine;
 };
 
+// Helper function to determine if a color is dark
+const isDarkColor = (color: string): boolean => {
+  // Remove # if present
+  const hex = color.replace('#', '');
+  
+  // Convert to RGB
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+  
+  // Calculate luminance
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  
+  // Return true if dark (luminance < 0.5)
+  return luminance < 0.5;
+};
+
+// Helper function to get shadow based on background color
+const getShadow = (backgroundColor: string, hover: boolean = false): string => {
+  // Normalize color (remove # and convert to lowercase)
+  const normalizedColor = backgroundColor.replace('#', '').toLowerCase();
+  
+  // Check if color is white or very light (ffffff, fff, or close to white)
+  const isWhite = normalizedColor === 'ffffff' || normalizedColor === 'fff' || 
+                  (normalizedColor.length === 6 && 
+                   parseInt(normalizedColor.substring(0, 2), 16) > 250 &&
+                   parseInt(normalizedColor.substring(2, 4), 16) > 250 &&
+                   parseInt(normalizedColor.substring(4, 6), 16) > 250);
+  
+  if (isDarkColor(backgroundColor)) {
+    // Light glow for dark backgrounds
+    if (hover) {
+      return '0 6px 24px rgba(255, 255, 255, 0.2), 0 3px 12px rgba(255, 255, 255, 0.15)';
+    }
+    return '0 4px 20px rgba(255, 255, 255, 0.15), 0 2px 8px rgba(255, 255, 255, 0.1)';
+  } else if (isWhite) {
+    // Lower opacity shadow for white backgrounds
+    if (hover) {
+      return '0 6px 24px rgba(0, 0, 0, 0.08), 0 3px 12px rgba(0, 0, 0, 0.05)';
+    }
+    return '0 4px 20px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.04)';
+  } else {
+    // Dark shadow for light backgrounds
+    if (hover) {
+      return '0 6px 24px rgba(0, 0, 0, 0.15), 0 3px 12px rgba(0, 0, 0, 0.1)';
+    }
+    return '0 4px 20px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08)';
+  }
+};
+
 export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({ 
   chartSpec, 
   data, 
@@ -63,7 +115,9 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
   onZoom,
   viewMode = 'list',
   backgroundColor = '#ffffff',
-  textColor = '#1a1a1a'
+  textColor = '#1a1a1a',
+  chartColors,
+  chartOpacities
 }) => {
   const notification = useNotification();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -312,15 +366,16 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
         cursor: 'pointer',
         transition: 'all 0.2s ease',
         display: 'flex',
-        flexDirection: 'column'
+        flexDirection: 'column',
+        boxShadow: getShadow(backgroundColor, false)
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.2)';
-        e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+        e.currentTarget.style.borderColor = isDarkColor(backgroundColor) ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)';
+        e.currentTarget.style.boxShadow = getShadow(backgroundColor, true);
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.1)';
-        e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.05)';
+        e.currentTarget.style.borderColor = isDarkColor(backgroundColor) ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+        e.currentTarget.style.boxShadow = getShadow(backgroundColor, false);
       }}
     >
       {/* Edit Button - Top Left */}
@@ -601,7 +656,49 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
             minHeight: 0
           }}>
             <Plot
-              data={figureData.data || []}
+              data={(figureData.data || []).map((trace: any, index: number) => {
+                const updatedTrace = { ...trace };
+                
+                // Helper to convert hex to rgba
+                const hexToRgba = (hex: string, opacity: number): string => {
+                  const normalizedHex = hex.replace('#', '');
+                  const r = parseInt(normalizedHex.substring(0, 2), 16);
+                  const g = parseInt(normalizedHex.substring(2, 4), 16);
+                  const b = parseInt(normalizedHex.substring(4, 6), 16);
+                  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+                };
+                
+                // Get color and opacity for this trace
+                const traceColor = chartColors?.[index] || trace.marker?.color || trace.line?.color || '#ff6b6b';
+                const traceOpacity = chartOpacities?.[index] ?? 1;
+                
+                // Convert color to rgba with opacity
+                const rgbaColor = traceColor.startsWith('#') ? hexToRgba(traceColor, traceOpacity) : traceColor;
+                
+                // Apply color with opacity based on trace type
+                if (trace.type === 'bar') {
+                  updatedTrace.marker = { ...trace.marker, color: rgbaColor };
+                } else if (trace.type === 'scatter') {
+                  if (trace.mode?.includes('lines')) {
+                    updatedTrace.line = { ...trace.line, color: rgbaColor };
+                    if (trace.marker) {
+                      updatedTrace.marker = { ...trace.marker, color: rgbaColor };
+                    }
+                  } else {
+                    updatedTrace.marker = { ...trace.marker, color: rgbaColor };
+                  }
+                } else if (trace.type === 'pie') {
+                  // For pie charts, apply opacity to all colors
+                  if (trace.marker?.colors) {
+                    updatedTrace.marker = {
+                      ...trace.marker,
+                      colors: trace.marker.colors.map((c: string) => c.startsWith('#') ? hexToRgba(c, traceOpacity) : c)
+                    };
+                  }
+                }
+                
+                return updatedTrace;
+              })}
               layout={{
                 ...figureData.layout,
                 autosize: true,

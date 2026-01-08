@@ -19,6 +19,7 @@ export const PublicDashboard: React.FC = () => {
     dashboard_title: string | null;
     background_color?: string;
     text_color?: string;
+    container_colors?: Record<number, {bg: string, text: string, opacity: number}>;
     figures_data: Array<{
       chart_index: number;
       figure: any;
@@ -325,6 +326,8 @@ export const PublicDashboard: React.FC = () => {
             }))}
             backgroundColor={dashboardData.background_color || '#ffffff'}
             textColor={dashboardData.text_color || '#1a1a1a'}
+            containerColors={dashboardData.container_colors}
+            applyToContainers={false}
           />
           
           {/* Charts Grid - Same layout as dashboard with notes icon */}
@@ -336,39 +339,56 @@ export const PublicDashboard: React.FC = () => {
             alignItems: 'start',
             position: 'relative'
           }}>
-            {regularCharts.map((spec) => (
-              <div
-                key={`chart-wrapper-${spec.chart_index}`}
-                style={{
-                  display: 'flex',
-                  gap: '12px',
-                  alignItems: 'flex-start'
-                }}
-              >
-                {/* Chart */}
-                <div style={{
-                  flex: 1,
-                  backgroundColor: dashboardData.background_color || '#ffffff',
-                  borderRadius: '12px',
-                  border: '1px solid #e5e7eb',
-                  overflow: 'hidden',
-                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-                  minHeight: '600px'
-                }}>
-                  <PlotlyChartRenderer
-                    chartSpec={{
-                      chart_spec: '',
-                      chart_type: spec.chart_type,
-                      title: spec.title,
-                      chart_index: spec.chart_index,
-                      figure: spec.figure
-                    }}
-                    data={[]}
-                    chartIndex={spec.chart_index}
-                    backgroundColor={dashboardData.background_color || '#ffffff'}
-                    textColor={dashboardData.text_color || '#1a1a1a'}
-                  />
-                </div>
+            {regularCharts.map((spec) => {
+              // Get container-specific colors or use defaults
+              const containerColor = dashboardData.container_colors?.[spec.chart_index];
+              const actualBg = containerColor?.bg || dashboardData.background_color || '#ffffff';
+              const actualText = containerColor?.text || dashboardData.text_color || '#1a1a1a';
+              const actualOpacity = containerColor?.opacity ?? 1;
+              
+              // Helper to convert hex to rgba
+              const hexToRgba = (hex: string, opacity: number): string => {
+                const normalizedHex = hex.replace('#', '');
+                const r = parseInt(normalizedHex.substring(0, 2), 16);
+                const g = parseInt(normalizedHex.substring(2, 4), 16);
+                const b = parseInt(normalizedHex.substring(4, 6), 16);
+                return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+              };
+              
+              return (
+                <div
+                  key={`chart-wrapper-${spec.chart_index}`}
+                  style={{
+                    display: 'flex',
+                    gap: '12px',
+                    alignItems: 'flex-start'
+                  }}
+                >
+                  {/* Chart */}
+                  <div style={{
+                    flex: 1,
+                    backgroundColor: hexToRgba(actualBg, actualOpacity),
+                    color: actualText,
+                    borderRadius: '12px',
+                    border: '1px solid #e5e7eb',
+                    overflow: 'hidden',
+                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+                    minHeight: '600px'
+                  }}>
+                    <PlotlyChartRenderer
+                      chartSpec={{
+                        chart_spec: '',
+                        chart_type: spec.chart_type,
+                        title: spec.title,
+                        chart_index: spec.chart_index,
+                        figure: spec.figure
+                      }}
+                      data={[]}
+                      chartIndex={spec.chart_index}
+                      backgroundColor={actualBg}
+                      textColor={actualText}
+                    />
+                  </div>
                 
                 {/* Notes Icon - Outside, to the right (same as dashboard) */}
                 {spec.notes && (
@@ -500,8 +520,9 @@ export const PublicDashboard: React.FC = () => {
                     )}
                   </div>
                 )}
-              </div>
-            ))}
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>

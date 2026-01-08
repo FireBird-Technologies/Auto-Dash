@@ -2736,6 +2736,7 @@ async def share_dashboard(
         dashboard_title = request.get("dashboard_title")
         background_color = request.get("background_color", "#ffffff")
         text_color = request.get("text_color", "#1a1a1a")
+        container_colors = request.get("container_colors", {})
         
         if not figures_data:
             raise HTTPException(status_code=400, detail="No figures data provided")
@@ -2763,7 +2764,8 @@ async def share_dashboard(
             dashboard_title,
             hours_valid,
             background_color,
-            text_color
+            text_color,
+            container_colors
         )
         
         # Build public URL

@@ -43,7 +43,71 @@ interface ChartItemProps {
   applyFilterToChart: (index: number) => void;
   getFilteredChartSpec: (spec: any, index: number) => any;
   viewMode: 'list' | 'grid';
+  activeContainerColorPicker: number | null;
+  setActiveContainerColorPicker: (index: number | null) => void;
+  containerColors: Record<number, {bg: string, text: string, opacity: number}>;
+  setContainerColors: React.Dispatch<React.SetStateAction<Record<number, {bg: string, text: string, opacity: number}>>>;
+  applyToContainers: boolean;
+  setApplyToContainers: (value: boolean) => void;
+  chartColors?: Record<number, string[]>;
+  setChartColors?: React.Dispatch<React.SetStateAction<Record<number, string[]>>>;
+  chartOpacities?: Record<number, number[]>;
+  setChartOpacities?: React.Dispatch<React.SetStateAction<Record<number, number[]>>>;
+  activeChartColorPicker?: number | null;
+  setActiveChartColorPicker?: (index: number | null) => void;
+  onChartColorChange?: (chartIndex: number, traceIndex: number, color: string) => void;
+  setChartSpecs?: React.Dispatch<React.SetStateAction<any[]>>;
 }
+
+// Helper function to determine if a color is dark
+const isDarkColor = (color: string): boolean => {
+  // Remove # if present
+  const hex = color.replace('#', '');
+  
+  // Convert to RGB
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+  
+  // Calculate luminance
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  
+  // Return true if dark (luminance < 0.5)
+  return luminance < 0.5;
+};
+
+// Helper function to convert hex color to rgba with opacity
+const hexToRgba = (hex: string, opacity: number): string => {
+  const normalizedHex = hex.replace('#', '');
+  const r = parseInt(normalizedHex.substring(0, 2), 16);
+  const g = parseInt(normalizedHex.substring(2, 4), 16);
+  const b = parseInt(normalizedHex.substring(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+};
+
+// Helper function to get shadow based on background color
+const getShadow = (backgroundColor: string): string => {
+  // Normalize color (remove # and convert to lowercase)
+  const normalizedColor = backgroundColor.replace('#', '').toLowerCase();
+  
+  // Check if color is white or very light (ffffff, fff, or close to white)
+  const isWhite = normalizedColor === 'ffffff' || normalizedColor === 'fff' || 
+                  (normalizedColor.length === 6 && 
+                   parseInt(normalizedColor.substring(0, 2), 16) > 250 &&
+                   parseInt(normalizedColor.substring(2, 4), 16) > 250 &&
+                   parseInt(normalizedColor.substring(4, 6), 16) > 250);
+  
+  if (isDarkColor(backgroundColor)) {
+    // Light glow for dark backgrounds
+    return '0 4px 20px rgba(255, 255, 255, 0.15), 0 2px 8px rgba(255, 255, 255, 0.1)';
+  } else if (isWhite) {
+    // Lower opacity shadow for white backgrounds
+    return '0 4px 20px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.04)';
+  } else {
+    // Dark shadow for light backgrounds
+    return '0 4px 20px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08)';
+  }
+};
 
 const ChartItem: React.FC<ChartItemProps> = ({
   chartSpec,
@@ -76,9 +140,163 @@ const ChartItem: React.FC<ChartItemProps> = ({
   getFilteredChartSpec,
   viewMode,
   backgroundColor = '#ffffff',
-  textColor = '#1a1a1a'
+  textColor = '#1a1a1a',
+  activeContainerColorPicker,
+  setActiveContainerColorPicker,
+  containerColors,
+  setContainerColors,
+  applyToContainers,
+  setApplyToContainers,
+  chartColors,
+  setChartColors,
+  chartOpacities,
+  setChartOpacities,
+  activeChartColorPicker,
+  setActiveChartColorPicker,
+  onChartColorChange
 }) => {
   const notification = useNotification();
+  const colorPickerRef = useRef<HTMLDivElement>(null);
+  const colorPickerButtonRef = useRef<HTMLButtonElement>(null);
+  const colorPickerDropdownRef = useRef<HTMLDivElement>(null);
+  const chartColorPickerButtonRef = useRef<HTMLButtonElement>(null);
+  const chartColorPickerDropdownRef = useRef<HTMLDivElement>(null);
+  const [traceOpacities, setTraceOpacities] = useState<Record<number, number>>({});
+  
+  // Extract chart colors from figure data
+  useEffect(() => {
+    if (chartSpec?.figure?.data && setChartColors) {
+      const figureData = chartSpec.figure.data;
+      const colors: string[] = [];
+      
+      figureData.forEach((trace: any) => {
+        // Extract color based on trace type
+        if (trace.type === 'bar') {
+          if (trace.marker?.color) {
+            colors.push(Array.isArray(trace.marker.color) ? trace.marker.color[0] : trace.marker.color);
+          } else {
+            colors.push('#ff6b6b'); // Default color
+          }
+        } else if (trace.type === 'scatter') {
+          if (trace.mode?.includes('lines')) {
+            // Line chart
+            if (trace.line?.color) {
+              colors.push(trace.line.color);
+            } else {
+              colors.push('#ff6b6b');
+            }
+          } else {
+            // Scatter plot
+            if (trace.marker?.color) {
+              colors.push(Array.isArray(trace.marker.color) ? trace.marker.color[0] : trace.marker.color);
+            } else {
+              colors.push('#ff6b6b');
+            }
+          }
+        } else if (trace.type === 'pie') {
+          // For pie charts, extract all colors
+          if (trace.marker?.colors && Array.isArray(trace.marker.colors)) {
+            trace.marker.colors.forEach((color: string) => colors.push(color));
+          } else {
+            colors.push('#ff6b6b');
+          }
+        } else {
+          // Other chart types
+          if (trace.marker?.color) {
+            colors.push(Array.isArray(trace.marker.color) ? trace.marker.color[0] : trace.marker.color);
+          } else if (trace.line?.color) {
+            colors.push(trace.line.color);
+          } else {
+            colors.push('#ff6b6b'); // Default
+          }
+        }
+      });
+      
+      if (colors.length > 0) {
+        setChartColors(prev => ({
+          ...prev,
+          [chartIndex]: colors
+        }));
+      }
+    }
+  }, [chartSpec?.figure, chartIndex, setChartColors]);
+  
+  // Close color picker when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (activeContainerColorPicker === chartIndex && colorPickerRef.current && !colorPickerRef.current.contains(event.target as Node)) {
+        setActiveContainerColorPicker(null);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [activeContainerColorPicker, chartIndex, setActiveContainerColorPicker]);
+
+  // Position color picker dropdown relative to button
+  useEffect(() => {
+    if (activeContainerColorPicker === chartIndex && colorPickerButtonRef.current && colorPickerDropdownRef.current) {
+      const buttonRect = colorPickerButtonRef.current.getBoundingClientRect();
+      const dropdown = colorPickerDropdownRef.current;
+      
+      // Position below the button, aligned to the right
+      dropdown.style.top = `${buttonRect.bottom + 4}px`;
+      dropdown.style.right = `${window.innerWidth - buttonRect.right}px`;
+      
+      // Adjust if dropdown would go off screen
+      const dropdownRect = dropdown.getBoundingClientRect();
+      if (dropdownRect.bottom > window.innerHeight) {
+        dropdown.style.top = `${buttonRect.top - dropdownRect.height - 4}px`;
+      }
+      if (dropdownRect.left < 0) {
+        dropdown.style.right = 'auto';
+        dropdown.style.left = `${buttonRect.left}px`;
+      }
+    }
+  }, [activeContainerColorPicker, chartIndex]);
+
+  // Position chart color picker dropdown relative to button
+  useEffect(() => {
+    if (activeChartColorPicker === chartIndex && chartColorPickerButtonRef.current && chartColorPickerDropdownRef.current) {
+      const buttonRect = chartColorPickerButtonRef.current.getBoundingClientRect();
+      const dropdown = chartColorPickerDropdownRef.current;
+      
+      // Position below the button, aligned to the right
+      dropdown.style.top = `${buttonRect.bottom + 4}px`;
+      dropdown.style.right = `${window.innerWidth - buttonRect.right}px`;
+      
+      // Adjust if dropdown would go off screen
+      const dropdownRect = dropdown.getBoundingClientRect();
+      if (dropdownRect.bottom > window.innerHeight) {
+        dropdown.style.top = `${buttonRect.top - dropdownRect.height - 4}px`;
+      }
+      if (dropdownRect.left < 0) {
+        dropdown.style.right = 'auto';
+        dropdown.style.left = `${buttonRect.left}px`;
+      }
+    }
+  }, [activeChartColorPicker, chartIndex]);
+
+  // Close chart color picker when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (activeChartColorPicker === chartIndex && chartColorPickerDropdownRef.current && !chartColorPickerDropdownRef.current.contains(event.target as Node)) {
+        setActiveChartColorPicker?.(null);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [activeChartColorPicker, chartIndex, setActiveChartColorPicker]);
+  
+  // Get container-specific colors or use defaults
+  const containerColor = containerColors[chartIndex];
+  const actualBg = applyToContainers ? backgroundColor : (containerColor?.bg || '#ffffff');
+  const actualText = applyToContainers ? textColor : (containerColor?.text || '#1a1a1a');
+  const actualOpacity = applyToContainers ? 1 : (containerColor?.opacity ?? 1);
+  
+  // Convert background to rgba for container and chart
+  const actualBgRgba = hexToRgba(actualBg, actualOpacity);
   
   return (
     <div
@@ -97,12 +315,12 @@ const ChartItem: React.FC<ChartItemProps> = ({
         {/* Chart */}
         <div style={{
           flex: 1,
-          backgroundColor: backgroundColor,
-          color: textColor,
+          backgroundColor: actualBgRgba,
+          color: actualText,
           borderRadius: '12px',
           border: '1px solid #e5e7eb',
           overflow: 'hidden',
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+          boxShadow: getShadow(actualBg),
           minHeight: '600px',
           height: 'auto',
           display: 'flex',
@@ -114,17 +332,20 @@ const ChartItem: React.FC<ChartItemProps> = ({
             chartIndex={chartIndex}
             datasetId={datasetId}
             onChartFixed={onChartFixed}
-            backgroundColor={backgroundColor}
-            textColor={textColor}
+            backgroundColor={actualBgRgba}
+            textColor={actualText}
             onFixingStatusChange={onFixingStatusChange}
             onZoom={onZoom}
             viewMode={viewMode}
+            chartColors={chartColors?.[chartIndex]}
+            chartOpacities={chartOpacities?.[chartIndex]}
           />
         </div>
         
-        {/* Action Buttons: Filter, Notes, Duplicate, Delete */}
+        {/* Action Buttons: Delete, Filter, Color Picker, Notes */}
         <div 
           data-notes-dropdown
+          ref={colorPickerRef}
           style={{
             position: 'relative',
             flexShrink: 0,
@@ -499,6 +720,380 @@ const ChartItem: React.FC<ChartItemProps> = ({
             </div>
             );
           })()}
+
+          {/* Chart Color Picker Button - 3rd position */}
+          {chartSpec?.figure?.data && chartSpec.figure.data.length > 0 && (
+            <>
+          <button
+                ref={chartColorPickerButtonRef}
+                onClick={() => {
+                  const isOpening = activeChartColorPicker !== chartIndex;
+                  setActiveChartColorPicker?.(isOpening ? chartIndex : null);
+                }}
+                style={{
+                  background: 'rgba(255, 107, 107, 0.1)',
+                  backdropFilter: 'blur(4px)',
+                  border: '1px solid rgba(255, 107, 107, 0.3)',
+                  borderRadius: '50%',
+                  width: '40px',
+                  height: '40px',
+                  padding: '0',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.2s',
+                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                  color: '#ff6b6b'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 107, 107, 0.2)';
+                  e.currentTarget.style.transform = 'scale(1.05)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 107, 107, 0.1)';
+                  e.currentTarget.style.transform = 'scale(1)';
+                }}
+                title="Chart colors"
+              >
+                <svg width="16" height="16" viewBox="0 0 512 512" fill="currentColor">
+                  <path d="M362.7 19.3L314.3 67.7 444.3 197.7l48.4-48.4c25-25 25-65.5 0-90.5L453.3 19.3c-25-25-65.5-25-90.5 0zm-71 71L58.6 323.5c-10.4 10.4-18 23.3-22.2 37.4L1 481.2C-1.5 489.7 .8 498.8 7 505s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L421.7 220.3 291.7 90.3z"/>
+                </svg>
+              </button>
+
+              {/* Chart Color Picker Dropdown */}
+              {activeChartColorPicker === chartIndex && chartColors && chartColors[chartIndex] && (
+                <div
+                  ref={chartColorPickerDropdownRef}
+                  style={{
+                    position: 'fixed',
+                    background: 'white',
+                    borderRadius: '12px',
+                    padding: '16px',
+                    boxShadow: '0 10px 40px rgba(0, 0, 0, 0.15)',
+                    zIndex: 1000,
+                    minWidth: '220px',
+                    maxHeight: '400px',
+                    overflowY: 'auto'
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div style={{ marginBottom: '12px', fontSize: '13px', fontWeight: 600, color: '#374151' }}>
+                    Chart Colors
+                  </div>
+                  {chartSpec.figure.data.map((trace: any, traceIndex: number) => {
+                    const currentColor = chartColors[chartIndex]?.[traceIndex] || '#ff6b6b';
+                    const traceName = trace.name || `Trace ${traceIndex + 1}`;
+                    const currentOpacity = traceOpacities[traceIndex] ?? trace.opacity ?? 1;
+                    
+                    return (
+                      <div key={traceIndex} style={{ marginBottom: '16px', paddingBottom: '16px', borderBottom: traceIndex < chartSpec.figure.data.length - 1 ? '1px solid #e5e7eb' : 'none' }}>
+                        <label style={{ display: 'block', marginBottom: '8px', fontSize: '12px', fontWeight: 500, color: '#6b7280' }}>
+                          {traceName}
+                        </label>
+                        
+                        {/* Color Picker */}
+                        <div style={{ marginBottom: '12px' }}>
+                          <label style={{ display: 'block', marginBottom: '6px', fontSize: '11px', color: '#9ca3af' }}>
+                            Color
+                          </label>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div
+                              style={{
+                                width: '32px',
+                                height: '32px',
+                                borderRadius: '6px',
+                                backgroundColor: currentColor,
+                                border: '1px solid #e5e7eb',
+                                flexShrink: 0
+                              }}
+                            />
+                            <input
+                              type="color"
+                              value={currentColor}
+                              onChange={(e) => {
+                                const newColor = e.target.value;
+                                if (onChartColorChange) {
+                                  onChartColorChange(chartIndex, traceIndex, newColor);
+                                }
+                                if (setChartColors) {
+                                  setChartColors(prev => {
+                                    const current = prev[chartIndex] || [];
+                                    const updated = [...current];
+                                    updated[traceIndex] = newColor;
+                                    return {
+                                      ...prev,
+                                      [chartIndex]: updated
+                                    };
+                                  });
+                                }
+                              }}
+                              style={{
+                                flex: 1,
+                                height: '36px',
+                                border: '1px solid #e5e7eb',
+                                borderRadius: '8px',
+                                cursor: 'pointer'
+                              }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Opacity Slider */}
+                        <div>
+                          <label style={{ display: 'block', marginBottom: '6px', fontSize: '11px', color: '#9ca3af' }}>
+                            Opacity
+                          </label>
+                          <style>{`
+                            input[type="range"]#trace-opacity-${chartIndex}-${traceIndex} {
+                              -webkit-appearance: none;
+                              appearance: none;
+                              width: 100%;
+                              height: 8px;
+                              background: #e5e7eb;
+                              border-radius: 4px;
+                              outline: none;
+                            }
+                            input[type="range"]#trace-opacity-${chartIndex}-${traceIndex}::-webkit-slider-thumb {
+                              -webkit-appearance: none;
+                              appearance: none;
+                              width: 12px;
+                              height: 12px;
+                              border-radius: 50%;
+                              background: #ff6b6b;
+                              cursor: pointer;
+                              box-shadow: 0 2px 4px rgba(255, 107, 107, 0.3);
+                            }
+                            input[type="range"]#trace-opacity-${chartIndex}-${traceIndex}::-moz-range-thumb {
+                              width: 12px;
+                              height: 12px;
+                              border-radius: 50%;
+                              background: #ff6b6b;
+                              cursor: pointer;
+                              border: none;
+                              box-shadow: 0 2px 4px rgba(255, 107, 107, 0.3);
+                            }
+                          `}</style>
+                          <input
+                            id={`trace-opacity-${chartIndex}-${traceIndex}`}
+                            type="range"
+                            min="0"
+                            max="1"
+                            step="0.01"
+                            value={currentOpacity}
+                            onChange={(e) => {
+                              const newOpacity = parseFloat(e.target.value);
+                              // Update local state immediately for responsive slider
+                              setTraceOpacities(prev => ({
+                                ...prev,
+                                [traceIndex]: newOpacity
+                              }));
+                              // Update chartOpacities state which PlotlyChartRenderer uses
+                              if (setChartOpacities) {
+                                setChartOpacities(prev => {
+                                  const current = prev[chartIndex] || [];
+                                  const updated = [...current];
+                                  updated[traceIndex] = newOpacity;
+                                  return {
+                                    ...prev,
+                                    [chartIndex]: updated
+                                  };
+                                });
+                              }
+                            }}
+                            style={{
+                              cursor: 'pointer'
+                            }}
+                          />
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#9ca3af', marginTop: '4px' }}>
+                            <span>0%</span>
+                            <span>{Math.round(currentOpacity * 100)}%</span>
+                            <span>100%</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Container Color Picker Button */}
+          <button
+            ref={colorPickerButtonRef}
+            onClick={() => {
+              const isOpening = activeContainerColorPicker !== chartIndex;
+              setActiveContainerColorPicker(isOpening ? chartIndex : null);
+              // Untick "apply to all" when opening color picker for a specific container
+              if (isOpening) {
+                setApplyToContainers(false);
+              }
+            }}
+            style={{
+              background: 'rgba(255, 107, 107, 0.1)',
+              backdropFilter: 'blur(4px)',
+              border: '1px solid rgba(255, 107, 107, 0.3)',
+              borderRadius: '50%',
+              width: '40px',
+              height: '40px',
+              padding: '0',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.2s',
+              boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+              color: '#ff6b6b'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(255, 107, 107, 0.2)';
+              e.currentTarget.style.transform = 'scale(1.05)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(255, 107, 107, 0.1)';
+              e.currentTarget.style.transform = 'scale(1)';
+            }}
+            title="Container colors"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 2a10 10 0 0 1 10 10"/>
+            </svg>
+          </button>
+
+          {/* Color Picker Dropdown */}
+          {activeContainerColorPicker === chartIndex && (
+            <div
+              ref={colorPickerDropdownRef}
+              style={{
+                position: 'fixed',
+                background: 'white',
+                borderRadius: '12px',
+                padding: '16px',
+                boxShadow: '0 10px 40px rgba(0, 0, 0, 0.15)',
+                zIndex: 1000,
+                minWidth: '200px'
+              }}
+            >
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '12px', fontWeight: 500, color: '#6b7280' }}>
+                  Background
+                </label>
+                <input
+                  type="color"
+                  value={containerColor?.bg || '#ffffff'}
+                  onChange={(e) => {
+                    setContainerColors(prev => ({
+                      ...prev,
+                      [chartIndex]: { ...prev[chartIndex], bg: e.target.value, text: prev[chartIndex]?.text || '#1a1a1a', opacity: prev[chartIndex]?.opacity ?? 1 }
+                    }));
+                    setApplyToContainers(false);
+                  }}
+                  style={{
+                    width: '100%',
+                    height: '36px',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '8px',
+                    cursor: 'pointer'
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '12px', fontWeight: 500, color: '#6b7280' }}>
+                  Opacity
+                </label>
+                <style>{`
+                  input[type="range"]#chart-opacity-${chartIndex}::-webkit-slider-thumb {
+                    -webkit-appearance: none;
+                    appearance: none;
+                    width: 18px;
+                    height: 18px;
+                    border-radius: 50%;
+                    background: #ff6b6b;
+                    cursor: pointer;
+                    box-shadow: 0 2px 4px rgba(255, 107, 107, 0.3);
+                  }
+                  input[type="range"]#chart-opacity-${chartIndex}::-moz-range-thumb {
+                    width: 18px;
+                    height: 18px;
+                    border-radius: 50%;
+                    background: #ff6b6b;
+                    cursor: pointer;
+                    border: none;
+                    box-shadow: 0 2px 4px rgba(255, 107, 107, 0.3);
+                  }
+                  input[type="range"]#chart-opacity-${chartIndex}::-webkit-slider-runnable-track {
+                    width: 100%;
+                    height: 4px;
+                    background: #e5e7eb;
+                    border-radius: 2px;
+                  }
+                  input[type="range"]#chart-opacity-${chartIndex}::-moz-range-track {
+                    width: 100%;
+                    height: 4px;
+                    background: #e5e7eb;
+                    border-radius: 2px;
+                  }
+                `}</style>
+                <input
+                  id={`chart-opacity-${chartIndex}`}
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={containerColor?.opacity ?? 1}
+                  onChange={(e) => {
+                    const newOpacity = parseFloat(e.target.value);
+                    setContainerColors(prev => ({
+                      ...prev,
+                      [chartIndex]: { 
+                        bg: prev[chartIndex]?.bg || '#ffffff', 
+                        text: prev[chartIndex]?.text || '#1a1a1a', 
+                        opacity: newOpacity 
+                      }
+                    }));
+                    setApplyToContainers(false);
+                  }}
+                  style={{
+                    width: '100%',
+                    cursor: 'pointer',
+                    accentColor: '#ff6b6b'
+                  }}
+                />
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#9ca3af', marginTop: '4px' }}>
+                  <span>0%</span>
+                  <span>{Math.round((containerColor?.opacity ?? 1) * 100)}%</span>
+                  <span>100%</span>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '12px', fontWeight: 500, color: '#6b7280' }}>
+                  Text
+                </label>
+                <input
+                  type="color"
+                  value={containerColor?.text || '#1a1a1a'}
+                  onChange={(e) => {
+                    setContainerColors(prev => ({
+                      ...prev,
+                      [chartIndex]: { ...prev[chartIndex], bg: prev[chartIndex]?.bg || '#ffffff', text: e.target.value, opacity: prev[chartIndex]?.opacity ?? 1 }
+                    }));
+                    setApplyToContainers(false);
+                  }}
+                  style={{
+                    width: '100%',
+                    height: '36px',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '8px',
+                    cursor: 'pointer'
+                  }}
+                />
+              </div>
+            </div>
+          )}
           
           {/* Notes Button */}
           <button
@@ -965,11 +1560,20 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   const [, setLoadingMessage] = useState('Crafting beautiful insights from your data...');
   const [chartSpecs, setChartSpecs] = useState<any[]>([]);  // Changed to array
   const [expectedKPICount, setExpectedKPICount] = useState<number | null>(null); // Track expected KPI count
-  const [expectedChartCount, setExpectedChartCount] = useState<number | null>(null); // Track expected chart count
+  const [_expectedChartCount, setExpectedChartCount] = useState<number | null>(null); // Track expected chart count
   const [streamingComplete, setStreamingComplete] = useState(false); // Track if streaming is done
   const [dashboardBgColor, setDashboardBgColor] = useState('#ffffff'); // Dashboard background color
   const [dashboardTextColor, setDashboardTextColor] = useState('#1a1a1a'); // Dashboard text color
+  const [dashboardBgOpacity, setDashboardBgOpacity] = useState(1); // Dashboard background opacity
+  const [useGradient, setUseGradient] = useState(false); // Use gradient for background
+  const [gradientColor2, setGradientColor2] = useState('#e5e7eb'); // Second color for gradient
   const [showColorPicker, setShowColorPicker] = useState(false); // Color picker dropdown visibility
+  const [applyToContainers, setApplyToContainers] = useState(true); // Apply dashboard colors to all containers
+  const [containerColors, setContainerColors] = useState<Record<number, {bg: string, text: string, opacity: number}>>({});
+  const [activeContainerColorPicker, setActiveContainerColorPicker] = useState<number | null>(null);
+  const [chartColors, setChartColors] = useState<Record<number, string[]>>({});
+  const [chartOpacities, setChartOpacities] = useState<Record<number, number[]>>({});
+  const [activeChartColorPicker, setActiveChartColorPicker] = useState<number | null>(null);
   const chatButtonRef = useRef<HTMLButtonElement>(null);
   const downloadButtonRef = useRef<HTMLButtonElement>(null);
   const publishButtonRef = useRef<HTMLButtonElement>(null);
@@ -1002,7 +1606,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   const [zoomedChartIndex, setZoomedChartIndex] = useState<number | null>(null);
   const [chartPreview, setChartPreview] = useState<{chartIndex: number, figure: any, code: string} | null>(null);
   const [isExecutingCode, setIsExecutingCode] = useState(false);
-  const [dashboardTitle, setDashboardTitle] = useState<string>('Dashboard');
+  const [dashboardTitle, setDashboardTitle] = useState<string>('');
+  const [_titleSetFromBackend, setTitleSetFromBackend] = useState<boolean>(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [showAddChartPopup, setShowAddChartPopup] = useState(false);
   const [addingChart, setAddingChart] = useState(false);
@@ -1290,6 +1895,49 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
 
   const handleChartZoom = (chartIndex: number) => {
     setZoomedChartIndex(chartIndex);
+  };
+
+  // Handle chart color change
+  const handleChartColorChange = (chartIndex: number, traceIndex: number, color: string) => {
+    setChartSpecs(prev => {
+      const updated = [...prev];
+      if (updated[chartIndex]?.figure?.data) {
+        const figureData = JSON.parse(JSON.stringify(updated[chartIndex].figure.data));
+        const trace = figureData[traceIndex];
+        
+        if (trace) {
+          // Update color based on trace type
+          if (trace.type === 'bar') {
+            trace.marker = trace.marker || {};
+            trace.marker.color = color;
+          } else if (trace.type === 'scatter') {
+            if (trace.mode?.includes('lines')) {
+              trace.line = trace.line || {};
+              trace.line.color = color;
+            } else {
+              trace.marker = trace.marker || {};
+              trace.marker.color = color;
+            }
+          } else if (trace.type === 'pie') {
+            trace.marker = trace.marker || {};
+            if (trace.marker.colors) {
+              trace.marker.colors[traceIndex] = color;
+            } else {
+              trace.marker.colors = [color];
+            }
+          }
+          
+          updated[chartIndex] = {
+            ...updated[chartIndex],
+            figure: {
+              ...updated[chartIndex].figure,
+              data: figureData
+            }
+          };
+        }
+      }
+      return updated;
+    });
   };
 
   // Generate insights for chart notes
@@ -2050,6 +2698,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                       case 'dashboard_info':
                         if (event.dashboard_title) {
                           setDashboardTitle(event.dashboard_title);
+                          setTitleSetFromBackend(true);
                         }
                         // Set expected counts for loading skeletons
                         const expectedKpis = event.kpi_count || 0;
@@ -2143,6 +2792,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
             const result = await response.json();
             if (result.dashboard_title) {
               setDashboardTitle(result.dashboard_title);
+              setTitleSetFromBackend(true);
             }
             if (result.charts && Array.isArray(result.charts)) {
               // Filter out blank charts
@@ -2499,7 +3149,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
       }));
 
       // Use the actual dashboard title from state (what user sees/edits)
-      const titleToShare = dashboardTitle || 'Dashboard';
+      const titleToShare = dashboardTitle || 'My Dashboard';
 
       // Call share endpoint
       const response = await fetch(`${config.backendUrl}/api/data/datasets/${datasetId}/share`, {
@@ -2510,7 +3160,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
           figures_data: figuresData,
           dashboard_title: titleToShare,
           background_color: dashboardBgColor,
-          text_color: dashboardTextColor
+          text_color: dashboardTextColor,
+          container_colors: containerColors
         })
       });
 
@@ -2738,27 +3389,29 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     const loadedKPIs = chartSpecs.filter(spec => spec.chart_type === 'kpi_card').length;
     const loadedCharts = chartSpecs.filter(spec => spec.chart_type !== 'kpi_card').length;
 
-    // If we know the expected counts from dashboard_info
-    if (expectedKPICount !== null && expectedChartCount !== null) {
+    // Always assume 3 charts maximum, show skeletons for remaining
+    const maxCharts = 3;
+    const chartSkeletons = Math.max(maxCharts - loadedCharts, 0);
+
+    // If we know the expected KPI count from dashboard_info
+    if (expectedKPICount !== null) {
       const kpiSkeletons = Math.max(expectedKPICount - loadedKPIs, 0);
-      const chartSkeletons = Math.max(expectedChartCount - loadedCharts, 0);
       
-      console.log(`Skeleton counts - KPIs: ${kpiSkeletons} (expected: ${expectedKPICount}, loaded: ${loadedKPIs}), Charts: ${chartSkeletons} (expected: ${expectedChartCount}, loaded: ${loadedCharts})`);
+      console.log(`Skeleton counts - KPIs: ${kpiSkeletons} (expected: ${expectedKPICount}, loaded: ${loadedKPIs}), Charts: ${chartSkeletons} (max: ${maxCharts}, loaded: ${loadedCharts})`);
       
       return { kpiSkeletons, chartSkeletons };
     }
 
     // If we haven't received dashboard_info yet but are loading
-    // Show default skeletons (but reduce as items arrive)
+    // Show default skeletons for KPIs (but reduce as items arrive)
     const defaultKPIs = 3;
-    const defaultCharts = 2;
     
     const counts = {
       kpiSkeletons: Math.max(defaultKPIs - loadedKPIs, loadedKPIs === 0 ? defaultKPIs : 1),
-      chartSkeletons: Math.max(defaultCharts - loadedCharts, loadedCharts === 0 ? defaultCharts : 1)
+      chartSkeletons: chartSkeletons
     };
     
-    console.log(`Skeleton counts (default) - KPIs: ${counts.kpiSkeletons} (loaded: ${loadedKPIs}), Charts: ${counts.chartSkeletons} (loaded: ${loadedCharts})`);
+    console.log(`Skeleton counts (default) - KPIs: ${counts.kpiSkeletons} (loaded: ${loadedKPIs}), Charts: ${counts.chartSkeletons} (max: ${maxCharts}, loaded: ${loadedCharts})`);
     
     return counts;
   };
@@ -2899,9 +3552,30 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
       )}
       
       {/* Fullscreen Modal */}
-      {isFullscreen && (
+      {isFullscreen && (() => {
+        // Helper to convert hex to rgba
+        const hexToRgba = (hex: string, opacity: number): string => {
+          const normalizedHex = hex.replace('#', '');
+          const r = parseInt(normalizedHex.substring(0, 2), 16);
+          const g = parseInt(normalizedHex.substring(2, 4), 16);
+          const b = parseInt(normalizedHex.substring(4, 6), 16);
+          return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+        };
+        
+        const fullscreenBg = useGradient && !applyToContainers
+          ? `linear-gradient(135deg, ${hexToRgba(dashboardBgColor, dashboardBgOpacity)}, ${hexToRgba(gradientColor2, dashboardBgOpacity)})`
+          : hexToRgba(dashboardBgColor, dashboardBgOpacity);
+        
+        return (
         <div className="fullscreen-modal" onClick={() => setIsFullscreen(false)}>
-          <div className="fullscreen-content" onClick={(e) => e.stopPropagation()}>
+            <div 
+              className="fullscreen-content" 
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: fullscreenBg,
+                color: dashboardTextColor
+              }}
+            >
             <button className="fullscreen-close" onClick={() => setIsFullscreen(false)}>
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
@@ -2939,6 +3613,12 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                             chartIndex={index}
                             backgroundColor={dashboardBgColor}
                             textColor={dashboardTextColor}
+                            activeContainerColorPicker={activeContainerColorPicker}
+                            setActiveContainerColorPicker={setActiveContainerColorPicker}
+                            containerColors={containerColors}
+                            setContainerColors={setContainerColors}
+                            applyToContainers={applyToContainers}
+                            setApplyToContainers={setApplyToContainers}
                           />
                         </div>
                       ))}
@@ -2986,7 +3666,13 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                 {chartSpecs
                   .map((spec, index) => ({ spec, index }))
                   .filter(({ spec }) => spec.chart_type !== 'kpi_card')
-                  .map(({ spec, index }) => (
+                  .map(({ spec, index }) => {
+                    // Get container-specific colors or use defaults
+                    const containerColor = containerColors[index];
+                    const actualBg = applyToContainers ? dashboardBgColor : (containerColor?.bg || dashboardBgColor);
+                    const actualText = applyToContainers ? dashboardTextColor : (containerColor?.text || dashboardTextColor);
+                    
+                    return (
                     <div key={`chart-${index}`} className="chart-fade-in">
                       <PlotlyChartRenderer 
                         chartSpec={spec} 
@@ -2995,11 +3681,12 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                         datasetId={datasetId}
                         onChartFixed={handleChartFixed}
                         onFixingStatusChange={(isFixing) => setShowFixNotification(isFixing)}
-                        backgroundColor={dashboardBgColor}
-                        textColor={dashboardTextColor}
+                          backgroundColor={actualBg}
+                          textColor={actualText}
                       />
                     </div>
-                  ))}
+                    );
+                  })}
                 
                 {/* Show loading skeletons for charts still being generated */}
                 {chartSkeletons > 0 && (
@@ -3038,11 +3725,27 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Chart Zoom Modal */}
       {zoomedChartIndex !== null && chartSpecs[zoomedChartIndex] && (() => {
         const isKPICard = chartSpecs[zoomedChartIndex].chart_type === 'kpi_card';
+        // Get container-specific colors or use defaults
+        const containerColor = containerColors[zoomedChartIndex];
+        const actualBg = applyToContainers ? dashboardBgColor : (containerColor?.bg || dashboardBgColor);
+        const actualText = applyToContainers ? dashboardTextColor : (containerColor?.text || dashboardTextColor);
+        const actualOpacity = applyToContainers ? dashboardBgOpacity : (containerColor?.opacity ?? dashboardBgOpacity);
+        
+        // Helper to convert hex to rgba
+        const hexToRgba = (hex: string, opacity: number): string => {
+          const normalizedHex = hex.replace('#', '');
+          const r = parseInt(normalizedHex.substring(0, 2), 16);
+          const g = parseInt(normalizedHex.substring(2, 4), 16);
+          const b = parseInt(normalizedHex.substring(4, 6), 16);
+          return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+        };
+        
         return (
           <div 
             className="fullscreen-modal" 
@@ -3105,8 +3808,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
               style={{
                 width: isKPICard ? 'fit-content' : '90%',
                 height: isKPICard ? 'fit-content' : '90%',
-                backgroundColor: dashboardBgColor,
-                color: dashboardTextColor,
+                backgroundColor: hexToRgba(actualBg, actualOpacity),
+                color: actualText,
                 borderRadius: '12px',
                 padding: isKPICard ? '40px 60px' : '20px',
                 position: 'relative',
@@ -3125,8 +3828,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                   datasetId={datasetId}
                   onChartFixed={handleChartFixed}
                   onFixingStatusChange={(isFixing) => setShowFixNotification(isFixing)}
-                  backgroundColor={dashboardBgColor}
-                  textColor={dashboardTextColor}
+                  backgroundColor={actualBg}
+                  textColor={actualText}
                 />
               </div>
             </div>
@@ -3748,7 +4451,11 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
               <div 
                 className={`chart-display ${isLoading && !streamingComplete ? 'loading' : ''}`}
                 style={{
-                  background: isLoading && !streamingComplete ? 'transparent' : dashboardBgColor,
+                  background: isLoading && !streamingComplete 
+                    ? 'transparent' 
+                    : (!applyToContainers && useGradient)
+                      ? `linear-gradient(135deg, ${hexToRgba(dashboardBgColor, dashboardBgOpacity)}, ${hexToRgba(gradientColor2, dashboardBgOpacity)})`
+                      : hexToRgba(dashboardBgColor, dashboardBgOpacity),
                   color: dashboardTextColor
                 }}
               >
@@ -3762,79 +4469,84 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                             justifyContent: 'center',
                             position: 'relative'
                           }}>
-                            {isEditingTitle ? (
-                              <input
-                                type="text"
-                                value={dashboardTitle}
-                                onChange={(e) => setDashboardTitle(e.target.value)}
-                                onBlur={() => setIsEditingTitle(false)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') setIsEditingTitle(false);
-                                  if (e.key === 'Escape') setIsEditingTitle(false);
-                                }}
-                                autoFocus
-                                style={{
-                                  fontSize: '2rem',
-                                  fontWeight: 700,
-                                  padding: '12px 16px',
-                                  border: '2px solid #ef4444',
-                                  borderRadius: '12px',
-                                  outline: 'none',
-                                  width: '100%',
-                                  maxWidth: '800px',
-                                  fontFamily: 'inherit',
-                                  background: 'white',
-                                  transition: 'all 0.2s',
-                                  textAlign: 'center',
-                                  boxShadow: '0 0 0 4px rgba(239, 68, 68, 0.1)'
-                                }}
-                              />
-                            ) : (
-                              <h2
-                                onClick={() => setIsEditingTitle(true)}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.backgroundColor = '#f9fafb';
-                                  e.currentTarget.style.transform = 'translateY(-1px)';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.backgroundColor = 'transparent';
-                                  e.currentTarget.style.transform = 'translateY(0)';
-                                }}
-                                title="Click to edit dashboard title"
-                                style={{
-                                  fontSize: '2rem',
-                                  fontWeight: 700,
-                                  color: dashboardTextColor,
-                                  margin: 0,
-                                  cursor: 'pointer',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '12px',
-                                  padding: '12px 20px',
-                                  borderRadius: '12px',
-                                  transition: 'all 0.2s',
-                                  border: '2px solid transparent'
-                                }}
-                              >
-                                {dashboardTitle}
-                                <svg 
-                                  width="20" 
-                                  height="20" 
-                                  viewBox="0 0 24 24" 
-                                  fill="none" 
-                                  stroke="currentColor" 
-                                  strokeWidth="2"
-                                  style={{ 
-                                    opacity: 0.4,
-                                    transition: 'opacity 0.2s'
-                                  }}
-                                  onMouseEnter={(e) => e.currentTarget.style.opacity = '0.7'}
-                                  onMouseLeave={(e) => e.currentTarget.style.opacity = '0.4'}
-                                >
-                                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                                </svg>
-                              </h2>
+                            {/* Only show title if one was provided (from backend or user edit) */}
+                            {dashboardTitle && (
+                              <>
+                                {isEditingTitle ? (
+                                  <input
+                                    type="text"
+                                    value={dashboardTitle}
+                                    onChange={(e) => setDashboardTitle(e.target.value)}
+                                    onBlur={() => setIsEditingTitle(false)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') setIsEditingTitle(false);
+                                      if (e.key === 'Escape') setIsEditingTitle(false);
+                                    }}
+                                    autoFocus
+                                    style={{
+                                      fontSize: '2rem',
+                                      fontWeight: 700,
+                                      padding: '12px 16px',
+                                      border: '2px solid #ef4444',
+                                      borderRadius: '12px',
+                                      outline: 'none',
+                                      width: '100%',
+                                      maxWidth: '800px',
+                                      fontFamily: 'inherit',
+                                      background: 'white',
+                                      transition: 'all 0.2s',
+                                      textAlign: 'center',
+                                      boxShadow: '0 0 0 4px rgba(239, 68, 68, 0.1)'
+                                    }}
+                                  />
+                                ) : (
+                                  <h2
+                                    onClick={() => setIsEditingTitle(true)}
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.backgroundColor = '#f9fafb';
+                                      e.currentTarget.style.transform = 'translateY(-1px)';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.currentTarget.style.backgroundColor = 'transparent';
+                                      e.currentTarget.style.transform = 'translateY(0)';
+                                    }}
+                                    title="Click to edit dashboard title"
+                                    style={{
+                                      fontSize: '2rem',
+                                      fontWeight: 700,
+                                      color: dashboardTextColor,
+                                      margin: 0,
+                                      cursor: 'pointer',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '12px',
+                                      padding: '12px 20px',
+                                      borderRadius: '12px',
+                                      transition: 'all 0.2s',
+                                      border: '2px solid transparent'
+                                    }}
+                                  >
+                                    {dashboardTitle}
+                                    <svg 
+                                      width="20" 
+                                      height="20" 
+                                      viewBox="0 0 24 24" 
+                                      fill="none" 
+                                      stroke="currentColor" 
+                                      strokeWidth="2"
+                                      style={{ 
+                                        opacity: 0.4,
+                                        transition: 'opacity 0.2s'
+                                      }}
+                                      onMouseEnter={(e) => e.currentTarget.style.opacity = '0.7'}
+                                      onMouseLeave={(e) => e.currentTarget.style.opacity = '0.4'}
+                                    >
+                                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                    </svg>
+                                  </h2>
+                                )}
+                              </>
                             )}
                             
                             {/* Color Picker - Near Title, Above KPI Cards */}
@@ -3842,11 +4554,12 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                               <div style={{ 
                                 position: 'absolute',
                                 left: '20px',
-                                top: '40%',
+                                top: '30%',
                                 transform: 'translateY(-50%)',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'flex-start',
+                                gap: '16px',
                                 zIndex: 10
                               }} data-color-picker>
                                 {/* Three Color Dots */}
@@ -3932,6 +4645,65 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                     +
                                   </button>
                                 </div>
+
+                                {/* Apply to Containers Checkbox - Outside the dropdown */}
+                                <label 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setApplyToContainers(!applyToContainers);
+                                  }}
+                                  style={{ 
+                                  display: 'flex', 
+                                  alignItems: 'center', 
+                                  gap: '6px', 
+                                  fontSize: '13px', 
+                                  fontWeight: 500, 
+                                  color: '#6b7280', 
+                                  cursor: 'pointer',
+                                  background: 'rgba(255, 255, 255, 0.9)',
+                                  backdropFilter: 'blur(8px)',
+                                  padding: '6px 12px',
+                                  borderRadius: '8px',
+                                  border: '1px solid #e5e7eb',
+                                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)'
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      width: '14px',
+                                      height: '14px',
+                                      border: '2px solid',
+                                      borderColor: applyToContainers ? '#ff6b6b' : '#d1d5db',
+                                      borderRadius: '3px',
+                                      backgroundColor: applyToContainers ? '#ff6b6b' : 'transparent',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      cursor: 'pointer',
+                                      transition: 'all 0.2s',
+                                      flexShrink: 0
+                                    }}
+                                  >
+                                    {applyToContainers && (
+                                      <svg
+                                        width="10"
+                                        height="10"
+                                        viewBox="0 0 12 12"
+                                        fill="none"
+                                        xmlns="http://www.w3.org/2000/svg"
+                                      >
+                                        <path
+                                          d="M2 6L5 9L10 2"
+                                          stroke="white"
+                                          strokeWidth="2"
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                        />
+                                      </svg>
+                                    )}
+                                  </div>
+                                  Apply to all
+                                </label>
                                 
                                 {/* Custom Color Picker Dropdown */}
                                 {showColorPicker && (
@@ -3966,6 +4738,111 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                           cursor: 'pointer'
                                         }}
                                       />
+                                    </div>
+                                    
+                                    {/* Use Gradient */}
+                                      <div style={{ marginBottom: '12px' }}>
+                                      <style>{`
+                                        input[type="checkbox"]#use-gradient-checkbox:checked {
+                                          accent-color: #ff6b6b;
+                                        }
+                                        input[type="checkbox"]#use-gradient-checkbox {
+                                          accent-color: #ff6b6b;
+                                          cursor: pointer;
+                                        }
+                                      `}</style>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: 500, color: '#6b7280', cursor: 'pointer' }}>
+                                          <input
+                                          id="use-gradient-checkbox"
+                                            type="checkbox"
+                                            checked={useGradient}
+                                          onChange={(e) => {
+                                            setUseGradient(e.target.checked);
+                                            // Turn off "apply to all" when gradient is enabled
+                                            if (e.target.checked) {
+                                              setApplyToContainers(false);
+                                            }
+                                          }}
+                                          style={{ cursor: 'pointer', accentColor: '#ff6b6b' }}
+                                          />
+                                          Use Gradient
+                                        </label>
+                                        {useGradient && (
+                                          <div style={{ marginTop: '8px' }}>
+                                            <label style={{ display: 'block', marginBottom: '6px', fontSize: '11px', color: '#9ca3af' }}>
+                                              Second Color
+                                            </label>
+                                            <input
+                                              type="color"
+                                              value={gradientColor2}
+                                              onChange={(e) => setGradientColor2(e.target.value)}
+                                              style={{
+                                                width: '100%',
+                                                height: '36px',
+                                                border: '1px solid #e5e7eb',
+                                                borderRadius: '8px',
+                                                cursor: 'pointer'
+                                              }}
+                                            />
+                                          </div>
+                                        )}
+                                      </div>
+
+                                    {/* Background Opacity */}
+                                    <div style={{ marginBottom: '12px' }}>
+                                      <label style={{ display: 'block', marginBottom: '6px', fontSize: '12px', fontWeight: 500, color: '#6b7280' }}>
+                                        Opacity
+                                      </label>
+                                      <style>{`
+                                        input[type="range"]::-webkit-slider-thumb {
+                                          -webkit-appearance: none;
+                                          appearance: none;
+                                          width: 18px;
+                                          height: 18px;
+                                          border-radius: 50%;
+                                          background: #ff6b6b;
+                                          cursor: pointer;
+                                          box-shadow: 0 2px 4px rgba(255, 107, 107, 0.3);
+                                        }
+                                        input[type="range"]::-moz-range-thumb {
+                                          width: 18px;
+                                          height: 18px;
+                                          border-radius: 50%;
+                                          background: #ff6b6b;
+                                          cursor: pointer;
+                                          border: none;
+                                          box-shadow: 0 2px 4px rgba(255, 107, 107, 0.3);
+                                        }
+                                        input[type="range"]::-webkit-slider-runnable-track {
+                                          width: 100%;
+                                          height: 4px;
+                                          background: #e5e7eb;
+                                          border-radius: 2px;
+                                        }
+                                        input[type="range"]::-moz-range-track {
+                                          width: 100%;
+                                          height: 4px;
+                                          background: #e5e7eb;
+                                          border-radius: 2px;
+                                        }
+                                      `}</style>
+                                      <input
+                                        type="range"
+                                        min="0"
+                                        max="1"
+                                        step="0.01"
+                                        value={dashboardBgOpacity}
+                                        onChange={(e) => setDashboardBgOpacity(parseFloat(e.target.value))}
+                                        style={{
+                                          width: '100%',
+                                          cursor: 'pointer'
+                                        }}
+                                      />
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#9ca3af', marginTop: '4px' }}>
+                                        <span>0%</span>
+                                        <span>{Math.round(dashboardBgOpacity * 100)}%</span>
+                                        <span>100%</span>
+                                      </div>
                                     </div>
                                     
                                     {/* Text Color */}
@@ -4015,6 +4892,12 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                             textColor={dashboardTextColor}
                             hideAddButton={isLoading && !streamingComplete}
                             isAddingKPI={isAddingKPI}
+                            activeContainerColorPicker={activeContainerColorPicker}
+                            setActiveContainerColorPicker={setActiveContainerColorPicker}
+                            containerColors={containerColors}
+                            setContainerColors={setContainerColors}
+                            applyToContainers={applyToContainers}
+                            setApplyToContainers={setApplyToContainers}
                           />
                           
                           {/* Add KPI Popup with Dataset Preview */}
@@ -4390,12 +5273,26 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                   viewMode={viewMode}
                                   backgroundColor={dashboardBgColor}
                                   textColor={dashboardTextColor}
+                                  activeContainerColorPicker={activeContainerColorPicker}
+                                  setActiveContainerColorPicker={setActiveContainerColorPicker}
+                                  containerColors={containerColors}
+                                  setContainerColors={setContainerColors}
+                                  applyToContainers={applyToContainers}
+                                  setApplyToContainers={setApplyToContainers}
+                                  chartColors={chartColors}
+                                  setChartColors={setChartColors}
+                                  chartOpacities={chartOpacities}
+                                  setChartOpacities={setChartOpacities}
+                                  activeChartColorPicker={activeChartColorPicker}
+                                  setActiveChartColorPicker={setActiveChartColorPicker}
+                                  onChartColorChange={handleChartColorChange}
+                                  setChartSpecs={setChartSpecs}
                                 />
                               );
                             })}
                             
                             {/* Skeleton Loading for Charts */}
-                            {isLoading && !streamingComplete && chartSpecs.filter(spec => spec.chart_type !== 'kpi_card').length === 0 && (
+                            {isLoading && !streamingComplete && (
                               <div style={{ width: '100%', padding: '20px' }}>
                                 <DashboardSkeleton />
                               </div>
