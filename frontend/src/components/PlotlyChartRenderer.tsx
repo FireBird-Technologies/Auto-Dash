@@ -14,6 +14,8 @@ interface PlotlyChartRendererProps {
   viewMode?: 'list' | 'grid';
   backgroundColor?: string;
   textColor?: string;
+  chartColors?: string[];
+  chartOpacities?: number[];
 }
 
 // Helper function to sanitize verbose Plotly error messages
@@ -113,7 +115,9 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
   onZoom,
   viewMode = 'list',
   backgroundColor = '#ffffff',
-  textColor = '#1a1a1a'
+  textColor = '#1a1a1a',
+  chartColors,
+  chartOpacities
 }) => {
   const notification = useNotification();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -652,7 +656,49 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
             minHeight: 0
           }}>
             <Plot
-              data={figureData.data || []}
+              data={(figureData.data || []).map((trace: any, index: number) => {
+                const updatedTrace = { ...trace };
+                
+                // Helper to convert hex to rgba
+                const hexToRgba = (hex: string, opacity: number): string => {
+                  const normalizedHex = hex.replace('#', '');
+                  const r = parseInt(normalizedHex.substring(0, 2), 16);
+                  const g = parseInt(normalizedHex.substring(2, 4), 16);
+                  const b = parseInt(normalizedHex.substring(4, 6), 16);
+                  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+                };
+                
+                // Get color and opacity for this trace
+                const traceColor = chartColors?.[index] || trace.marker?.color || trace.line?.color || '#ff6b6b';
+                const traceOpacity = chartOpacities?.[index] ?? 1;
+                
+                // Convert color to rgba with opacity
+                const rgbaColor = traceColor.startsWith('#') ? hexToRgba(traceColor, traceOpacity) : traceColor;
+                
+                // Apply color with opacity based on trace type
+                if (trace.type === 'bar') {
+                  updatedTrace.marker = { ...trace.marker, color: rgbaColor };
+                } else if (trace.type === 'scatter') {
+                  if (trace.mode?.includes('lines')) {
+                    updatedTrace.line = { ...trace.line, color: rgbaColor };
+                    if (trace.marker) {
+                      updatedTrace.marker = { ...trace.marker, color: rgbaColor };
+                    }
+                  } else {
+                    updatedTrace.marker = { ...trace.marker, color: rgbaColor };
+                  }
+                } else if (trace.type === 'pie') {
+                  // For pie charts, apply opacity to all colors
+                  if (trace.marker?.colors) {
+                    updatedTrace.marker = {
+                      ...trace.marker,
+                      colors: trace.marker.colors.map((c: string) => c.startsWith('#') ? hexToRgba(c, traceOpacity) : c)
+                    };
+                  }
+                }
+                
+                return updatedTrace;
+              })}
               layout={{
                 ...figureData.layout,
                 autosize: true,

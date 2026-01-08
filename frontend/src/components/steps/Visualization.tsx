@@ -49,6 +49,14 @@ interface ChartItemProps {
   setContainerColors: React.Dispatch<React.SetStateAction<Record<number, {bg: string, text: string, opacity: number}>>>;
   applyToContainers: boolean;
   setApplyToContainers: (value: boolean) => void;
+  chartColors?: Record<number, string[]>;
+  setChartColors?: React.Dispatch<React.SetStateAction<Record<number, string[]>>>;
+  chartOpacities?: Record<number, number[]>;
+  setChartOpacities?: React.Dispatch<React.SetStateAction<Record<number, number[]>>>;
+  activeChartColorPicker?: number | null;
+  setActiveChartColorPicker?: (index: number | null) => void;
+  onChartColorChange?: (chartIndex: number, traceIndex: number, color: string) => void;
+  setChartSpecs?: React.Dispatch<React.SetStateAction<any[]>>;
 }
 
 // Helper function to determine if a color is dark
@@ -138,12 +146,80 @@ const ChartItem: React.FC<ChartItemProps> = ({
   containerColors,
   setContainerColors,
   applyToContainers,
-  setApplyToContainers
+  setApplyToContainers,
+  chartColors,
+  setChartColors,
+  chartOpacities,
+  setChartOpacities,
+  activeChartColorPicker,
+  setActiveChartColorPicker,
+  onChartColorChange
 }) => {
   const notification = useNotification();
   const colorPickerRef = useRef<HTMLDivElement>(null);
   const colorPickerButtonRef = useRef<HTMLButtonElement>(null);
   const colorPickerDropdownRef = useRef<HTMLDivElement>(null);
+  const chartColorPickerButtonRef = useRef<HTMLButtonElement>(null);
+  const chartColorPickerDropdownRef = useRef<HTMLDivElement>(null);
+  const [traceOpacities, setTraceOpacities] = useState<Record<number, number>>({});
+  
+  // Extract chart colors from figure data
+  useEffect(() => {
+    if (chartSpec?.figure?.data && setChartColors) {
+      const figureData = chartSpec.figure.data;
+      const colors: string[] = [];
+      
+      figureData.forEach((trace: any, index: number) => {
+        // Extract color based on trace type
+        if (trace.type === 'bar') {
+          if (trace.marker?.color) {
+            colors.push(Array.isArray(trace.marker.color) ? trace.marker.color[0] : trace.marker.color);
+          } else {
+            colors.push('#ff6b6b'); // Default color
+          }
+        } else if (trace.type === 'scatter') {
+          if (trace.mode?.includes('lines')) {
+            // Line chart
+            if (trace.line?.color) {
+              colors.push(trace.line.color);
+            } else {
+              colors.push('#ff6b6b');
+            }
+          } else {
+            // Scatter plot
+            if (trace.marker?.color) {
+              colors.push(Array.isArray(trace.marker.color) ? trace.marker.color[0] : trace.marker.color);
+            } else {
+              colors.push('#ff6b6b');
+            }
+          }
+        } else if (trace.type === 'pie') {
+          // For pie charts, extract all colors
+          if (trace.marker?.colors && Array.isArray(trace.marker.colors)) {
+            trace.marker.colors.forEach((color: string) => colors.push(color));
+          } else {
+            colors.push('#ff6b6b');
+          }
+        } else {
+          // Other chart types
+          if (trace.marker?.color) {
+            colors.push(Array.isArray(trace.marker.color) ? trace.marker.color[0] : trace.marker.color);
+          } else if (trace.line?.color) {
+            colors.push(trace.line.color);
+          } else {
+            colors.push('#ff6b6b'); // Default
+          }
+        }
+      });
+      
+      if (colors.length > 0) {
+        setChartColors(prev => ({
+          ...prev,
+          [chartIndex]: colors
+        }));
+      }
+    }
+  }, [chartSpec?.figure, chartIndex, setChartColors]);
   
   // Close color picker when clicking outside
   useEffect(() => {
@@ -178,12 +254,49 @@ const ChartItem: React.FC<ChartItemProps> = ({
       }
     }
   }, [activeContainerColorPicker, chartIndex]);
+
+  // Position chart color picker dropdown relative to button
+  useEffect(() => {
+    if (activeChartColorPicker === chartIndex && chartColorPickerButtonRef.current && chartColorPickerDropdownRef.current) {
+      const buttonRect = chartColorPickerButtonRef.current.getBoundingClientRect();
+      const dropdown = chartColorPickerDropdownRef.current;
+      
+      // Position below the button, aligned to the right
+      dropdown.style.top = `${buttonRect.bottom + 4}px`;
+      dropdown.style.right = `${window.innerWidth - buttonRect.right}px`;
+      
+      // Adjust if dropdown would go off screen
+      const dropdownRect = dropdown.getBoundingClientRect();
+      if (dropdownRect.bottom > window.innerHeight) {
+        dropdown.style.top = `${buttonRect.top - dropdownRect.height - 4}px`;
+      }
+      if (dropdownRect.left < 0) {
+        dropdown.style.right = 'auto';
+        dropdown.style.left = `${buttonRect.left}px`;
+      }
+    }
+  }, [activeChartColorPicker, chartIndex]);
+
+  // Close chart color picker when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (activeChartColorPicker === chartIndex && chartColorPickerDropdownRef.current && !chartColorPickerDropdownRef.current.contains(event.target as Node)) {
+        setActiveChartColorPicker?.(null);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [activeChartColorPicker, chartIndex, setActiveChartColorPicker]);
   
   // Get container-specific colors or use defaults
   const containerColor = containerColors[chartIndex];
   const actualBg = applyToContainers ? backgroundColor : (containerColor?.bg || '#ffffff');
   const actualText = applyToContainers ? textColor : (containerColor?.text || '#1a1a1a');
   const actualOpacity = applyToContainers ? 1 : (containerColor?.opacity ?? 1);
+  
+  // Convert background to rgba for container and chart
+  const actualBgRgba = hexToRgba(actualBg, actualOpacity);
   
   return (
     <div
@@ -202,7 +315,7 @@ const ChartItem: React.FC<ChartItemProps> = ({
         {/* Chart */}
         <div style={{
           flex: 1,
-          backgroundColor: hexToRgba(actualBg, actualOpacity),
+          backgroundColor: actualBgRgba,
           color: actualText,
           borderRadius: '12px',
           border: '1px solid #e5e7eb',
@@ -219,11 +332,13 @@ const ChartItem: React.FC<ChartItemProps> = ({
             chartIndex={chartIndex}
             datasetId={datasetId}
             onChartFixed={onChartFixed}
-            backgroundColor={actualBg}
+            backgroundColor={actualBgRgba}
             textColor={actualText}
             onFixingStatusChange={onFixingStatusChange}
             onZoom={onZoom}
             viewMode={viewMode}
+            chartColors={chartColors?.[chartIndex]}
+            chartOpacities={chartOpacities?.[chartIndex]}
           />
         </div>
         
@@ -606,7 +721,205 @@ const ChartItem: React.FC<ChartItemProps> = ({
             );
           })()}
 
-          {/* Color Picker Button */}
+          {/* Chart Color Picker Button - 3rd position */}
+          {chartSpec?.figure?.data && chartSpec.figure.data.length > 0 && (
+            <>
+          <button
+                ref={chartColorPickerButtonRef}
+                onClick={() => {
+                  const isOpening = activeChartColorPicker !== chartIndex;
+                  setActiveChartColorPicker?.(isOpening ? chartIndex : null);
+                }}
+                style={{
+                  background: 'rgba(255, 107, 107, 0.1)',
+                  backdropFilter: 'blur(4px)',
+                  border: '1px solid rgba(255, 107, 107, 0.3)',
+                  borderRadius: '50%',
+                  width: '40px',
+                  height: '40px',
+                  padding: '0',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.2s',
+                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                  color: '#ff6b6b'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 107, 107, 0.2)';
+                  e.currentTarget.style.transform = 'scale(1.05)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 107, 107, 0.1)';
+                  e.currentTarget.style.transform = 'scale(1)';
+                }}
+                title="Chart colors"
+              >
+                <svg width="16" height="16" viewBox="0 0 512 512" fill="currentColor">
+                  <path d="M362.7 19.3L314.3 67.7 444.3 197.7l48.4-48.4c25-25 25-65.5 0-90.5L453.3 19.3c-25-25-65.5-25-90.5 0zm-71 71L58.6 323.5c-10.4 10.4-18 23.3-22.2 37.4L1 481.2C-1.5 489.7 .8 498.8 7 505s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L421.7 220.3 291.7 90.3z"/>
+                </svg>
+              </button>
+
+              {/* Chart Color Picker Dropdown */}
+              {activeChartColorPicker === chartIndex && chartColors && chartColors[chartIndex] && (
+                <div
+                  ref={chartColorPickerDropdownRef}
+                  style={{
+                    position: 'fixed',
+                    background: 'white',
+                    borderRadius: '12px',
+                    padding: '16px',
+                    boxShadow: '0 10px 40px rgba(0, 0, 0, 0.15)',
+                    zIndex: 1000,
+                    minWidth: '220px',
+                    maxHeight: '400px',
+                    overflowY: 'auto'
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div style={{ marginBottom: '12px', fontSize: '13px', fontWeight: 600, color: '#374151' }}>
+                    Chart Colors
+                  </div>
+                  {chartSpec.figure.data.map((trace: any, traceIndex: number) => {
+                    const currentColor = chartColors[chartIndex]?.[traceIndex] || '#ff6b6b';
+                    const traceName = trace.name || `Trace ${traceIndex + 1}`;
+                    const currentOpacity = traceOpacities[traceIndex] ?? trace.opacity ?? 1;
+                    
+                    return (
+                      <div key={traceIndex} style={{ marginBottom: '16px', paddingBottom: '16px', borderBottom: traceIndex < chartSpec.figure.data.length - 1 ? '1px solid #e5e7eb' : 'none' }}>
+                        <label style={{ display: 'block', marginBottom: '8px', fontSize: '12px', fontWeight: 500, color: '#6b7280' }}>
+                          {traceName}
+                        </label>
+                        
+                        {/* Color Picker */}
+                        <div style={{ marginBottom: '12px' }}>
+                          <label style={{ display: 'block', marginBottom: '6px', fontSize: '11px', color: '#9ca3af' }}>
+                            Color
+                          </label>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div
+                              style={{
+                                width: '32px',
+                                height: '32px',
+                                borderRadius: '6px',
+                                backgroundColor: currentColor,
+                                border: '1px solid #e5e7eb',
+                                flexShrink: 0
+                              }}
+                            />
+                            <input
+                              type="color"
+                              value={currentColor}
+                              onChange={(e) => {
+                                const newColor = e.target.value;
+                                if (onChartColorChange) {
+                                  onChartColorChange(chartIndex, traceIndex, newColor);
+                                }
+                                if (setChartColors) {
+                                  setChartColors(prev => {
+                                    const current = prev[chartIndex] || [];
+                                    const updated = [...current];
+                                    updated[traceIndex] = newColor;
+                                    return {
+                                      ...prev,
+                                      [chartIndex]: updated
+                                    };
+                                  });
+                                }
+                              }}
+                              style={{
+                                flex: 1,
+                                height: '36px',
+                                border: '1px solid #e5e7eb',
+                                borderRadius: '8px',
+                                cursor: 'pointer'
+                              }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Opacity Slider */}
+                        <div>
+                          <label style={{ display: 'block', marginBottom: '6px', fontSize: '11px', color: '#9ca3af' }}>
+                            Opacity
+                          </label>
+                          <style>{`
+                            input[type="range"]#trace-opacity-${chartIndex}-${traceIndex} {
+                              -webkit-appearance: none;
+                              appearance: none;
+                              width: 100%;
+                              height: 8px;
+                              background: #e5e7eb;
+                              border-radius: 4px;
+                              outline: none;
+                            }
+                            input[type="range"]#trace-opacity-${chartIndex}-${traceIndex}::-webkit-slider-thumb {
+                              -webkit-appearance: none;
+                              appearance: none;
+                              width: 12px;
+                              height: 12px;
+                              border-radius: 50%;
+                              background: #ff6b6b;
+                              cursor: pointer;
+                              box-shadow: 0 2px 4px rgba(255, 107, 107, 0.3);
+                            }
+                            input[type="range"]#trace-opacity-${chartIndex}-${traceIndex}::-moz-range-thumb {
+                              width: 12px;
+                              height: 12px;
+                              border-radius: 50%;
+                              background: #ff6b6b;
+                              cursor: pointer;
+                              border: none;
+                              box-shadow: 0 2px 4px rgba(255, 107, 107, 0.3);
+                            }
+                          `}</style>
+                          <input
+                            id={`trace-opacity-${chartIndex}-${traceIndex}`}
+                            type="range"
+                            min="0"
+                            max="1"
+                            step="0.01"
+                            value={currentOpacity}
+                            onChange={(e) => {
+                              const newOpacity = parseFloat(e.target.value);
+                              // Update local state immediately for responsive slider
+                              setTraceOpacities(prev => ({
+                                ...prev,
+                                [traceIndex]: newOpacity
+                              }));
+                              // Update chartOpacities state which PlotlyChartRenderer uses
+                              if (setChartOpacities) {
+                                setChartOpacities(prev => {
+                                  const current = prev[chartIndex] || [];
+                                  const updated = [...current];
+                                  updated[traceIndex] = newOpacity;
+                                  return {
+                                    ...prev,
+                                    [chartIndex]: updated
+                                  };
+                                });
+                              }
+                            }}
+                            style={{
+                              cursor: 'pointer'
+                            }}
+                          />
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#9ca3af', marginTop: '4px' }}>
+                            <span>0%</span>
+                            <span>{Math.round(currentOpacity * 100)}%</span>
+                            <span>100%</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Container Color Picker Button */}
           <button
             ref={colorPickerButtonRef}
             onClick={() => {
@@ -781,7 +1094,7 @@ const ChartItem: React.FC<ChartItemProps> = ({
               </div>
             </div>
           )}
-
+          
           {/* Notes Button */}
           <button
             onClick={() => {
@@ -1258,6 +1571,9 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   const [applyToContainers, setApplyToContainers] = useState(true); // Apply dashboard colors to all containers
   const [containerColors, setContainerColors] = useState<Record<number, {bg: string, text: string, opacity: number}>>({});
   const [activeContainerColorPicker, setActiveContainerColorPicker] = useState<number | null>(null);
+  const [chartColors, setChartColors] = useState<Record<number, string[]>>({});
+  const [chartOpacities, setChartOpacities] = useState<Record<number, number[]>>({});
+  const [activeChartColorPicker, setActiveChartColorPicker] = useState<number | null>(null);
   const chatButtonRef = useRef<HTMLButtonElement>(null);
   const downloadButtonRef = useRef<HTMLButtonElement>(null);
   const publishButtonRef = useRef<HTMLButtonElement>(null);
@@ -1579,6 +1895,49 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
 
   const handleChartZoom = (chartIndex: number) => {
     setZoomedChartIndex(chartIndex);
+  };
+
+  // Handle chart color change
+  const handleChartColorChange = (chartIndex: number, traceIndex: number, color: string) => {
+    setChartSpecs(prev => {
+      const updated = [...prev];
+      if (updated[chartIndex]?.figure?.data) {
+        const figureData = JSON.parse(JSON.stringify(updated[chartIndex].figure.data));
+        const trace = figureData[traceIndex];
+        
+        if (trace) {
+          // Update color based on trace type
+          if (trace.type === 'bar') {
+            trace.marker = trace.marker || {};
+            trace.marker.color = color;
+          } else if (trace.type === 'scatter') {
+            if (trace.mode?.includes('lines')) {
+              trace.line = trace.line || {};
+              trace.line.color = color;
+            } else {
+              trace.marker = trace.marker || {};
+              trace.marker.color = color;
+            }
+          } else if (trace.type === 'pie') {
+            trace.marker = trace.marker || {};
+            if (trace.marker.colors) {
+              trace.marker.colors[traceIndex] = color;
+            } else {
+              trace.marker.colors = [color];
+            }
+          }
+          
+          updated[chartIndex] = {
+            ...updated[chartIndex],
+            figure: {
+              ...updated[chartIndex].figure,
+              data: figureData
+            }
+          };
+        }
+      }
+      return updated;
+    });
   };
 
   // Generate insights for chart notes
@@ -3208,7 +3567,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
           : hexToRgba(dashboardBgColor, dashboardBgOpacity);
         
         return (
-          <div className="fullscreen-modal" onClick={() => setIsFullscreen(false)}>
+        <div className="fullscreen-modal" onClick={() => setIsFullscreen(false)}>
             <div 
               className="fullscreen-content" 
               onClick={(e) => e.stopPropagation()}
@@ -3314,18 +3673,18 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                     const actualText = applyToContainers ? dashboardTextColor : (containerColor?.text || dashboardTextColor);
                     
                     return (
-                      <div key={`chart-${index}`} className="chart-fade-in">
-                        <PlotlyChartRenderer 
-                          chartSpec={spec} 
-                          data={localData}
-                          chartIndex={index}
-                          datasetId={datasetId}
-                          onChartFixed={handleChartFixed}
-                          onFixingStatusChange={(isFixing) => setShowFixNotification(isFixing)}
+                    <div key={`chart-${index}`} className="chart-fade-in">
+                      <PlotlyChartRenderer 
+                        chartSpec={spec} 
+                        data={localData}
+                        chartIndex={index}
+                        datasetId={datasetId}
+                        onChartFixed={handleChartFixed}
+                        onFixingStatusChange={(isFixing) => setShowFixNotification(isFixing)}
                           backgroundColor={actualBg}
                           textColor={actualText}
-                        />
-                      </div>
+                      />
+                    </div>
                     );
                   })}
                 
@@ -3364,8 +3723,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                 )}
               </div>
             </div>
-            </div>
           </div>
+        </div>
         );
       })()}
 
@@ -4294,19 +4653,19 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                     setApplyToContainers(!applyToContainers);
                                   }}
                                   style={{ 
-                                    display: 'flex', 
-                                    alignItems: 'center', 
-                                    gap: '6px', 
-                                    fontSize: '13px', 
-                                    fontWeight: 500, 
-                                    color: '#6b7280', 
-                                    cursor: 'pointer',
-                                    background: 'rgba(255, 255, 255, 0.9)',
-                                    backdropFilter: 'blur(8px)',
-                                    padding: '6px 12px',
-                                    borderRadius: '8px',
-                                    border: '1px solid #e5e7eb',
-                                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)'
+                                  display: 'flex', 
+                                  alignItems: 'center', 
+                                  gap: '6px', 
+                                  fontSize: '13px', 
+                                  fontWeight: 500, 
+                                  color: '#6b7280', 
+                                  cursor: 'pointer',
+                                  background: 'rgba(255, 255, 255, 0.9)',
+                                  backdropFilter: 'blur(8px)',
+                                  padding: '6px 12px',
+                                  borderRadius: '8px',
+                                  border: '1px solid #e5e7eb',
+                                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)'
                                   }}
                                 >
                                   <div
@@ -4382,7 +4741,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                     </div>
                                     
                                     {/* Use Gradient */}
-                                    <div style={{ marginBottom: '12px' }}>
+                                      <div style={{ marginBottom: '12px' }}>
                                       <style>{`
                                         input[type="checkbox"]#use-gradient-checkbox:checked {
                                           accent-color: #ff6b6b;
@@ -4392,11 +4751,11 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                           cursor: pointer;
                                         }
                                       `}</style>
-                                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: 500, color: '#6b7280', cursor: 'pointer' }}>
-                                        <input
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: 500, color: '#6b7280', cursor: 'pointer' }}>
+                                          <input
                                           id="use-gradient-checkbox"
-                                          type="checkbox"
-                                          checked={useGradient}
+                                            type="checkbox"
+                                            checked={useGradient}
                                           onChange={(e) => {
                                             setUseGradient(e.target.checked);
                                             // Turn off "apply to all" when gradient is enabled
@@ -4405,29 +4764,29 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                             }
                                           }}
                                           style={{ cursor: 'pointer', accentColor: '#ff6b6b' }}
-                                        />
-                                        Use Gradient
-                                      </label>
-                                      {useGradient && (
-                                        <div style={{ marginTop: '8px' }}>
-                                          <label style={{ display: 'block', marginBottom: '6px', fontSize: '11px', color: '#9ca3af' }}>
-                                            Second Color
-                                          </label>
-                                          <input
-                                            type="color"
-                                            value={gradientColor2}
-                                            onChange={(e) => setGradientColor2(e.target.value)}
-                                            style={{
-                                              width: '100%',
-                                              height: '36px',
-                                              border: '1px solid #e5e7eb',
-                                              borderRadius: '8px',
-                                              cursor: 'pointer'
-                                            }}
                                           />
-                                        </div>
-                                      )}
-                                    </div>
+                                          Use Gradient
+                                        </label>
+                                        {useGradient && (
+                                          <div style={{ marginTop: '8px' }}>
+                                            <label style={{ display: 'block', marginBottom: '6px', fontSize: '11px', color: '#9ca3af' }}>
+                                              Second Color
+                                            </label>
+                                            <input
+                                              type="color"
+                                              value={gradientColor2}
+                                              onChange={(e) => setGradientColor2(e.target.value)}
+                                              style={{
+                                                width: '100%',
+                                                height: '36px',
+                                                border: '1px solid #e5e7eb',
+                                                borderRadius: '8px',
+                                                cursor: 'pointer'
+                                              }}
+                                            />
+                                          </div>
+                                        )}
+                                      </div>
 
                                     {/* Background Opacity */}
                                     <div style={{ marginBottom: '12px' }}>
@@ -4920,6 +5279,14 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                   setContainerColors={setContainerColors}
                                   applyToContainers={applyToContainers}
                                   setApplyToContainers={setApplyToContainers}
+                                  chartColors={chartColors}
+                                  setChartColors={setChartColors}
+                                  chartOpacities={chartOpacities}
+                                  setChartOpacities={setChartOpacities}
+                                  activeChartColorPicker={activeChartColorPicker}
+                                  setActiveChartColorPicker={setActiveChartColorPicker}
+                                  onChartColorChange={handleChartColorChange}
+                                  setChartSpecs={setChartSpecs}
                                 />
                               );
                             })}
