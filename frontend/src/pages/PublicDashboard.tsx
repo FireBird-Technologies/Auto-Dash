@@ -19,7 +19,13 @@ export const PublicDashboard: React.FC = () => {
     dashboard_title: string | null;
     background_color?: string;
     text_color?: string;
+    background_opacity?: number;
+    use_gradient?: boolean;
+    gradient_color_2?: string;
     container_colors?: Record<number, {bg: string, text: string, opacity: number}>;
+    chart_colors?: Record<number, string[]>;
+    chart_opacities?: Record<number, number[]>;
+    apply_to_containers?: boolean;
     figures_data: Array<{
       chart_index: number;
       figure: any;
@@ -291,7 +297,26 @@ export const PublicDashboard: React.FC = () => {
         overflow: 'auto'
       }}>
         <div className="chart-display" style={{
-          background: dashboardData.background_color || '#ffffff',
+          background: (() => {
+            const bgColor = dashboardData.background_color || '#ffffff';
+            const opacity = dashboardData.background_opacity ?? 1.0;
+            const useGradient = dashboardData.use_gradient ?? false;
+            const gradientColor2 = dashboardData.gradient_color_2 || '#e5e7eb';
+            
+            // Helper to convert hex to rgba
+            const hexToRgba = (hex: string, op: number): string => {
+              const normalizedHex = hex.replace('#', '');
+              const r = parseInt(normalizedHex.substring(0, 2), 16);
+              const g = parseInt(normalizedHex.substring(2, 4), 16);
+              const b = parseInt(normalizedHex.substring(4, 6), 16);
+              return `rgba(${r}, ${g}, ${b}, ${op})`;
+            };
+            
+            if (useGradient) {
+              return `linear-gradient(135deg, ${hexToRgba(bgColor, opacity)}, ${hexToRgba(gradientColor2, opacity)})`;
+            }
+            return hexToRgba(bgColor, opacity);
+          })(),
           color: dashboardData.text_color || '#1a1a1a'
         }}>
           {/* Dashboard Title */}
@@ -327,7 +352,7 @@ export const PublicDashboard: React.FC = () => {
             backgroundColor={dashboardData.background_color || '#ffffff'}
             textColor={dashboardData.text_color || '#1a1a1a'}
             containerColors={dashboardData.container_colors}
-            applyToContainers={false}
+            applyToContainers={dashboardData.apply_to_containers ?? true}
           />
           
           {/* Charts Grid - Same layout as dashboard with notes icon */}
@@ -340,8 +365,9 @@ export const PublicDashboard: React.FC = () => {
             position: 'relative'
           }}>
             {regularCharts.map((spec) => {
-              // Get container-specific colors or use defaults
-              const containerColor = dashboardData.container_colors?.[spec.chart_index];
+              // Get container-specific colors or use defaults based on apply_to_containers
+              const applyToContainers = dashboardData.apply_to_containers ?? true;
+              const containerColor = applyToContainers ? null : dashboardData.container_colors?.[spec.chart_index];
               const actualBg = containerColor?.bg || dashboardData.background_color || '#ffffff';
               const actualText = containerColor?.text || dashboardData.text_color || '#1a1a1a';
               const actualOpacity = containerColor?.opacity ?? 1;
@@ -385,8 +411,10 @@ export const PublicDashboard: React.FC = () => {
                       }}
                       data={[]}
                       chartIndex={spec.chart_index}
-                      backgroundColor={actualBg}
+                      backgroundColor={hexToRgba(actualBg, actualOpacity)}
                       textColor={actualText}
+                      chartColors={dashboardData.chart_colors?.[spec.chart_index]}
+                      chartOpacities={dashboardData.chart_opacities?.[spec.chart_index]}
                     />
                   </div>
                 

@@ -117,6 +117,18 @@ export const Landing: React.FC<LandingProps> = ({ onStart }) => {
             <FeatureCard
               icon={
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M20.71 4.63a1 1 0 0 0-1.42 0l-1.83 1.83 3.75 3.75L23 8.29a1 1 0 0 0 0-1.41z"/>
+                  <path d="M16 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                  <path d="M20 21v-8"/>
+                  <path d="M16 17H8"/>
+                </svg>
+              }
+              title="Full Customization"
+              description="Personalize every aspect: dashboard colors, gradients, container styles, chart trace colors, and opacity controls. Make it yours!"
+            />
+            <FeatureCard
+              icon={
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <line x1="12" y1="2" x2="12" y2="6" />
                   <line x1="12" y1="18" x2="12" y2="22" />
                   <line x1="4.93" y1="4.93" x2="7.76" y2="7.76" />
@@ -458,18 +470,20 @@ export const Landing: React.FC<LandingProps> = ({ onStart }) => {
       <section className="demo-section" style={{ backgroundColor: 'white' }}>
         <div className="section-container">
           <div className="demo-header">
-            <span className="demo-badge">Live Demo</span>
+            <span className="demo-badge">Live Interactive Demo</span>
             <h2 className="section-heading">See AutoDash in Action</h2>
             <p className="section-subheading">
               Try interacting with fully functional visualizations and data analysis below. 
+              <strong> Click the "Customize" button</strong> to personalize colors, gradients, opacity, and more!
               Explore charts, run notebook-style analysis, and see AI-powered insights - all created with natural language.
             </p>
           </div>
-          <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '32px', boxShadow: '0 4px 24px rgba(0, 0, 0, 0.08)' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '32px', boxShadow: '0 4px 24px rgba(0, 0, 0, 0.08)', position: 'relative' }}>
             <DemoVisualization />
           </div>
           <div className="demo-cta">
             <p className="demo-cta-text">
+              <strong>🎨 Full Customization:</strong> Personalize every aspect - dashboard colors, gradients, container styles, chart colors, and opacity. 
               These are just examples. AutoDash can create <strong>any visualization or analysis you can imagine</strong> - just describe it in plain English.
             </p>
             <GoogleAuthButton

@@ -669,11 +669,32 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
                 };
                 
                 // Get color and opacity for this trace
-                const traceColor = chartColors?.[index] || trace.marker?.color || trace.line?.color || '#ff6b6b';
-                const traceOpacity = chartOpacities?.[index] ?? 1;
+                // chartColors is already the array for this chart: string[]
+                // chartOpacities is already the array for this chart: number[]
+                let traceColor: string = chartColors?.[index] || trace.marker?.color || trace.line?.color || '#ff6b6b';
                 
-                // Convert color to rgba with opacity
-                const rgbaColor = traceColor.startsWith('#') ? hexToRgba(traceColor, traceOpacity) : traceColor;
+                // Ensure traceColor is a string (handle edge cases)
+                if (typeof traceColor !== 'string') {
+                  if (Array.isArray(traceColor)) {
+                    traceColor = traceColor[0] || '#ff6b6b';
+                  } else {
+                    traceColor = String(traceColor) || '#ff6b6b';
+                  }
+                }
+                
+                const traceOpacity = chartOpacities?.[index] ?? trace.opacity ?? 1;
+                
+                // Convert color to rgba with opacity (only if it's a hex color)
+                let rgbaColor: string;
+                if (typeof traceColor === 'string' && traceColor.startsWith('#')) {
+                  rgbaColor = hexToRgba(traceColor, traceOpacity);
+                } else if (typeof traceColor === 'string' && traceColor.startsWith('rgba')) {
+                  // Already rgba, just update opacity
+                  rgbaColor = traceColor;
+                } else {
+                  // rgb() or other format, try to convert
+                  rgbaColor = traceColor;
+                }
                 
                 // Apply color with opacity based on trace type
                 if (trace.type === 'bar') {
