@@ -183,7 +183,7 @@ const ChartItem: React.FC<ChartItemProps> = ({
   const containerColor = containerColors[chartIndex];
   const actualBg = applyToContainers ? backgroundColor : (containerColor?.bg || '#ffffff');
   const actualText = applyToContainers ? textColor : (containerColor?.text || '#1a1a1a');
-  const actualOpacity = applyToContainers ? 1 : (containerColor?.opacity || 1);
+  const actualOpacity = applyToContainers ? 1 : (containerColor?.opacity ?? 1);
   
   return (
     <div
@@ -673,7 +673,7 @@ const ChartItem: React.FC<ChartItemProps> = ({
                   onChange={(e) => {
                     setContainerColors(prev => ({
                       ...prev,
-                      [chartIndex]: { ...prev[chartIndex], bg: e.target.value, text: prev[chartIndex]?.text || '#1a1a1a', opacity: prev[chartIndex]?.opacity || 1 }
+                      [chartIndex]: { ...prev[chartIndex], bg: e.target.value, text: prev[chartIndex]?.text || '#1a1a1a', opacity: prev[chartIndex]?.opacity ?? 1 }
                     }));
                     setApplyToContainers(false);
                   }}
@@ -766,7 +766,7 @@ const ChartItem: React.FC<ChartItemProps> = ({
                   onChange={(e) => {
                     setContainerColors(prev => ({
                       ...prev,
-                      [chartIndex]: { ...prev[chartIndex], bg: prev[chartIndex]?.bg || '#ffffff', text: e.target.value, opacity: prev[chartIndex]?.opacity || 1 }
+                      [chartIndex]: { ...prev[chartIndex], bg: prev[chartIndex]?.bg || '#ffffff', text: e.target.value, opacity: prev[chartIndex]?.opacity ?? 1 }
                     }));
                     setApplyToContainers(false);
                   }}
@@ -781,7 +781,7 @@ const ChartItem: React.FC<ChartItemProps> = ({
               </div>
             </div>
           )}
-          
+
           {/* Notes Button */}
           <button
             onClick={() => {
@@ -3376,7 +3376,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
         const containerColor = containerColors[zoomedChartIndex];
         const actualBg = applyToContainers ? dashboardBgColor : (containerColor?.bg || dashboardBgColor);
         const actualText = applyToContainers ? dashboardTextColor : (containerColor?.text || dashboardTextColor);
-        const actualOpacity = applyToContainers ? dashboardBgOpacity : (containerColor?.opacity || dashboardBgOpacity);
+        const actualOpacity = applyToContainers ? dashboardBgOpacity : (containerColor?.opacity ?? dashboardBgOpacity);
         
         // Helper to convert hex to rgba
         const hexToRgba = (hex: string, opacity: number): string => {

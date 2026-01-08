@@ -275,7 +275,7 @@ export const KPICard: React.FC<KPICardProps> = ({
                   onChange={(e) => {
                     setContainerColors(prev => ({
                       ...prev,
-                      [chartIndex]: { ...prev[chartIndex], bg: e.target.value, text: prev[chartIndex]?.text || '#1a1a1a', opacity: prev[chartIndex]?.opacity || 1 }
+                      [chartIndex]: { ...prev[chartIndex], bg: e.target.value, text: prev[chartIndex]?.text || '#1a1a1a', opacity: prev[chartIndex]?.opacity ?? 1 }
                     }));
                     if (setApplyToContainers) {
                       setApplyToContainers(false);
@@ -372,7 +372,7 @@ export const KPICard: React.FC<KPICardProps> = ({
                   onChange={(e) => {
                     setContainerColors(prev => ({
                       ...prev,
-                      [chartIndex]: { ...prev[chartIndex], bg: prev[chartIndex]?.bg || '#ffffff', text: e.target.value, opacity: prev[chartIndex]?.opacity || 1 }
+                      [chartIndex]: { ...prev[chartIndex], bg: prev[chartIndex]?.bg || '#ffffff', text: e.target.value, opacity: prev[chartIndex]?.opacity ?? 1 }
                     }));
                     if (setApplyToContainers) {
                       setApplyToContainers(false);

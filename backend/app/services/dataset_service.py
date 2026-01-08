@@ -772,45 +772,24 @@ class DatasetService:
         # Generate unique token
         share_token = secrets.token_urlsafe(32)
         
-        # Check if public dashboard already exists for this dataset
-        existing = db.query(PublicDashboard).filter(
-            PublicDashboard.dataset_id == dataset.id,
-            PublicDashboard.is_public == True
-        ).first()
-        
-        if existing:
-            # Update existing
-            existing.share_token = share_token
-            existing.figures_data = figures_data
-            existing.dashboard_title = dashboard_title
-            existing.background_color = background_color
-            existing.text_color = text_color
-            existing.updated_at = datetime.utcnow()
-            if hours_valid:
-                existing.expires_at = datetime.utcnow() + timedelta(hours=hours_valid)
-            else:
-                existing.expires_at = None
-            db.commit()
-            db.refresh(existing)
-            return existing
-        else:
-            # Create new
-            public_dashboard = PublicDashboard(
-                dataset_id=dataset.id,
-                user_id=user_id,
-                share_token=share_token,
-                figures_data=figures_data,
-                dashboard_title=dashboard_title,
-                background_color=background_color,
-                text_color=text_color,
-                container_colors=container_colors or {},
-                is_public=True,
-                expires_at=datetime.utcnow() + timedelta(hours=hours_valid) if hours_valid else None
-            )
-            db.add(public_dashboard)
-            db.commit()
-            db.refresh(public_dashboard)
-            return public_dashboard
+        # Always create a new public dashboard entry with latest data
+        # This ensures each publish creates a new unique link
+        public_dashboard = PublicDashboard(
+            dataset_id=dataset.id,
+            user_id=user_id,
+            share_token=share_token,
+            figures_data=figures_data,
+            dashboard_title=dashboard_title,
+            background_color=background_color,
+            text_color=text_color,
+            container_colors=container_colors or {},
+            is_public=True,
+            expires_at=datetime.utcnow() + timedelta(hours=hours_valid) if hours_valid else None
+        )
+        db.add(public_dashboard)
+        db.commit()
+        db.refresh(public_dashboard)
+        return public_dashboard
     
     def get_public_dashboard(
         self,
