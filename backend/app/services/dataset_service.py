@@ -744,7 +744,13 @@ class DatasetService:
         hours_valid: Optional[int] = None,
         background_color: str = "#ffffff",
         text_color: str = "#1a1a1a",
-        container_colors: Optional[Dict] = None
+        background_opacity: float = 1.0,
+        use_gradient: bool = False,
+        gradient_color_2: str = "#e5e7eb",
+        container_colors: Optional[Dict] = None,
+        chart_colors: Optional[Dict] = None,
+        chart_opacities: Optional[Dict] = None,
+        apply_to_containers: bool = True
     ) -> PublicDashboard:
         """
         Create a public dashboard entry.
@@ -782,7 +788,13 @@ class DatasetService:
             dashboard_title=dashboard_title,
             background_color=background_color,
             text_color=text_color,
+            background_opacity=background_opacity,
+            use_gradient=use_gradient,
+            gradient_color_2=gradient_color_2,
             container_colors=container_colors or {},
+            chart_colors=chart_colors or {},
+            chart_opacities=chart_opacities or {},
+            apply_to_containers=apply_to_containers,
             is_public=True,
             expires_at=datetime.utcnow() + timedelta(hours=hours_valid) if hours_valid else None
         )
@@ -826,7 +838,13 @@ class DatasetService:
             "dashboard_title": public_dashboard.dashboard_title,
             "background_color": public_dashboard.background_color or "#ffffff",
             "text_color": public_dashboard.text_color or "#1a1a1a",
+            "background_opacity": public_dashboard.background_opacity if public_dashboard.background_opacity is not None else 1.0,
+            "use_gradient": public_dashboard.use_gradient if public_dashboard.use_gradient is not None else False,
+            "gradient_color_2": public_dashboard.gradient_color_2 or "#e5e7eb",
             "container_colors": public_dashboard.container_colors or {},
+            "chart_colors": public_dashboard.chart_colors or {},
+            "chart_opacities": public_dashboard.chart_opacities or {},
+            "apply_to_containers": public_dashboard.apply_to_containers if public_dashboard.apply_to_containers is not None else True,
             "figures_data": figures_data,
             "owner_name": public_dashboard.dataset.user.name if public_dashboard.dataset.user else "Anonymous",
             "created_at": public_dashboard.created_at.isoformat()

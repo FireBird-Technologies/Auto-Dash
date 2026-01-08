@@ -223,14 +223,31 @@ const ChartItem: React.FC<ChartItemProps> = ({
   
   // Close color picker when clicking outside
   useEffect(() => {
+    // Only set up listener if this chart's picker is active
+    if (activeContainerColorPicker !== chartIndex) return;
+    
     const handleClickOutside = (event: MouseEvent) => {
-      if (activeContainerColorPicker === chartIndex && colorPickerRef.current && !colorPickerRef.current.contains(event.target as Node)) {
+      const target = event.target as HTMLElement;
+      
+      // Never close if clicking on a color input (native picker is outside our refs)
+      if (target.tagName === 'INPUT' && (target as HTMLInputElement).type === 'color') {
+        return;
+      }
+      
+      if (colorPickerRef.current && !colorPickerRef.current.contains(target)) {
         setActiveContainerColorPicker(null);
       }
     };
     
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    // Small delay to prevent closing immediately when opening
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside);
+    }, 50);
+    
+    return () => {
+      clearTimeout(timeoutId);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, [activeContainerColorPicker, chartIndex, setActiveContainerColorPicker]);
 
   // Position color picker dropdown relative to button
@@ -771,7 +788,7 @@ const ChartItem: React.FC<ChartItemProps> = ({
                     borderRadius: '12px',
                     padding: '16px',
                     boxShadow: '0 10px 40px rgba(0, 0, 0, 0.15)',
-                    zIndex: 1000,
+                    zIndex: 900,
                     minWidth: '220px',
                     maxHeight: '400px',
                     overflowY: 'auto'
@@ -972,7 +989,7 @@ const ChartItem: React.FC<ChartItemProps> = ({
                 borderRadius: '12px',
                 padding: '16px',
                 boxShadow: '0 10px 40px rgba(0, 0, 0, 0.15)',
-                zIndex: 1000,
+                zIndex: 900,
                 minWidth: '200px'
               }}
             >
@@ -1223,6 +1240,39 @@ const ChartItem: React.FC<ChartItemProps> = ({
                         <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
                       </svg>
                       {generatingInsights[chartIndex] ? 'Generating...' : 'Generate with AI'}
+                    </button>
+                  )}
+                  {editingNotesIndex !== chartIndex && chartNotes[chartIndex] && (
+                    <button
+                      onClick={() => {
+                        setEditingNotesIndex(chartIndex);
+                        setSavedNotes(prev => ({ ...prev, [chartIndex]: false }));
+                      }}
+                      style={{
+                        padding: '4px 10px',
+                        background: 'rgba(59, 130, 246, 0.1)',
+                        border: '1px solid rgba(59, 130, 246, 0.2)',
+                        borderRadius: '6px',
+                        fontSize: '11px',
+                        color: '#3b82f6',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        transition: 'all 0.2s'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(59, 130, 246, 0.15)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)';
+                      }}
+                    >
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                      </svg>
+                      Edit
                     </button>
                   )}
                 </div>
@@ -3161,7 +3211,13 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
           dashboard_title: titleToShare,
           background_color: dashboardBgColor,
           text_color: dashboardTextColor,
-          container_colors: containerColors
+          background_opacity: dashboardBgOpacity,
+          use_gradient: useGradient,
+          gradient_color_2: gradientColor2,
+          container_colors: containerColors,
+          chart_colors: chartColors,
+          chart_opacities: chartOpacities,
+          apply_to_containers: applyToContainers
         })
       });
 
@@ -4560,7 +4616,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                 alignItems: 'center',
                                 justifyContent: 'flex-start',
                                 gap: '16px',
-                                zIndex: 10
+                                zIndex: 900
                               }} data-color-picker>
                                 {/* Three Color Dots */}
                                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -4623,7 +4679,11 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                   
                                   {/* More Options Button */}
                                   <button
-                                    onClick={() => setShowColorPicker(!showColorPicker)}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setShowColorPicker(!showColorPicker);
+                                    }}
+                                    data-color-picker="button"
                                     title="More colors"
                                     style={{
                                       width: '24px',
@@ -4708,6 +4768,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                 {/* Custom Color Picker Dropdown */}
                                 {showColorPicker && (
                                   <div
+                                    data-color-picker="dashboard"
+                                    onClick={(e) => e.stopPropagation()}
                                     style={{
                                       position: 'absolute',
                                       top: '100%',
@@ -4717,7 +4779,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                       borderRadius: '12px',
                                       padding: '16px',
                                       boxShadow: '0 10px 40px rgba(0, 0, 0, 0.15)',
-                                      zIndex: 1000,
+                                      zIndex: 901,
                                       minWidth: '180px'
                                     }}
                                   >

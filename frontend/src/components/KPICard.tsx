@@ -102,14 +102,35 @@ export const KPICard: React.FC<KPICardProps> = ({
 
   // Close color picker when clicking outside
   useEffect(() => {
+    if (activeContainerColorPicker !== chartIndex) return;
+    
     const handleClickOutside = (event: MouseEvent) => {
-      if (activeContainerColorPicker === chartIndex && colorPickerRef.current && !colorPickerRef.current.contains(event.target as Node)) {
+      const target = event.target as HTMLElement;
+      
+      // Never close if clicking on a color input (native picker is outside our refs)
+      if (target.tagName === 'INPUT' && (target as HTMLInputElement).type === 'color') {
+        return;
+      }
+      
+      // Check if click is inside the dropdown, the button, or the action buttons container
+      const isInsideDropdown = colorPickerDropdownRef.current?.contains(target);
+      const isInsideButton = colorPickerButtonRef.current?.contains(target);
+      const isInsideActionButtons = colorPickerRef.current?.contains(target);
+      
+      if (!isInsideDropdown && !isInsideButton && !isInsideActionButtons) {
         setActiveContainerColorPicker?.(null);
       }
     };
     
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    // Small delay to prevent closing immediately when opening
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside);
+    }, 50);
+    
+    return () => {
+      clearTimeout(timeoutId);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, [activeContainerColorPicker, chartIndex, setActiveContainerColorPicker]);
 
   // Position color picker dropdown relative to button
@@ -199,6 +220,146 @@ export const KPICard: React.FC<KPICardProps> = ({
     return String(val);
   };
 
+  // Color Picker Dropdown - rendered as JSX variable to avoid function component re-creation
+  const colorPickerDropdown = activeContainerColorPicker === chartIndex && setContainerColors ? (
+    <div
+      ref={colorPickerDropdownRef}
+      onMouseDown={(e) => e.stopPropagation()}
+      style={{
+        position: 'fixed',
+        background: 'white',
+        borderRadius: '12px',
+        padding: '16px',
+        boxShadow: '0 10px 40px rgba(0, 0, 0, 0.15)',
+        zIndex: 900,
+        minWidth: '200px'
+      }}
+    >
+        <div style={{ marginBottom: '12px' }}>
+          <label style={{ display: 'block', marginBottom: '6px', fontSize: '12px', fontWeight: 500, color: '#6b7280' }}>
+            Background
+          </label>
+          <input
+            type="color"
+            value={containerColor?.bg || '#ffffff'}
+            onChange={(e) => {
+              setContainerColors(prev => ({
+                ...prev,
+                [chartIndex]: { ...prev[chartIndex], bg: e.target.value, text: prev[chartIndex]?.text || '#1a1a1a', opacity: prev[chartIndex]?.opacity ?? 1 }
+              }));
+              if (setApplyToContainers) {
+                setApplyToContainers(false);
+              }
+            }}
+            style={{
+              width: '100%',
+              height: '36px',
+              border: '1px solid #e5e7eb',
+              borderRadius: '8px',
+              cursor: 'pointer'
+            }}
+          />
+        </div>
+
+        <div style={{ marginBottom: '10px' }}>
+          <label style={{ display: 'block', marginBottom: '4px', fontSize: '11px', fontWeight: 500, color: '#6b7280' }}>
+            Opacity
+          </label>
+          <style>{`
+            input[type="range"]#kpi-opacity-${chartIndex}::-webkit-slider-thumb {
+              -webkit-appearance: none;
+              appearance: none;
+              width: 14px;
+              height: 14px;
+              border-radius: 50%;
+              background: #ff6b6b;
+              cursor: pointer;
+              box-shadow: 0 2px 4px rgba(255, 107, 107, 0.3);
+            }
+            input[type="range"]#kpi-opacity-${chartIndex}::-moz-range-thumb {
+              width: 14px;
+              height: 14px;
+              border-radius: 50%;
+              background: #ff6b6b;
+              cursor: pointer;
+              border: none;
+              box-shadow: 0 2px 4px rgba(255, 107, 107, 0.3);
+            }
+            input[type="range"]#kpi-opacity-${chartIndex}::-webkit-slider-runnable-track {
+              width: 100%;
+              height: 4px;
+              background: #e5e7eb;
+              border-radius: 2px;
+            }
+            input[type="range"]#kpi-opacity-${chartIndex}::-moz-range-track {
+              width: 100%;
+              height: 4px;
+              background: #e5e7eb;
+              border-radius: 2px;
+            }
+          `}</style>
+          <input
+            id={`kpi-opacity-${chartIndex}`}
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value={containerColor?.opacity ?? 1}
+            onChange={(e) => {
+              const newOpacity = parseFloat(e.target.value);
+              setContainerColors(prev => ({
+                ...prev,
+                [chartIndex]: { 
+                  bg: prev[chartIndex]?.bg || '#ffffff', 
+                  text: prev[chartIndex]?.text || '#1a1a1a', 
+                  opacity: newOpacity 
+                }
+              }));
+              if (setApplyToContainers) {
+                setApplyToContainers(false);
+              }
+            }}
+            style={{
+              width: '100%',
+              cursor: 'pointer',
+              accentColor: '#ff6b6b'
+            }}
+          />
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', color: '#9ca3af', marginTop: '2px' }}>
+            <span>0%</span>
+            <span>{Math.round((containerColor?.opacity ?? 1) * 100)}%</span>
+            <span>100%</span>
+          </div>
+        </div>
+
+        <div>
+          <label style={{ display: 'block', marginBottom: '6px', fontSize: '12px', fontWeight: 500, color: '#6b7280' }}>
+            Text
+          </label>
+          <input
+            type="color"
+            value={containerColor?.text || '#1a1a1a'}
+            onChange={(e) => {
+              setContainerColors(prev => ({
+                ...prev,
+                [chartIndex]: { ...prev[chartIndex], bg: prev[chartIndex]?.bg || '#ffffff', text: e.target.value, opacity: prev[chartIndex]?.opacity ?? 1 }
+              }));
+              if (setApplyToContainers) {
+                setApplyToContainers(false);
+              }
+            }}
+            style={{
+              width: '100%',
+              height: '36px',
+              border: '1px solid #e5e7eb',
+              borderRadius: '8px',
+              cursor: 'pointer'
+            }}
+          />
+        </div>
+      </div>
+  ) : null;
+
   const ActionButtons = () => (
     <div 
       ref={colorPickerRef}
@@ -210,191 +371,55 @@ export const KPICard: React.FC<KPICardProps> = ({
         gap: '4px',
         opacity: showActions ? 1 : 0,
         transition: 'opacity 0.2s',
-        zIndex: 10
+        zIndex: 5
       }}>
-      {/* Color Picker Button */}
+          {/* Color Picker Button */}
       {setActiveContainerColorPicker && (
-        <div style={{ position: 'relative' }}>
-          <button
-            ref={colorPickerButtonRef}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (setActiveContainerColorPicker) {
-                const isOpening = activeContainerColorPicker !== chartIndex;
-                setActiveContainerColorPicker(isOpening ? chartIndex : null);
+        <button
+          ref={colorPickerButtonRef}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (setActiveContainerColorPicker) {
+              // Toggle: if already open for this card, close it; otherwise open it
+              const willOpen = activeContainerColorPicker !== chartIndex;
+              if (willOpen) {
+                setActiveContainerColorPicker(chartIndex);
                 // Untick "apply to all" when opening color picker for a specific container
-                if (isOpening && setApplyToContainers) {
+                if (setApplyToContainers) {
                   setApplyToContainers(false);
                 }
+              } else {
+                setActiveContainerColorPicker(null);
               }
-            }}
-            style={{
-              width: '24px',
-              height: '24px',
-              borderRadius: '4px',
-              border: 'none',
-              backgroundColor: 'rgba(255, 107, 107, 0.1)',
-              color: '#ff6b6b',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'all 0.2s'
-            }}
-            title="Container colors"
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="10"/>
-              <path d="M12 2a10 10 0 0 1 10 10"/>
-            </svg>
-          </button>
-
-          {/* Color Picker Dropdown */}
-          {activeContainerColorPicker === chartIndex && setContainerColors && (
-            <div
-              ref={colorPickerDropdownRef}
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                position: 'fixed',
-                background: 'white',
-                borderRadius: '8px',
-                padding: '12px',
-                boxShadow: '0 10px 40px rgba(0, 0, 0, 0.15)',
-                zIndex: 10000,
-                minWidth: '180px',
-                border: '1px solid #e5e7eb'
-              }}
-            >
-              <div style={{ marginBottom: '10px' }}>
-                <label style={{ display: 'block', marginBottom: '4px', fontSize: '11px', fontWeight: 500, color: '#6b7280' }}>
-                  Background
-                </label>
-                <input
-                  type="color"
-                  value={containerColor?.bg || '#ffffff'}
-                  onChange={(e) => {
-                    setContainerColors(prev => ({
-                      ...prev,
-                      [chartIndex]: { ...prev[chartIndex], bg: e.target.value, text: prev[chartIndex]?.text || '#1a1a1a', opacity: prev[chartIndex]?.opacity ?? 1 }
-                    }));
-                    if (setApplyToContainers) {
-                      setApplyToContainers(false);
-                    }
-                  }}
-                  style={{
-                    width: '100%',
-                    height: '32px',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '6px',
-                    cursor: 'pointer'
-                  }}
-                />
-              </div>
-
-              <div style={{ marginBottom: '10px' }}>
-                <label style={{ display: 'block', marginBottom: '4px', fontSize: '11px', fontWeight: 500, color: '#6b7280' }}>
-                  Opacity
-                </label>
-                <style>{`
-                  input[type="range"]#kpi-opacity-${chartIndex}::-webkit-slider-thumb {
-                    -webkit-appearance: none;
-                    appearance: none;
-                    width: 14px;
-                    height: 14px;
-                    border-radius: 50%;
-                    background: #ff6b6b;
-                    cursor: pointer;
-                    box-shadow: 0 2px 4px rgba(255, 107, 107, 0.3);
-                  }
-                  input[type="range"]#kpi-opacity-${chartIndex}::-moz-range-thumb {
-                    width: 14px;
-                    height: 14px;
-                    border-radius: 50%;
-                    background: #ff6b6b;
-                    cursor: pointer;
-                    border: none;
-                    box-shadow: 0 2px 4px rgba(255, 107, 107, 0.3);
-                  }
-                  input[type="range"]#kpi-opacity-${chartIndex}::-webkit-slider-runnable-track {
-                    width: 100%;
-                    height: 4px;
-                    background: #e5e7eb;
-                    border-radius: 2px;
-                  }
-                  input[type="range"]#kpi-opacity-${chartIndex}::-moz-range-track {
-                    width: 100%;
-                    height: 4px;
-                    background: #e5e7eb;
-                    border-radius: 2px;
-                  }
-                `}</style>
-                <input
-                  id={`kpi-opacity-${chartIndex}`}
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.01"
-                  value={containerColor?.opacity ?? 1}
-                  onChange={(e) => {
-                    const newOpacity = parseFloat(e.target.value);
-                    setContainerColors(prev => ({
-                      ...prev,
-                      [chartIndex]: { 
-                        bg: prev[chartIndex]?.bg || '#ffffff', 
-                        text: prev[chartIndex]?.text || '#1a1a1a', 
-                        opacity: newOpacity 
-                      }
-                    }));
-                    if (setApplyToContainers) {
-                      setApplyToContainers(false);
-                    }
-                  }}
-                  style={{
-                    width: '100%',
-                    cursor: 'pointer',
-                    accentColor: '#ff6b6b'
-                  }}
-                />
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', color: '#9ca3af', marginTop: '2px' }}>
-                  <span>0%</span>
-                  <span>{Math.round((containerColor?.opacity ?? 1) * 100)}%</span>
-                  <span>100%</span>
-                </div>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontSize: '11px', fontWeight: 500, color: '#6b7280' }}>
-                  Text
-                </label>
-                <input
-                  type="color"
-                  value={containerColor?.text || '#1a1a1a'}
-                  onChange={(e) => {
-                    setContainerColors(prev => ({
-                      ...prev,
-                      [chartIndex]: { ...prev[chartIndex], bg: prev[chartIndex]?.bg || '#ffffff', text: e.target.value, opacity: prev[chartIndex]?.opacity ?? 1 }
-                    }));
-                    if (setApplyToContainers) {
-                      setApplyToContainers(false);
-                    }
-                  }}
-                  style={{
-                    width: '100%',
-                    height: '32px',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '6px',
-                    cursor: 'pointer'
-                  }}
-                />
-              </div>
-            </div>
-          )}
-        </div>
+            }
+          }}
+          style={{
+            width: '24px',
+            height: '24px',
+            borderRadius: '4px',
+            border: 'none',
+            backgroundColor: 'rgba(255, 107, 107, 0.1)',
+            color: '#ff6b6b',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'all 0.2s'
+          }}
+          title="Container colors"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M12 2a10 10 0 0 1 10 10"/>
+          </svg>
+        </button>
       )}
 
       {/* Edit Button */}
       {onEdit && (
         <button
+          onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             setShowEditInput(true);
@@ -424,6 +449,7 @@ export const KPICard: React.FC<KPICardProps> = ({
       {/* Remove Button */}
       {onRemove && (
         <button
+          onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             onRemove(chartIndex);
@@ -526,27 +552,95 @@ export const KPICard: React.FC<KPICardProps> = ({
   // If we have valid indicator data, render a clean custom KPI card
   if (indicatorData?.type === 'indicator' && value !== undefined) {
     return (
+      <>
+        <div 
+          ref={containerRef}
+          onMouseEnter={() => setShowActions(true)}
+          onMouseLeave={() => setShowActions(false)}
+          style={{
+            backgroundColor: hexToRgba(actualBg, actualOpacity),
+            color: actualText,
+            borderRadius: '12px',
+            border: '1px solid #e5e7eb',
+            overflow: 'hidden',
+            width: '100%',
+            height: '100px',
+            boxShadow: getShadow(backgroundColor),
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: '12px 16px',
+            position: 'relative',
+            opacity: isEditing ? 0.7 : 1,
+            transition: 'opacity 0.2s',
+            boxSizing: 'border-box'
+          }}
+        >
+          {isEditing && (
+            <div style={{
+              position: 'absolute',
+              inset: 0,
+              backgroundColor: 'rgba(255, 255, 255, 0.8)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 15
+            }}>
+              <div className="loading-spinner" style={{ width: 20, height: 20 }} />
+            </div>
+          )}
+          
+          <ActionButtons />
+          {showEditInput && <EditInputOverlay />}
+          
+          <div style={{ 
+            fontSize: '11px', 
+            fontWeight: 500, 
+            color: actualText, 
+            opacity: 0.7,
+            marginBottom: '6px',
+            textAlign: 'center',
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px',
+            maxWidth: '100%',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap'
+          }}>
+            {indicatorTitle}
+          </div>
+          <div style={{ 
+            fontSize: '28px', 
+            fontWeight: 700, 
+            color: actualText,
+            lineHeight: 1.1
+          }}>
+            {formatValue(value)}
+          </div>
+        </div>
+        {colorPickerDropdown}
+      </>
+    );
+  }
+
+  // Fallback: render with Plotly for other indicator types
+  return (
+    <>
       <div 
         ref={containerRef}
         onMouseEnter={() => setShowActions(true)}
         onMouseLeave={() => setShowActions(false)}
         style={{
-          backgroundColor: hexToRgba(actualBg, actualOpacity),
-          color: actualText,
+          backgroundColor: backgroundColor,
+          color: textColor,
           borderRadius: '12px',
           border: '1px solid #e5e7eb',
           overflow: 'hidden',
           width: '100%',
           height: '100px',
           boxShadow: getShadow(backgroundColor),
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center',
-          padding: '12px 16px',
           position: 'relative',
-          opacity: isEditing ? 0.7 : 1,
-          transition: 'opacity 0.2s',
           boxSizing: 'border-box'
         }}
       >
@@ -567,90 +661,28 @@ export const KPICard: React.FC<KPICardProps> = ({
         <ActionButtons />
         {showEditInput && <EditInputOverlay />}
         
-        <div style={{ 
-          fontSize: '11px', 
-          fontWeight: 500, 
-          color: actualText, 
-          opacity: 0.7,
-          marginBottom: '6px',
-          textAlign: 'center',
-          textTransform: 'uppercase',
-          letterSpacing: '0.5px',
-          maxWidth: '100%',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap'
-        }}>
-          {indicatorTitle}
-        </div>
-        <div style={{ 
-          fontSize: '28px', 
-          fontWeight: 700, 
-          color: actualText,
-          lineHeight: 1.1
-        }}>
-          {formatValue(value)}
-        </div>
+        <Plot
+          data={figureData.data || []}
+          layout={{
+            autosize: false,
+            width: dimensions.width,
+            height: dimensions.height,
+            margin: { l: 8, r: 8, t: 30, b: 8 },
+            paper_bgcolor: actualBg,
+            plot_bgcolor: actualBg,
+            font: { color: actualText },
+            showlegend: false,
+          }}
+          config={{
+            displayModeBar: false,
+            responsive: true,
+            staticPlot: true,
+          }}
+          style={{ width: '100%', height: '100%' }}
+        />
       </div>
-    );
-  }
-
-  // Fallback: render with Plotly for other indicator types
-  return (
-    <div 
-      ref={containerRef}
-      onMouseEnter={() => setShowActions(true)}
-      onMouseLeave={() => setShowActions(false)}
-      style={{
-        backgroundColor: backgroundColor,
-        color: textColor,
-        borderRadius: '12px',
-        border: '1px solid #e5e7eb',
-        overflow: 'hidden',
-        width: '100%',
-        height: '100px',
-        boxShadow: getShadow(backgroundColor),
-        position: 'relative',
-        boxSizing: 'border-box'
-      }}
-    >
-      {isEditing && (
-        <div style={{
-          position: 'absolute',
-          inset: 0,
-          backgroundColor: 'rgba(255, 255, 255, 0.8)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 15
-        }}>
-          <div className="loading-spinner" style={{ width: 20, height: 20 }} />
-        </div>
-      )}
-      
-      <ActionButtons />
-      {showEditInput && <EditInputOverlay />}
-      
-      <Plot
-        data={figureData.data || []}
-        layout={{
-          autosize: false,
-          width: dimensions.width,
-          height: dimensions.height,
-          margin: { l: 8, r: 8, t: 30, b: 8 },
-          paper_bgcolor: actualBg,
-          plot_bgcolor: actualBg,
-          font: { color: actualText },
-          showlegend: false,
-        }}
-        config={{
-          displayModeBar: false,
-          responsive: true,
-          staticPlot: true,
-        }}
-        style={{ width: '100%', height: '100%' }}
-      />
-    </div>
+      {colorPickerDropdown}
+    </>
   );
 };
 

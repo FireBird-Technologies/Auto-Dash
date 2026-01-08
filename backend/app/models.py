@@ -1,4 +1,4 @@
-from sqlalchemy import String, Integer, Boolean, ForeignKey, DateTime, Text, JSON, Numeric, Enum
+from sqlalchemy import String, Integer, Boolean, ForeignKey, DateTime, Text, JSON, Numeric, Enum, Float
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import datetime
 from decimal import Decimal
@@ -138,7 +138,13 @@ class PublicDashboard(Base):
     dashboard_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     background_color: Mapped[str | None] = mapped_column(String(7), nullable=True, default="#ffffff")  # Hex color code
     text_color: Mapped[str | None] = mapped_column(String(7), nullable=True, default="#1a1a1a")  # Hex color code for text
+    background_opacity: Mapped[float | None] = mapped_column(Float, nullable=True, default=1.0)  # Background opacity
+    use_gradient: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=False)  # Use gradient background
+    gradient_color_2: Mapped[str | None] = mapped_column(String(7), nullable=True, default="#e5e7eb")  # Second gradient color
     container_colors: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # Container-specific colors
+    chart_colors: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # Chart trace colors
+    chart_opacities: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # Chart trace opacities
+    apply_to_containers: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=True)  # Apply colors to all containers
     is_public: Mapped[bool] = mapped_column(Boolean, default=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
