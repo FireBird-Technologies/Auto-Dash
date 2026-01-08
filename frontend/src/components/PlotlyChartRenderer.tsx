@@ -53,6 +53,56 @@ const sanitizeErrorMessage = (error: string): string => {
   return firstLine;
 };
 
+// Helper function to determine if a color is dark
+const isDarkColor = (color: string): boolean => {
+  // Remove # if present
+  const hex = color.replace('#', '');
+  
+  // Convert to RGB
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+  
+  // Calculate luminance
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  
+  // Return true if dark (luminance < 0.5)
+  return luminance < 0.5;
+};
+
+// Helper function to get shadow based on background color
+const getShadow = (backgroundColor: string, hover: boolean = false): string => {
+  // Normalize color (remove # and convert to lowercase)
+  const normalizedColor = backgroundColor.replace('#', '').toLowerCase();
+  
+  // Check if color is white or very light (ffffff, fff, or close to white)
+  const isWhite = normalizedColor === 'ffffff' || normalizedColor === 'fff' || 
+                  (normalizedColor.length === 6 && 
+                   parseInt(normalizedColor.substring(0, 2), 16) > 250 &&
+                   parseInt(normalizedColor.substring(2, 4), 16) > 250 &&
+                   parseInt(normalizedColor.substring(4, 6), 16) > 250);
+  
+  if (isDarkColor(backgroundColor)) {
+    // Light glow for dark backgrounds
+    if (hover) {
+      return '0 6px 24px rgba(255, 255, 255, 0.2), 0 3px 12px rgba(255, 255, 255, 0.15)';
+    }
+    return '0 4px 20px rgba(255, 255, 255, 0.15), 0 2px 8px rgba(255, 255, 255, 0.1)';
+  } else if (isWhite) {
+    // Lower opacity shadow for white backgrounds
+    if (hover) {
+      return '0 6px 24px rgba(0, 0, 0, 0.08), 0 3px 12px rgba(0, 0, 0, 0.05)';
+    }
+    return '0 4px 20px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.04)';
+  } else {
+    // Dark shadow for light backgrounds
+    if (hover) {
+      return '0 6px 24px rgba(0, 0, 0, 0.15), 0 3px 12px rgba(0, 0, 0, 0.1)';
+    }
+    return '0 4px 20px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08)';
+  }
+};
+
 export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({ 
   chartSpec, 
   data, 
@@ -312,15 +362,16 @@ export const PlotlyChartRenderer: React.FC<PlotlyChartRendererProps> = ({
         cursor: 'pointer',
         transition: 'all 0.2s ease',
         display: 'flex',
-        flexDirection: 'column'
+        flexDirection: 'column',
+        boxShadow: getShadow(backgroundColor, false)
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.2)';
-        e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+        e.currentTarget.style.borderColor = isDarkColor(backgroundColor) ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)';
+        e.currentTarget.style.boxShadow = getShadow(backgroundColor, true);
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.1)';
-        e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.05)';
+        e.currentTarget.style.borderColor = isDarkColor(backgroundColor) ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+        e.currentTarget.style.boxShadow = getShadow(backgroundColor, false);
       }}
     >
       {/* Edit Button - Top Left */}

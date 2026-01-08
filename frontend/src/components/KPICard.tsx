@@ -1,6 +1,47 @@
 import React, { useRef, useEffect, useState } from 'react';
 import Plot from 'react-plotly.js';
 
+// Helper function to determine if a color is dark
+const isDarkColor = (color: string): boolean => {
+  // Remove # if present
+  const hex = color.replace('#', '');
+  
+  // Convert to RGB
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+  
+  // Calculate luminance
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  
+  // Return true if dark (luminance < 0.5)
+  return luminance < 0.5;
+};
+
+// Helper function to get shadow based on background color
+const getShadow = (backgroundColor: string): string => {
+  // Normalize color (remove # and convert to lowercase)
+  const normalizedColor = backgroundColor.replace('#', '').toLowerCase();
+  
+  // Check if color is white or very light (ffffff, fff, or close to white)
+  const isWhite = normalizedColor === 'ffffff' || normalizedColor === 'fff' || 
+                  (normalizedColor.length === 6 && 
+                   parseInt(normalizedColor.substring(0, 2), 16) > 250 &&
+                   parseInt(normalizedColor.substring(2, 4), 16) > 250 &&
+                   parseInt(normalizedColor.substring(4, 6), 16) > 250);
+  
+  if (isDarkColor(backgroundColor)) {
+    // Light glow for dark backgrounds
+    return '0 4px 20px rgba(255, 255, 255, 0.15), 0 2px 8px rgba(255, 255, 255, 0.1)';
+  } else if (isWhite) {
+    // Lower opacity shadow for white backgrounds
+    return '0 4px 20px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.04)';
+  } else {
+    // Dark shadow for light backgrounds
+    return '0 4px 20px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08)';
+  }
+};
+
 interface KPICardProps {
   title: string;
   chartSpec: any;
@@ -10,7 +51,22 @@ interface KPICardProps {
   isEditing?: boolean;
   backgroundColor?: string;
   textColor?: string;
+  activeContainerColorPicker?: number | null;
+  setActiveContainerColorPicker?: (index: number | null) => void;
+  containerColors?: Record<number, {bg: string, text: string, opacity: number}>;
+  setContainerColors?: React.Dispatch<React.SetStateAction<Record<number, {bg: string, text: string, opacity: number}>>>;
+  applyToContainers?: boolean;
+  setApplyToContainers?: (value: boolean) => void;
 }
+
+// Helper function to convert hex to rgba
+const hexToRgba = (hex: string, opacity: number): string => {
+  const normalizedHex = hex.replace('#', '');
+  const r = parseInt(normalizedHex.substring(0, 2), 16);
+  const g = parseInt(normalizedHex.substring(2, 4), 16);
+  const b = parseInt(normalizedHex.substring(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+};
 
 export const KPICard: React.FC<KPICardProps> = ({ 
   title, 
@@ -20,14 +76,63 @@ export const KPICard: React.FC<KPICardProps> = ({
   backgroundColor = '#ffffff',
   textColor = '#1a1a1a',
   onRemove,
-  isEditing = false
+  isEditing = false,
+  activeContainerColorPicker,
+  setActiveContainerColorPicker,
+  containerColors,
+  setContainerColors,
+  applyToContainers,
+  setApplyToContainers
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const colorPickerRef = useRef<HTMLDivElement>(null);
+  const colorPickerButtonRef = useRef<HTMLButtonElement>(null);
+  const colorPickerDropdownRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 280, height: 100 });
   const [showActions, setShowActions] = useState(false);
   const [showEditInput, setShowEditInput] = useState(false);
   const [editInput, setEditInput] = useState('');
   const figureData = chartSpec?.figure;
+
+  // Get container-specific colors or use defaults
+  const containerColor = containerColors?.[chartIndex];
+  const actualBg = applyToContainers ? backgroundColor : (containerColor?.bg || '#ffffff');
+  const actualText = applyToContainers ? textColor : (containerColor?.text || '#1a1a1a');
+  const actualOpacity = applyToContainers ? 1 : (containerColor?.opacity || 1);
+
+  // Close color picker when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (activeContainerColorPicker === chartIndex && colorPickerRef.current && !colorPickerRef.current.contains(event.target as Node)) {
+        setActiveContainerColorPicker?.(null);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [activeContainerColorPicker, chartIndex, setActiveContainerColorPicker]);
+
+  // Position color picker dropdown relative to button
+  useEffect(() => {
+    if (activeContainerColorPicker === chartIndex && colorPickerButtonRef.current && colorPickerDropdownRef.current) {
+      const buttonRect = colorPickerButtonRef.current.getBoundingClientRect();
+      const dropdown = colorPickerDropdownRef.current;
+      
+      // Position below the button, aligned to the right
+      dropdown.style.top = `${buttonRect.bottom + 4}px`;
+      dropdown.style.right = `${window.innerWidth - buttonRect.right}px`;
+      
+      // Adjust if dropdown would go off screen
+      const dropdownRect = dropdown.getBoundingClientRect();
+      if (dropdownRect.bottom > window.innerHeight) {
+        dropdown.style.top = `${buttonRect.top - dropdownRect.height - 4}px`;
+      }
+      if (dropdownRect.left < 0) {
+        dropdown.style.right = 'auto';
+        dropdown.style.left = `${buttonRect.left}px`;
+      }
+    }
+  }, [activeContainerColorPicker, chartIndex]);
 
   useEffect(() => {
     const updateDimensions = () => {
@@ -60,8 +165,8 @@ export const KPICard: React.FC<KPICardProps> = ({
       <div 
         ref={containerRef}
         style={{
-          backgroundColor: backgroundColor,
-          color: textColor,
+          backgroundColor: hexToRgba(actualBg, actualOpacity),
+          color: actualText,
           borderRadius: '12px',
           border: '1px solid #e5e7eb',
           width: '100%',
@@ -70,7 +175,7 @@ export const KPICard: React.FC<KPICardProps> = ({
           flexDirection: 'column',
           justifyContent: 'center',
           alignItems: 'center',
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)',
+          boxShadow: getShadow(actualBg),
           boxSizing: 'border-box'
         }}>
         <div style={{ fontSize: '11px', color: '#9ca3af' }}>Loading...</div>
@@ -95,16 +200,198 @@ export const KPICard: React.FC<KPICardProps> = ({
   };
 
   const ActionButtons = () => (
-    <div style={{
-      position: 'absolute',
-      top: '4px',
-      right: '4px',
-      display: 'flex',
-      gap: '4px',
-      opacity: showActions ? 1 : 0,
-      transition: 'opacity 0.2s',
-      zIndex: 10
-    }}>
+    <div 
+      ref={colorPickerRef}
+      style={{
+        position: 'absolute',
+        top: '4px',
+        right: '4px',
+        display: 'flex',
+        gap: '4px',
+        opacity: showActions ? 1 : 0,
+        transition: 'opacity 0.2s',
+        zIndex: 10
+      }}>
+      {/* Color Picker Button */}
+      {setActiveContainerColorPicker && (
+        <div style={{ position: 'relative' }}>
+          <button
+            ref={colorPickerButtonRef}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (setActiveContainerColorPicker) {
+                const isOpening = activeContainerColorPicker !== chartIndex;
+                setActiveContainerColorPicker(isOpening ? chartIndex : null);
+                // Untick "apply to all" when opening color picker for a specific container
+                if (isOpening && setApplyToContainers) {
+                  setApplyToContainers(false);
+                }
+              }
+            }}
+            style={{
+              width: '24px',
+              height: '24px',
+              borderRadius: '4px',
+              border: 'none',
+              backgroundColor: 'rgba(255, 107, 107, 0.1)',
+              color: '#ff6b6b',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.2s'
+            }}
+            title="Container colors"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 2a10 10 0 0 1 10 10"/>
+            </svg>
+          </button>
+
+          {/* Color Picker Dropdown */}
+          {activeContainerColorPicker === chartIndex && setContainerColors && (
+            <div
+              ref={colorPickerDropdownRef}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                position: 'fixed',
+                background: 'white',
+                borderRadius: '8px',
+                padding: '12px',
+                boxShadow: '0 10px 40px rgba(0, 0, 0, 0.15)',
+                zIndex: 10000,
+                minWidth: '180px',
+                border: '1px solid #e5e7eb'
+              }}
+            >
+              <div style={{ marginBottom: '10px' }}>
+                <label style={{ display: 'block', marginBottom: '4px', fontSize: '11px', fontWeight: 500, color: '#6b7280' }}>
+                  Background
+                </label>
+                <input
+                  type="color"
+                  value={containerColor?.bg || '#ffffff'}
+                  onChange={(e) => {
+                    setContainerColors(prev => ({
+                      ...prev,
+                      [chartIndex]: { ...prev[chartIndex], bg: e.target.value, text: prev[chartIndex]?.text || '#1a1a1a', opacity: prev[chartIndex]?.opacity || 1 }
+                    }));
+                    if (setApplyToContainers) {
+                      setApplyToContainers(false);
+                    }
+                  }}
+                  style={{
+                    width: '100%',
+                    height: '32px',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '6px',
+                    cursor: 'pointer'
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '10px' }}>
+                <label style={{ display: 'block', marginBottom: '4px', fontSize: '11px', fontWeight: 500, color: '#6b7280' }}>
+                  Opacity
+                </label>
+                <style>{`
+                  input[type="range"]#kpi-opacity-${chartIndex}::-webkit-slider-thumb {
+                    -webkit-appearance: none;
+                    appearance: none;
+                    width: 14px;
+                    height: 14px;
+                    border-radius: 50%;
+                    background: #ff6b6b;
+                    cursor: pointer;
+                    box-shadow: 0 2px 4px rgba(255, 107, 107, 0.3);
+                  }
+                  input[type="range"]#kpi-opacity-${chartIndex}::-moz-range-thumb {
+                    width: 14px;
+                    height: 14px;
+                    border-radius: 50%;
+                    background: #ff6b6b;
+                    cursor: pointer;
+                    border: none;
+                    box-shadow: 0 2px 4px rgba(255, 107, 107, 0.3);
+                  }
+                  input[type="range"]#kpi-opacity-${chartIndex}::-webkit-slider-runnable-track {
+                    width: 100%;
+                    height: 4px;
+                    background: #e5e7eb;
+                    border-radius: 2px;
+                  }
+                  input[type="range"]#kpi-opacity-${chartIndex}::-moz-range-track {
+                    width: 100%;
+                    height: 4px;
+                    background: #e5e7eb;
+                    border-radius: 2px;
+                  }
+                `}</style>
+                <input
+                  id={`kpi-opacity-${chartIndex}`}
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={containerColor?.opacity ?? 1}
+                  onChange={(e) => {
+                    const newOpacity = parseFloat(e.target.value);
+                    setContainerColors(prev => ({
+                      ...prev,
+                      [chartIndex]: { 
+                        bg: prev[chartIndex]?.bg || '#ffffff', 
+                        text: prev[chartIndex]?.text || '#1a1a1a', 
+                        opacity: newOpacity 
+                      }
+                    }));
+                    if (setApplyToContainers) {
+                      setApplyToContainers(false);
+                    }
+                  }}
+                  style={{
+                    width: '100%',
+                    cursor: 'pointer',
+                    accentColor: '#ff6b6b'
+                  }}
+                />
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', color: '#9ca3af', marginTop: '2px' }}>
+                  <span>0%</span>
+                  <span>{Math.round((containerColor?.opacity ?? 1) * 100)}%</span>
+                  <span>100%</span>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '4px', fontSize: '11px', fontWeight: 500, color: '#6b7280' }}>
+                  Text
+                </label>
+                <input
+                  type="color"
+                  value={containerColor?.text || '#1a1a1a'}
+                  onChange={(e) => {
+                    setContainerColors(prev => ({
+                      ...prev,
+                      [chartIndex]: { ...prev[chartIndex], bg: prev[chartIndex]?.bg || '#ffffff', text: e.target.value, opacity: prev[chartIndex]?.opacity || 1 }
+                    }));
+                    if (setApplyToContainers) {
+                      setApplyToContainers(false);
+                    }
+                  }}
+                  style={{
+                    width: '100%',
+                    height: '32px',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '6px',
+                    cursor: 'pointer'
+                  }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Edit Button */}
       {onEdit && (
         <button
@@ -244,14 +531,14 @@ export const KPICard: React.FC<KPICardProps> = ({
         onMouseEnter={() => setShowActions(true)}
         onMouseLeave={() => setShowActions(false)}
         style={{
-          backgroundColor: backgroundColor,
-          color: textColor,
+          backgroundColor: hexToRgba(actualBg, actualOpacity),
+          color: actualText,
           borderRadius: '12px',
           border: '1px solid #e5e7eb',
           overflow: 'hidden',
           width: '100%',
           height: '100px',
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)',
+          boxShadow: getShadow(backgroundColor),
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
@@ -283,7 +570,7 @@ export const KPICard: React.FC<KPICardProps> = ({
         <div style={{ 
           fontSize: '11px', 
           fontWeight: 500, 
-          color: textColor, 
+          color: actualText, 
           opacity: 0.7,
           marginBottom: '6px',
           textAlign: 'center',
@@ -299,7 +586,7 @@ export const KPICard: React.FC<KPICardProps> = ({
         <div style={{ 
           fontSize: '28px', 
           fontWeight: 700, 
-          color: textColor,
+          color: actualText,
           lineHeight: 1.1
         }}>
           {formatValue(value)}
@@ -322,7 +609,7 @@ export const KPICard: React.FC<KPICardProps> = ({
         overflow: 'hidden',
         width: '100%',
         height: '100px',
-        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)',
+        boxShadow: getShadow(backgroundColor),
         position: 'relative',
         boxSizing: 'border-box'
       }}
@@ -351,9 +638,9 @@ export const KPICard: React.FC<KPICardProps> = ({
           width: dimensions.width,
           height: dimensions.height,
           margin: { l: 8, r: 8, t: 30, b: 8 },
-          paper_bgcolor: backgroundColor,
-          plot_bgcolor: backgroundColor,
-          font: { color: textColor },
+          paper_bgcolor: actualBg,
+          plot_bgcolor: actualBg,
+          font: { color: actualText },
           showlegend: false,
         }}
         config={{
@@ -378,6 +665,12 @@ interface KPICardsContainerProps {
   backgroundColor?: string;
   textColor?: string;
   hideAddButton?: boolean;
+  activeContainerColorPicker?: number | null;
+  setActiveContainerColorPicker?: (index: number | null) => void;
+  containerColors?: Record<number, {bg: string, text: string, opacity: number}>;
+  setContainerColors?: React.Dispatch<React.SetStateAction<Record<number, {bg: string, text: string, opacity: number}>>>;
+  applyToContainers?: boolean;
+  setApplyToContainers?: (value: boolean) => void;
 }
 
 export const KPICardsContainer: React.FC<KPICardsContainerProps> = ({ 
@@ -389,7 +682,13 @@ export const KPICardsContainer: React.FC<KPICardsContainerProps> = ({
   isAddingKPI = false,
   backgroundColor = '#ffffff',
   textColor = '#1a1a1a',
-  hideAddButton = false
+  hideAddButton = false,
+  activeContainerColorPicker,
+  setActiveContainerColorPicker,
+  containerColors,
+  setContainerColors,
+  applyToContainers,
+  setApplyToContainers
 }) => {
   const kpis = kpiSpecs || [];
   const [addButtonHovered, setAddButtonHovered] = useState(false);
@@ -429,6 +728,12 @@ export const KPICardsContainer: React.FC<KPICardsContainerProps> = ({
               isEditing={editingKPIIndex === index}
               backgroundColor={backgroundColor}
               textColor={textColor}
+              activeContainerColorPicker={activeContainerColorPicker}
+              setActiveContainerColorPicker={setActiveContainerColorPicker}
+              containerColors={containerColors}
+              setContainerColors={setContainerColors}
+              applyToContainers={applyToContainers}
+              setApplyToContainers={setApplyToContainers}
             />
           </div>
         ))}

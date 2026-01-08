@@ -743,7 +743,8 @@ class DatasetService:
         dashboard_title: Optional[str] = None,
         hours_valid: Optional[int] = None,
         background_color: str = "#ffffff",
-        text_color: str = "#1a1a1a"
+        text_color: str = "#1a1a1a",
+        container_colors: Optional[Dict] = None
     ) -> PublicDashboard:
         """
         Create a public dashboard entry.
@@ -802,6 +803,7 @@ class DatasetService:
                 dashboard_title=dashboard_title,
                 background_color=background_color,
                 text_color=text_color,
+                container_colors=container_colors or {},
                 is_public=True,
                 expires_at=datetime.utcnow() + timedelta(hours=hours_valid) if hours_valid else None
             )
@@ -845,6 +847,7 @@ class DatasetService:
             "dashboard_title": public_dashboard.dashboard_title,
             "background_color": public_dashboard.background_color or "#ffffff",
             "text_color": public_dashboard.text_color or "#1a1a1a",
+            "container_colors": public_dashboard.container_colors or {},
             "figures_data": figures_data,
             "owner_name": public_dashboard.dataset.user.name if public_dashboard.dataset.user else "Anonymous",
             "created_at": public_dashboard.created_at.isoformat()
