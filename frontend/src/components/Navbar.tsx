@@ -26,6 +26,16 @@ export const Navbar: React.FC<NavbarProps> = ({ onAccountClick }) => {
   
   const isVisualizePage = location.pathname === '/visualize';
 
+  const handleLoadRecentDashboard = (metadata: any) => {
+    // Navigate to visualize page with the dataset ID
+    navigate('/visualize', { 
+      state: { 
+        datasetId: metadata.datasetId,
+        fromRecent: true
+      } 
+    });
+  };
+
   useEffect(() => {
     // Check if user is logged in
     const token = localStorage.getItem('auth_token');
@@ -163,7 +173,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onAccountClick }) => {
           >
             Visualize
           </button>
-            <RecentDashboards />
+            <RecentDashboards onLoadDashboard={handleLoadRecentDashboard} />
           </>
         )}
 

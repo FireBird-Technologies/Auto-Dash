@@ -696,7 +696,49 @@ summary`}
               <label style={{ display: 'block', marginBottom: '6px', fontSize: '11px', color: '#9ca3af' }}>
                 Opacity: {Math.round(dashboardBgOpacity * 100)}%
               </label>
+              <style>{`
+                input[type="range"]#demo-dashboard-opacity {
+                  -webkit-appearance: none;
+                  appearance: none;
+                  width: 100%;
+                  height: 8px;
+                  background: linear-gradient(to right, #ff6b6b 0%, #ff6b6b ${dashboardBgOpacity * 100}%, #e5e7eb ${dashboardBgOpacity * 100}%, #e5e7eb 100%);
+                  border-radius: 4px;
+                  outline: none;
+                }
+                input[type="range"]#demo-dashboard-opacity::-webkit-slider-thumb {
+                  -webkit-appearance: none;
+                  appearance: none;
+                  width: 20px;
+                  height: 20px;
+                  border-radius: 50%;
+                  background: #ff6b6b;
+                  cursor: pointer;
+                  box-shadow: 0 2px 6px rgba(255, 107, 107, 0.4);
+                  border: 2px solid white;
+                }
+                input[type="range"]#demo-dashboard-opacity::-moz-range-thumb {
+                  width: 20px;
+                  height: 20px;
+                  border-radius: 50%;
+                  background: #ff6b6b;
+                  cursor: pointer;
+                  border: 2px solid white;
+                  box-shadow: 0 2px 6px rgba(255, 107, 107, 0.4);
+                }
+                input[type="range"]#demo-dashboard-opacity::-webkit-slider-runnable-track {
+                  width: 100%;
+                  height: 8px;
+                  border-radius: 4px;
+                }
+                input[type="range"]#demo-dashboard-opacity::-moz-range-track {
+                  width: 100%;
+                  height: 8px;
+                  border-radius: 4px;
+                }
+              `}</style>
               <input
+                id="demo-dashboard-opacity"
                 type="range"
                 min="0"
                 max="1"
@@ -705,18 +747,50 @@ summary`}
                 onChange={(e) => setDashboardBgOpacity(parseFloat(e.target.value))}
                 style={{
                   width: '100%',
-                  cursor: 'pointer',
-                  accentColor: '#ff6b6b'
+                  cursor: 'pointer'
                 }}
               />
             </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#6b7280', cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={useGradient}
-                onChange={(e) => setUseGradient(e.target.checked)}
-                style={{ cursor: 'pointer' }}
-              />
+            <label 
+              onClick={(e) => {
+                e.stopPropagation();
+                setUseGradient(!useGradient);
+              }}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#6b7280', cursor: 'pointer' }}
+            >
+              <div
+                style={{
+                  width: '14px',
+                  height: '14px',
+                  border: '2px solid',
+                  borderColor: useGradient ? '#ff6b6b' : '#d1d5db',
+                  borderRadius: '3px',
+                  backgroundColor: useGradient ? '#ff6b6b' : 'transparent',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  flexShrink: 0
+                }}
+              >
+                {useGradient && (
+                  <svg
+                    width="10"
+                    height="10"
+                    viewBox="0 0 12 12"
+                    fill="none"
+                    stroke="white"
+                    strokeWidth="2"
+                  >
+                    <polyline
+                      points="2,6 5,9 10,3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                )}
+              </div>
               Use Gradient
             </label>
             {useGradient && (
@@ -786,7 +860,49 @@ summary`}
               <label style={{ display: 'block', marginBottom: '6px', fontSize: '11px', color: '#9ca3af' }}>
                 Opacity: {Math.round((containerColors[0]?.opacity ?? 1) * 100)}%
               </label>
+              <style>{`
+                input[type="range"]#demo-container-opacity {
+                  -webkit-appearance: none;
+                  appearance: none;
+                  width: 100%;
+                  height: 8px;
+                  background: linear-gradient(to right, #ff6b6b 0%, #ff6b6b ${(containerColors[0]?.opacity ?? 1) * 100}%, #e5e7eb ${(containerColors[0]?.opacity ?? 1) * 100}%, #e5e7eb 100%);
+                  border-radius: 4px;
+                  outline: none;
+                }
+                input[type="range"]#demo-container-opacity::-webkit-slider-thumb {
+                  -webkit-appearance: none;
+                  appearance: none;
+                  width: 20px;
+                  height: 20px;
+                  border-radius: 50%;
+                  background: #ff6b6b;
+                  cursor: pointer;
+                  box-shadow: 0 2px 6px rgba(255, 107, 107, 0.4);
+                  border: 2px solid white;
+                }
+                input[type="range"]#demo-container-opacity::-moz-range-thumb {
+                  width: 20px;
+                  height: 20px;
+                  border-radius: 50%;
+                  background: #ff6b6b;
+                  cursor: pointer;
+                  border: 2px solid white;
+                  box-shadow: 0 2px 6px rgba(255, 107, 107, 0.4);
+                }
+                input[type="range"]#demo-container-opacity::-webkit-slider-runnable-track {
+                  width: 100%;
+                  height: 8px;
+                  border-radius: 4px;
+                }
+                input[type="range"]#demo-container-opacity::-moz-range-track {
+                  width: 100%;
+                  height: 8px;
+                  border-radius: 4px;
+                }
+              `}</style>
               <input
+                id="demo-container-opacity"
                 type="range"
                 min="0"
                 max="1"
@@ -800,8 +916,7 @@ summary`}
                 }}
                 style={{
                   width: '100%',
-                  cursor: 'pointer',
-                  accentColor: '#ff6b6b'
+                  cursor: 'pointer'
                 }}
               />
             </div>
@@ -872,7 +987,49 @@ summary`}
               <label style={{ display: 'block', marginBottom: '6px', fontSize: '11px', color: '#9ca3af' }}>
                 Opacity: {Math.round((chartOpacities[0]?.[0] ?? 1) * 100)}%
               </label>
+              <style>{`
+                input[type="range"]#demo-chart-opacity {
+                  -webkit-appearance: none;
+                  appearance: none;
+                  width: 100%;
+                  height: 8px;
+                  background: linear-gradient(to right, #ff6b6b 0%, #ff6b6b ${(chartOpacities[0]?.[0] ?? 1) * 100}%, #e5e7eb ${(chartOpacities[0]?.[0] ?? 1) * 100}%, #e5e7eb 100%);
+                  border-radius: 4px;
+                  outline: none;
+                }
+                input[type="range"]#demo-chart-opacity::-webkit-slider-thumb {
+                  -webkit-appearance: none;
+                  appearance: none;
+                  width: 20px;
+                  height: 20px;
+                  border-radius: 50%;
+                  background: #ff6b6b;
+                  cursor: pointer;
+                  box-shadow: 0 2px 6px rgba(255, 107, 107, 0.4);
+                  border: 2px solid white;
+                }
+                input[type="range"]#demo-chart-opacity::-moz-range-thumb {
+                  width: 20px;
+                  height: 20px;
+                  border-radius: 50%;
+                  background: #ff6b6b;
+                  cursor: pointer;
+                  border: 2px solid white;
+                  box-shadow: 0 2px 6px rgba(255, 107, 107, 0.4);
+                }
+                input[type="range"]#demo-chart-opacity::-webkit-slider-runnable-track {
+                  width: 100%;
+                  height: 8px;
+                  border-radius: 4px;
+                }
+                input[type="range"]#demo-chart-opacity::-moz-range-track {
+                  width: 100%;
+                  height: 8px;
+                  border-radius: 4px;
+                }
+              `}</style>
               <input
+                id="demo-chart-opacity"
                 type="range"
                 min="0"
                 max="1"
@@ -886,8 +1043,7 @@ summary`}
                 }}
                 style={{
                   width: '100%',
-                  cursor: 'pointer',
-                  accentColor: '#ff6b6b'
+                  cursor: 'pointer'
                 }}
               />
             </div>

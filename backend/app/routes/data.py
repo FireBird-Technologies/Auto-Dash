@@ -2831,6 +2831,58 @@ async def get_public_dashboard(
         raise HTTPException(status_code=500, detail=f"Failed to fetch dashboard: {str(e)}")
 
 
+@router.get("/dashboards/recent")
+async def get_recent_dashboards(
+    limit: int = 10,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get recent dashboards for the current user.
+    
+    Args:
+        limit: Maximum number of recent dashboards to return (default 10)
+    
+    Returns:
+        List of recent dashboards with metadata
+    """
+    try:
+        dashboards = dataset_service.get_recent_dashboards(db, current_user.id, limit)
+        return {"dashboards": dashboards}
+    except Exception as e:
+        logger.error(f"Error fetching recent dashboards: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to fetch recent dashboards: {str(e)}")
+
+
+@router.get("/dashboards/{query_id}")
+async def get_dashboard_by_id(
+    query_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get a specific dashboard by query ID.
+    
+    Args:
+        query_id: Dashboard query ID
+    
+    Returns:
+        Dashboard data with charts
+    """
+    try:
+        dashboard = dataset_service.get_dashboard_by_query_id(db, current_user.id, query_id)
+        
+        if not dashboard:
+            raise HTTPException(status_code=404, detail="Dashboard not found")
+        
+        return dashboard
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching dashboard: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to fetch dashboard: {str(e)}")
+
+
 @router.post("/datasets/{dataset_id}/suggest-queries")
 async def suggest_query(
     dataset_id: str,

@@ -601,6 +601,83 @@ class DatasetService:
             for q in queries
         ]
     
+    def get_recent_dashboards(
+        self,
+        db: Session,
+        user_id: int,
+        limit: int = 10
+    ) -> List[Dict[str, Any]]:
+        """
+        Get recent dashboards across all datasets for a user.
+        Returns the most recent dashboard for each dataset.
+        """
+        # Get all datasets for user with their latest dashboard query
+        datasets_with_queries = (
+            db.query(Dataset, DashboardQuery)
+            .join(DashboardQuery, Dataset.id == DashboardQuery.dataset_id)
+            .filter(Dataset.user_id == user_id)
+            .filter(DashboardQuery.charts_data.isnot(None))
+            .order_by(DashboardQuery.created_at.desc())
+            .all()
+        )
+        
+        # Group by dataset and keep only the most recent for each
+        seen_datasets = set()
+        recent = []
+        
+        for dataset, query in datasets_with_queries:
+            if dataset.id not in seen_datasets:
+                seen_datasets.add(dataset.id)
+                chart_count = len(query.charts_data) if query.charts_data else 0
+                recent.append({
+                    "id": str(query.id),
+                    "dashboard_query_id": query.id,
+                    "title": query.dashboard_title or "Untitled Dashboard",
+                    "datasetId": dataset.dataset_id,
+                    "datasetName": dataset.filename or "Dataset",
+                    "chartCount": chart_count,
+                    "timestamp": int(query.created_at.timestamp() * 1000),  # milliseconds
+                    "charts_data": query.charts_data,
+                    "background_color": query.background_color,
+                    "text_color": query.text_color
+                })
+                
+                if len(recent) >= limit:
+                    break
+        
+        return recent
+    
+    def get_dashboard_by_query_id(
+        self,
+        db: Session,
+        user_id: int,
+        query_id: int
+    ) -> Optional[Dict[str, Any]]:
+        """Get a specific dashboard by its query ID."""
+        query = db.query(DashboardQuery).filter(
+            and_(
+                DashboardQuery.id == query_id,
+                DashboardQuery.user_id == user_id
+            )
+        ).first()
+        
+        if not query:
+            return None
+        
+        dataset = db.query(Dataset).filter(Dataset.id == query.dataset_id).first()
+        if not dataset:
+            return None
+        
+        return {
+            "dashboard_query_id": query.id,
+            "title": query.dashboard_title,
+            "datasetId": dataset.dataset_id,
+            "charts_data": query.charts_data,
+            "background_color": query.background_color,
+            "text_color": query.text_color,
+            "created_at": query.created_at.isoformat()
+        }
+    
     def update_dashboard_colors(
         self,
         db: Session,

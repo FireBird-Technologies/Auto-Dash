@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { config, getAuthHeaders } from '../config';
 
 interface DashboardMetadata {
   id: string;
+  dashboard_query_id?: number;
   title: string;
   datasetId: string;
   chartCount: number;
@@ -13,14 +15,20 @@ interface RecentDashboardsProps {
   onLoadDashboard?: (metadata: DashboardMetadata) => void;
 }
 
-export const RecentDashboards: React.FC<RecentDashboardsProps> = ({ onLoadDashboard }) => {
+export const RecentDashboards: React.FC<RecentDashboardsProps> = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [recentDashboards, setRecentDashboards] = useState<DashboardMetadata[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [showAll, setShowAll] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  
+  const displayedDashboards = showAll ? recentDashboards : recentDashboards.slice(0, 5);
 
   useEffect(() => {
-    loadRecentDashboards();
-  }, []);
+    if (isOpen) {
+      loadRecentDashboards();
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -38,17 +46,26 @@ export const RecentDashboards: React.FC<RecentDashboardsProps> = ({ onLoadDashbo
     };
   }, [isOpen]);
 
-  const loadRecentDashboards = () => {
+  const loadRecentDashboards = async () => {
+    setIsLoading(true);
     try {
-      const stored = localStorage.getItem('recent_dashboards');
-      if (stored) {
-        const dashboards = JSON.parse(stored) as DashboardMetadata[];
-        // Sort by timestamp descending (most recent first)
-        dashboards.sort((a, b) => b.timestamp - a.timestamp);
-        setRecentDashboards(dashboards.slice(0, 10)); // Keep only last 10
+      const response = await fetch(`${config.backendUrl}/api/data/dashboards/recent?limit=10`, {
+        method: 'GET',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to load recent dashboards');
       }
+
+      const data = await response.json();
+      setRecentDashboards(data.dashboards || []);
     } catch (error) {
       console.error('Failed to load recent dashboards:', error);
+      setRecentDashboards([]);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -71,15 +88,18 @@ export const RecentDashboards: React.FC<RecentDashboardsProps> = ({ onLoadDashbo
     });
   };
 
-  const handleDashboardClick = (dashboard: DashboardMetadata) => {
+  const handleDashboardClick = (dashboard: DashboardMetadata, event: React.MouseEvent) => {
+    event.preventDefault();
     setIsOpen(false);
-    if (onLoadDashboard) {
-      onLoadDashboard(dashboard);
-    }
+    
+    // Open in new tab with dashboard query ID to load saved state
+    const url = `/visualize?dashboardId=${dashboard.dashboard_query_id}&savedView=true`;
+    window.open(url, '_blank');
   };
 
   const clearRecentDashboards = () => {
-    localStorage.removeItem('recent_dashboards');
+    // Since dashboards are now stored in the database per user,
+    // we just clear the local display
     setRecentDashboards([]);
     setIsOpen(false);
   };
@@ -193,7 +213,16 @@ export const RecentDashboards: React.FC<RecentDashboardsProps> = ({ onLoadDashbo
             overflowY: 'auto',
             maxHeight: '400px'
           }}>
-            {recentDashboards.length === 0 ? (
+            {isLoading ? (
+              <div style={{
+                padding: '40px 20px',
+                textAlign: 'center',
+                color: '#9ca3af'
+              }}>
+                <div className="loading-spinner" style={{ width: 32, height: 32, margin: '0 auto 12px' }} />
+                <p style={{ margin: 0, fontSize: '14px' }}>Loading...</p>
+              </div>
+            ) : recentDashboards.length === 0 ? (
               <div style={{
                 padding: '40px 20px',
                 textAlign: 'center',
@@ -208,10 +237,11 @@ export const RecentDashboards: React.FC<RecentDashboardsProps> = ({ onLoadDashbo
                 <p style={{ margin: '4px 0 0 0', fontSize: '12px' }}>Create a dashboard to see it here</p>
               </div>
             ) : (
-              recentDashboards.map((dashboard) => (
+              <>
+              {displayedDashboards.map((dashboard) => (
                 <button
                   key={dashboard.id}
-                  onClick={() => handleDashboardClick(dashboard)}
+                  onClick={(e) => handleDashboardClick(dashboard, e)}
                   style={{
                     width: '100%',
                     padding: '12px 16px',
@@ -270,7 +300,7 @@ export const RecentDashboards: React.FC<RecentDashboardsProps> = ({ onLoadDashbo
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap'
                       }}>
-                        📊 {dashboard.datasetName}
+                        {dashboard.datasetName}
                       </span>
                     )}
                     <span style={{ flexShrink: 0 }}>
@@ -278,7 +308,35 @@ export const RecentDashboards: React.FC<RecentDashboardsProps> = ({ onLoadDashbo
                     </span>
                   </div>
                 </button>
-              ))
+              ))}
+              
+              {!showAll && recentDashboards.length > 5 && (
+                <button
+                  onClick={() => setShowAll(true)}
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    border: 'none',
+                    borderTop: '1px solid #e5e7eb',
+                    backgroundColor: '#f9fafb',
+                    cursor: 'pointer',
+                    textAlign: 'center',
+                    color: '#ff6b6b',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    transition: 'background-color 0.2s'
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.backgroundColor = '#fee2e2';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.backgroundColor = '#f9fafb';
+                  }}
+                >
+                  Show {recentDashboards.length - 5} more
+                </button>
+              )}
+              </>
             )}
           </div>
         </div>
@@ -287,27 +345,9 @@ export const RecentDashboards: React.FC<RecentDashboardsProps> = ({ onLoadDashbo
   );
 };
 
-// Helper function to save dashboard to recent list
-export const saveDashboardToRecent = (metadata: Omit<DashboardMetadata, 'timestamp'>) => {
-  try {
-    const stored = localStorage.getItem('recent_dashboards');
-    let dashboards: DashboardMetadata[] = stored ? JSON.parse(stored) : [];
-    
-    // Remove existing entry with same ID if exists
-    dashboards = dashboards.filter(d => d.id !== metadata.id);
-    
-    // Add new entry with timestamp
-    dashboards.unshift({
-      ...metadata,
-      timestamp: Date.now()
-    });
-    
-    // Keep only last 10
-    dashboards = dashboards.slice(0, 10);
-    
-    localStorage.setItem('recent_dashboards', JSON.stringify(dashboards));
-  } catch (error) {
-    console.error('Failed to save dashboard to recent:', error);
-  }
+// No-op function since dashboards are now automatically saved in the backend
+export const saveDashboardToRecent = (_metadata: Omit<DashboardMetadata, 'timestamp'>) => {
+  // Dashboards are now automatically saved when charts are generated via save_dashboard_query
+  // This function is kept for backward compatibility but doesn't need to do anything
 };
 

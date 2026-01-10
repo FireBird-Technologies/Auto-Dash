@@ -9,6 +9,7 @@ import { KPICardsContainer, KPICard } from '../KPICard';
 import { DashboardSkeleton } from '../LoadingSkeleton';
 import { config, getAuthHeaders, checkAuthResponse } from '../../config';
 import { useNotification } from '../../contexts/NotificationContext';
+import { saveDashboardToRecent } from '../RecentDashboards';
 
 // Chart Item Component
 interface ChartItemProps {
@@ -241,7 +242,7 @@ const ChartItem: React.FC<ChartItemProps> = ({
     
     // Small delay to prevent closing immediately when opening
     const timeoutId = setTimeout(() => {
-      document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('mousedown', handleClickOutside);
     }, 50);
     
     return () => {
@@ -375,10 +376,9 @@ const ChartItem: React.FC<ChartItemProps> = ({
           <button
             onClick={() => onDelete(chartIndex)}
             style={{
-              background: 'rgba(255, 107, 107, 0.1)',
-              backdropFilter: 'blur(4px)',
-              border: '1px solid rgba(255, 107, 107, 0.3)',
-              borderRadius: '50%',
+              background: 'white',
+              border: '1px solid #e5e7eb',
+              borderRadius: '8px',
               width: '40px',
               height: '40px',
               padding: '0',
@@ -387,16 +387,18 @@ const ChartItem: React.FC<ChartItemProps> = ({
               alignItems: 'center',
               justifyContent: 'center',
               transition: 'all 0.2s',
-              boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-              color: '#ff6b6b'
+              boxShadow: 'none',
+              color: '#6b7280'
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'rgba(255, 107, 107, 0.2)';
-              e.currentTarget.style.transform = 'scale(1.05)';
+              e.currentTarget.style.background = '#fef2f2';
+              e.currentTarget.style.color = '#ef4444';
+              e.currentTarget.style.borderColor = '#fecaca';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'rgba(255, 107, 107, 0.1)';
-              e.currentTarget.style.transform = 'scale(1)';
+              e.currentTarget.style.background = 'white';
+              e.currentTarget.style.color = '#6b7280';
+              e.currentTarget.style.borderColor = '#e5e7eb';
             }}
             title="Delete chart"
           >
@@ -412,10 +414,9 @@ const ChartItem: React.FC<ChartItemProps> = ({
               setFilterPanelOpen(filterPanelOpen === chartIndex ? null : chartIndex);
             }}
             style={{
-              background: filterPanelOpen === chartIndex ? 'rgba(255, 107, 107, 0.2)' : 'rgba(255, 107, 107, 0.1)',
-              backdropFilter: 'blur(4px)',
-              border: '1px solid rgba(255, 107, 107, 0.3)',
-              borderRadius: '50%',
+              background: filterPanelOpen === chartIndex ? '#fef2f2' : 'white',
+              border: filterPanelOpen === chartIndex ? '1px solid #fecaca' : '1px solid #e5e7eb',
+              borderRadius: '8px',
               width: '40px',
               height: '40px',
               padding: '0',
@@ -424,18 +425,23 @@ const ChartItem: React.FC<ChartItemProps> = ({
               alignItems: 'center',
               justifyContent: 'center',
               transition: 'all 0.2s',
-              boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-              color: '#ff6b6b'
+              boxShadow: 'none',
+              color: filterPanelOpen === chartIndex ? '#ef4444' : '#6b7280'
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'rgba(255, 107, 107, 0.2)';
-              e.currentTarget.style.transform = 'scale(1.05)';
+              e.currentTarget.style.background = '#fef2f2';
+              e.currentTarget.style.color = '#ef4444';
+              e.currentTarget.style.borderColor = '#fecaca';
             }}
             onMouseLeave={(e) => {
               if (filterPanelOpen !== chartIndex) {
-                e.currentTarget.style.background = 'rgba(255, 107, 107, 0.1)';
+                e.currentTarget.style.background = 'white';
+                e.currentTarget.style.color = '#6b7280';
+                e.currentTarget.style.borderColor = '#e5e7eb';
+              } else {
+                e.currentTarget.style.background = '#fef2f2';
+                e.currentTarget.style.color = '#ef4444';
               }
-              e.currentTarget.style.transform = 'scale(1)';
             }}
             title="Filter data"
           >
@@ -748,10 +754,9 @@ const ChartItem: React.FC<ChartItemProps> = ({
                   setActiveChartColorPicker?.(isOpening ? chartIndex : null);
                 }}
                 style={{
-                  background: 'rgba(255, 107, 107, 0.1)',
-                  backdropFilter: 'blur(4px)',
-                  border: '1px solid rgba(255, 107, 107, 0.3)',
-                  borderRadius: '50%',
+                  background: activeChartColorPicker === chartIndex ? '#fef2f2' : 'white',
+                  border: activeChartColorPicker === chartIndex ? '1px solid #fecaca' : '1px solid #e5e7eb',
+                  borderRadius: '8px',
                   width: '40px',
                   height: '40px',
                   padding: '0',
@@ -760,16 +765,23 @@ const ChartItem: React.FC<ChartItemProps> = ({
                   alignItems: 'center',
                   justifyContent: 'center',
                   transition: 'all 0.2s',
-                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-                  color: '#ff6b6b'
+                  boxShadow: 'none',
+                  color: activeChartColorPicker === chartIndex ? '#ef4444' : '#6b7280'
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(255, 107, 107, 0.2)';
-                  e.currentTarget.style.transform = 'scale(1.05)';
+                  e.currentTarget.style.background = '#fef2f2';
+                  e.currentTarget.style.color = '#ef4444';
+                  e.currentTarget.style.borderColor = '#fecaca';
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'rgba(255, 107, 107, 0.1)';
-                  e.currentTarget.style.transform = 'scale(1)';
+                  if (activeChartColorPicker !== chartIndex) {
+                    e.currentTarget.style.background = 'white';
+                    e.currentTarget.style.color = '#6b7280';
+                    e.currentTarget.style.borderColor = '#e5e7eb';
+                  } else {
+                    e.currentTarget.style.background = '#fef2f2';
+                    e.currentTarget.style.color = '#ef4444';
+                  }
                 }}
                 title="Chart colors"
               >
@@ -867,28 +879,39 @@ const ChartItem: React.FC<ChartItemProps> = ({
                               appearance: none;
                               width: 100%;
                               height: 8px;
-                              background: #e5e7eb;
+                              background: linear-gradient(to right, #ff6b6b 0%, #ff6b6b ${currentOpacity * 100}%, #e5e7eb ${currentOpacity * 100}%, #e5e7eb 100%);
                               border-radius: 4px;
                               outline: none;
                             }
                             input[type="range"]#trace-opacity-${chartIndex}-${traceIndex}::-webkit-slider-thumb {
                               -webkit-appearance: none;
                               appearance: none;
-                              width: 12px;
-                              height: 12px;
+                              width: 20px;
+                              height: 20px;
                               border-radius: 50%;
                               background: #ff6b6b;
                               cursor: pointer;
-                              box-shadow: 0 2px 4px rgba(255, 107, 107, 0.3);
+                              box-shadow: 0 2px 6px rgba(255, 107, 107, 0.4);
+                              border: 2px solid white;
                             }
                             input[type="range"]#trace-opacity-${chartIndex}-${traceIndex}::-moz-range-thumb {
-                              width: 12px;
-                              height: 12px;
+                              width: 20px;
+                              height: 20px;
                               border-radius: 50%;
                               background: #ff6b6b;
                               cursor: pointer;
-                              border: none;
-                              box-shadow: 0 2px 4px rgba(255, 107, 107, 0.3);
+                              border: 2px solid white;
+                              box-shadow: 0 2px 6px rgba(255, 107, 107, 0.4);
+                            }
+                            input[type="range"]#trace-opacity-${chartIndex}-${traceIndex}::-webkit-slider-runnable-track {
+                              width: 100%;
+                              height: 8px;
+                              border-radius: 4px;
+                            }
+                            input[type="range"]#trace-opacity-${chartIndex}-${traceIndex}::-moz-range-track {
+                              width: 100%;
+                              height: 8px;
+                              border-radius: 4px;
                             }
                           `}</style>
                           <input
@@ -948,10 +971,9 @@ const ChartItem: React.FC<ChartItemProps> = ({
               }
             }}
             style={{
-              background: 'rgba(255, 107, 107, 0.1)',
-              backdropFilter: 'blur(4px)',
-              border: '1px solid rgba(255, 107, 107, 0.3)',
-              borderRadius: '50%',
+              background: activeContainerColorPicker === chartIndex ? '#fef2f2' : 'white',
+              border: activeContainerColorPicker === chartIndex ? '1px solid #fecaca' : '1px solid #e5e7eb',
+              borderRadius: '8px',
               width: '40px',
               height: '40px',
               padding: '0',
@@ -960,16 +982,23 @@ const ChartItem: React.FC<ChartItemProps> = ({
               alignItems: 'center',
               justifyContent: 'center',
               transition: 'all 0.2s',
-              boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-              color: '#ff6b6b'
+              boxShadow: 'none',
+              color: activeContainerColorPicker === chartIndex ? '#ef4444' : '#6b7280'
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'rgba(255, 107, 107, 0.2)';
-              e.currentTarget.style.transform = 'scale(1.05)';
+              e.currentTarget.style.background = '#fef2f2';
+              e.currentTarget.style.color = '#ef4444';
+              e.currentTarget.style.borderColor = '#fecaca';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'rgba(255, 107, 107, 0.1)';
-              e.currentTarget.style.transform = 'scale(1)';
+              if (activeContainerColorPicker !== chartIndex) {
+                e.currentTarget.style.background = 'white';
+                e.currentTarget.style.color = '#6b7280';
+                e.currentTarget.style.borderColor = '#e5e7eb';
+              } else {
+                e.currentTarget.style.background = '#fef2f2';
+                e.currentTarget.style.color = '#ef4444';
+              }
             }}
             title="Container colors"
           >
@@ -1022,36 +1051,44 @@ const ChartItem: React.FC<ChartItemProps> = ({
                   Opacity
                 </label>
                 <style>{`
+                  input[type="range"]#chart-opacity-${chartIndex} {
+                    -webkit-appearance: none;
+                    appearance: none;
+                    width: 100%;
+                    height: 8px;
+                    background: linear-gradient(to right, #ff6b6b 0%, #ff6b6b ${(containerColor?.opacity ?? 1) * 100}%, #e5e7eb ${(containerColor?.opacity ?? 1) * 100}%, #e5e7eb 100%);
+                    border-radius: 4px;
+                    outline: none;
+                  }
                   input[type="range"]#chart-opacity-${chartIndex}::-webkit-slider-thumb {
                     -webkit-appearance: none;
                     appearance: none;
-                    width: 18px;
-                    height: 18px;
+                    width: 20px;
+                    height: 20px;
                     border-radius: 50%;
                     background: #ff6b6b;
                     cursor: pointer;
-                    box-shadow: 0 2px 4px rgba(255, 107, 107, 0.3);
+                    box-shadow: 0 2px 6px rgba(255, 107, 107, 0.4);
+                    border: 2px solid white;
                   }
                   input[type="range"]#chart-opacity-${chartIndex}::-moz-range-thumb {
-                    width: 18px;
-                    height: 18px;
+                    width: 20px;
+                    height: 20px;
                     border-radius: 50%;
                     background: #ff6b6b;
                     cursor: pointer;
-                    border: none;
-                    box-shadow: 0 2px 4px rgba(255, 107, 107, 0.3);
+                    border: 2px solid white;
+                    box-shadow: 0 2px 6px rgba(255, 107, 107, 0.4);
                   }
                   input[type="range"]#chart-opacity-${chartIndex}::-webkit-slider-runnable-track {
                     width: 100%;
-                    height: 4px;
-                    background: #e5e7eb;
-                    border-radius: 2px;
+                    height: 8px;
+                    border-radius: 4px;
                   }
                   input[type="range"]#chart-opacity-${chartIndex}::-moz-range-track {
                     width: 100%;
-                    height: 4px;
-                    background: #e5e7eb;
-                    border-radius: 2px;
+                    height: 8px;
+                    border-radius: 4px;
                   }
                 `}</style>
                 <input
@@ -1135,30 +1172,34 @@ const ChartItem: React.FC<ChartItemProps> = ({
               }
             }}
             style={{
-              background: 'rgba(255, 107, 107, 0.1)',
-              backdropFilter: 'blur(4px)',
-              border: '1px solid rgba(255, 107, 107, 0.3)',
+              background: notesVisible[chartIndex] ? '#fef2f2' : 'white',
+              border: notesVisible[chartIndex] ? '1px solid #fecaca' : '1px solid #e5e7eb',
               borderRadius: '8px',
               padding: '8px 12px',
               fontSize: '12px',
-              color: '#ff6b6b',
+              color: notesVisible[chartIndex] ? '#ef4444' : '#6b7280',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
               transition: 'all 0.2s',
-              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+              boxShadow: 'none',
               whiteSpace: 'nowrap'
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(255, 107, 107, 0.2)';
+              e.currentTarget.style.backgroundColor = '#fef2f2';
               e.currentTarget.style.color = '#ef4444';
-              e.currentTarget.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.15)';
+              e.currentTarget.style.borderColor = '#fecaca';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(255, 107, 107, 0.1)';
-              e.currentTarget.style.color = '#ff6b6b';
-              e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.1)';
+              if (!notesVisible[chartIndex]) {
+                e.currentTarget.style.backgroundColor = 'white';
+                e.currentTarget.style.color = '#6b7280';
+                e.currentTarget.style.borderColor = '#e5e7eb';
+              } else {
+                e.currentTarget.style.backgroundColor = '#fef2f2';
+                e.currentTarget.style.color = '#ef4444';
+              }
             }}
             title={chartNotes[chartIndex] ? (notesVisible[chartIndex] ? "Hide notes" : "Show notes") : "Add notes"}
           >
@@ -1597,6 +1638,8 @@ interface VisualizationProps {
   context: {
     description: string;
     colorTheme?: string;
+    savedView?: boolean;
+    savedDashboardData?: any;
   };
   onReupload?: () => void;
 }
@@ -1650,6 +1693,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   const [previewData, setPreviewData] = useState<{ preview: Row[], total_rows: number } | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const hasGeneratedInitialChart = useRef(false);
+  const savedViewNotificationShown = useRef(false);
   const visualizationRef = useRef<HTMLDivElement>(null);
   const downloadMenuRef = useRef<HTMLDivElement>(null);
   const [showFixNotification, setShowFixNotification] = useState(false);
@@ -1671,6 +1715,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     plan?: string;
   }>({});
   const [chatVisible, setChatVisible] = useState(() => {
+    // Hide chat in saved view mode
+    if (context.savedView) return false;
     const saved = localStorage.getItem('chatVisible');
     return saved !== null ? saved === 'true' : true;
   });
@@ -1689,9 +1735,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
   const [showAddKPIPopup, setShowAddKPIPopup] = useState(false);
   const [addKPIInput, setAddKPIInput] = useState('');
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
-  const [viewMode, setViewMode] = useState<'list' | 'grid'>(() => {
-    return (localStorage.getItem('chart_view_mode') as 'list' | 'grid') || 'list';
-  });
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   
   // Undo/Redo state
   const [chartHistory, setChartHistory] = useState<any[][]>([]);
@@ -1750,10 +1794,12 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     }
   };
 
-  // Save chat visibility preference
+  // Save chat visibility preference (not in saved view)
   useEffect(() => {
-    localStorage.setItem('chatVisible', String(chatVisible));
-  }, [chatVisible]);
+    if (!context.savedView) {
+      localStorage.setItem('chatVisible', String(chatVisible));
+    }
+  }, [chatVisible, context.savedView]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -1856,13 +1902,35 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     }
   }, [showDatasetPreview, fullDataFetched, datasetId, data.length]);
 
-  // Generate initial chart on load (only once)
+  // Load saved dashboard or generate initial chart
   useEffect(() => {
-    if (context.description && datasetId && !hasGeneratedInitialChart.current) {
+    if (context.savedView && context.savedDashboardData) {
+      // Load saved dashboard
+      const savedData = context.savedDashboardData;
+      setDashboardTitle(savedData.title || 'Saved Dashboard');
+      setChartSpecs(savedData.charts_data || []);
+      setDashboardBgColor(savedData.background_color || '#ffffff');
+      setDashboardTextColor(savedData.text_color || '#1a1a1a');
+      hasGeneratedInitialChart.current = true;
+    } else if (context.description && datasetId && !hasGeneratedInitialChart.current) {
+      // Generate initial chart for new dashboards
       hasGeneratedInitialChart.current = true;
       generateChart(context.description);
     }
-  }, [context.description]); // Only depend on context.description, not datasetId
+  }, [context]);
+
+  // Save dashboard to recent dashboards when we have charts (only for non-saved views)
+  useEffect(() => {
+    if (!context.savedView && chartSpecs.length > 0 && dashboardTitle && datasetId) {
+      saveDashboardToRecent({
+        id: datasetId,
+        title: dashboardTitle,
+        datasetId: datasetId,
+        chartCount: chartSpecs.length,
+        datasetName: dashboardTitle
+      });
+    }
+  }, [chartSpecs.length, dashboardTitle, datasetId, context.savedView]);
 
   // Prepare context when user starts typing (only before first chart)
   const prepareContext = async () => {
@@ -3323,6 +3391,22 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
     }
   }, [guideStep]);
 
+  // Show notification for saved view (only once)
+  useEffect(() => {
+    if (context.savedView && !savedViewNotificationShown.current) {
+      notification.showNotification({
+        type: 'error',
+        message: 'You can edit charts, customize colors, and publish. To add new charts, start a fresh dashboard.',
+        title: 'Saved Dashboard View',
+        duration: 8000,
+        showClose: false,
+        showOkButton: true,
+        showIcon: false
+      });
+      savedViewNotificationShown.current = true;
+    }
+  }, [context.savedView, notification]);
+
   // Global Keyboard Shortcuts
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
@@ -4095,7 +4179,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                         )}
                         <MarkdownMessage content={msg.message} />
                         <div style={{ marginTop: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                        {msg.codeType && msg.executableCode && (
+                          {msg.codeType && msg.executableCode && (
                             <>
                               {msg.codeType === 'add_chart_query' ? (
                                 <button
@@ -4109,28 +4193,25 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                     display: 'inline-flex',
                                     alignItems: 'center',
                                     gap: '8px',
-                                    padding: '8px 16px',
-                                    background: addingChart ? '#6b7280' : 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)',
-                                    color: 'white',
+                                    padding: '10px 20px',
+                                    background: addingChart ? '#e5e7eb' : '#ff6b6b',
+                                    color: addingChart ? '#9ca3af' : 'white',
                                     border: 'none',
                                     borderRadius: '8px',
                                     fontSize: '14px',
                                     fontWeight: '500',
                                     cursor: addingChart ? 'not-allowed' : 'pointer',
                                     transition: 'all 0.2s',
-                                    opacity: addingChart ? 0.6 : 1,
-                                    boxShadow: addingChart ? 'none' : '0 2px 8px rgba(239, 68, 68, 0.2)'
+                                    opacity: addingChart ? 0.7 : 1
                                   }}
                                   onMouseEnter={(e) => {
                                     if (!addingChart) {
-                                      e.currentTarget.style.background = 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)';
-                                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.3)';
+                                      e.currentTarget.style.background = '#ef4444';
                                     }
                                   }}
                                   onMouseLeave={(e) => {
                                     if (!addingChart) {
-                                      e.currentTarget.style.background = 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)';
-                                      e.currentTarget.style.boxShadow = '0 2px 8px rgba(239, 68, 68, 0.2)';
+                                      e.currentTarget.style.background = '#ff6b6b';
                                     }
                                   }}
                                 >
@@ -4141,50 +4222,47 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                   )}
                                 </button>
                               ) : (
-                            <button
-                              onClick={() => {
-                                if (msg.codeType === 'plotly_edit' && msg.matchedChart) {
-                                  executePlotlyEdit(msg.executableCode!, msg.matchedChart.index);
-                                } else if (msg.codeType === 'analysis') {
-                                  executeAnalysisCode(msg.executableCode!);
-                                }
-                              }}
-                              disabled={isExecutingCode}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '8px',
-                                padding: '8px 16px',
-                                background: isExecutingCode ? '#6b7280' : 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '8px',
-                                fontSize: '14px',
-                                fontWeight: '500',
-                                cursor: isExecutingCode ? 'not-allowed' : 'pointer',
-                                transition: 'all 0.2s',
-                                opacity: isExecutingCode ? 0.6 : 1,
-                                boxShadow: isExecutingCode ? 'none' : '0 2px 8px rgba(239, 68, 68, 0.2)'
-                              }}
-                              onMouseEnter={(e) => {
-                                if (!isExecutingCode) {
-                                  e.currentTarget.style.background = 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)';
-                                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.3)';
-                                }
-                              }}
-                              onMouseLeave={(e) => {
-                                if (!isExecutingCode) {
-                                  e.currentTarget.style.background = 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)';
-                                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(239, 68, 68, 0.2)';
-                                }
-                              }}
-                            >
-                              {isExecutingCode ? (
-                                <span>Running...</span>
-                              ) : (
-                                <span>{msg.codeType === 'plotly_edit' ? 'Run Code' : 'Run Analysis'}</span>
-                              )}
-                            </button>
+                                <button
+                                  onClick={() => {
+                                    if (msg.codeType === 'plotly_edit' && msg.matchedChart) {
+                                      executePlotlyEdit(msg.executableCode!, msg.matchedChart.index);
+                                    } else if (msg.codeType === 'analysis') {
+                                      executeAnalysisCode(msg.executableCode!);
+                                    }
+                                  }}
+                                  disabled={isExecutingCode}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    padding: '10px 20px',
+                                    background: isExecutingCode ? '#e5e7eb' : '#ff6b6b',
+                                    color: isExecutingCode ? '#9ca3af' : 'white',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    fontSize: '14px',
+                                    fontWeight: '500',
+                                    cursor: isExecutingCode ? 'not-allowed' : 'pointer',
+                                    transition: 'all 0.2s',
+                                    opacity: isExecutingCode ? 0.7 : 1
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    if (!isExecutingCode) {
+                                      e.currentTarget.style.background = '#ef4444';
+                                    }
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    if (!isExecutingCode) {
+                                      e.currentTarget.style.background = '#ff6b6b';
+                                    }
+                                  }}
+                                >
+                                  {isExecutingCode ? (
+                                    <span>Running...</span>
+                                  ) : (
+                                    <span>{msg.codeType === 'plotly_edit' ? 'Run Code' : 'Run Analysis'}</span>
+                                  )}
+                                </button>
                               )}
                             </>
                           )}
@@ -4269,17 +4347,17 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
               value={query}
               onChange={handleQueryChange}
               onKeyDown={handleKeyDown}
-              placeholder="Ask about your data..."
+              placeholder={context.savedView ? "Chat disabled in saved view" : "Ask about your data..."}
               className="chat-input"
               rows={2}
-              disabled={isLoading}
+              disabled={isLoading || context.savedView}
             />
             <button 
               ref={chatButtonRef}
               onClick={handleSubmit}
-              disabled={!query.trim() || isLoading}
+              disabled={!query.trim() || isLoading || context.savedView}
               className={`chat-send-button ${guideStep === 0 ? 'guide-highlight' : ''}`}
-              title={isLoading ? 'Generating...' : 'Send message'}
+              title={context.savedView ? 'Chat disabled in saved view' : (isLoading ? 'Generating...' : 'Send message')}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -4330,8 +4408,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
         <main className="dashboard-main">
           <div className="step-header">
             <div>
-              <h1 className="step-title">Your Dashboard</h1>
-              <p className="step-description">Ask questions to generate visualizations</p>
+              <h1 className="step-title">{context.savedView ? 'Saved Dashboard' : 'Your Dashboard'}</h1>
+              <p className="step-description">{context.savedView ? 'Edit and customize your saved charts' : 'Ask questions to generate visualizations'}</p>
             </div>
             <div className="dashboard-controls">
               {/* Undo/Redo Buttons */}
@@ -4804,29 +4882,50 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                     
                                     {/* Use Gradient */}
                                       <div style={{ marginBottom: '12px' }}>
-                                      <style>{`
-                                        input[type="checkbox"]#use-gradient-checkbox:checked {
-                                          accent-color: #ff6b6b;
-                                        }
-                                        input[type="checkbox"]#use-gradient-checkbox {
-                                          accent-color: #ff6b6b;
-                                          cursor: pointer;
-                                        }
-                                      `}</style>
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: 500, color: '#6b7280', cursor: 'pointer' }}>
-                                          <input
-                                          id="use-gradient-checkbox"
-                                            type="checkbox"
-                                            checked={useGradient}
-                                          onChange={(e) => {
-                                            setUseGradient(e.target.checked);
+                                        <label 
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setUseGradient(!useGradient);
                                             // Turn off "apply to all" when gradient is enabled
-                                            if (e.target.checked) {
+                                            if (!useGradient) {
                                               setApplyToContainers(false);
                                             }
                                           }}
-                                          style={{ cursor: 'pointer', accentColor: '#ff6b6b' }}
-                                          />
+                                          style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: 500, color: '#6b7280', cursor: 'pointer' }}
+                                        >
+                                          <div
+                                            style={{
+                                              width: '14px',
+                                              height: '14px',
+                                              border: '2px solid',
+                                              borderColor: useGradient ? '#ff6b6b' : '#d1d5db',
+                                              borderRadius: '3px',
+                                              backgroundColor: useGradient ? '#ff6b6b' : 'transparent',
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              justifyContent: 'center',
+                                              cursor: 'pointer',
+                                              transition: 'all 0.2s',
+                                              flexShrink: 0
+                                            }}
+                                          >
+                                            {useGradient && (
+                                              <svg
+                                                width="10"
+                                                height="10"
+                                                viewBox="0 0 12 12"
+                                                fill="none"
+                                                stroke="white"
+                                                strokeWidth="2"
+                                              >
+                                                <polyline
+                                                  points="2,6 5,9 10,3"
+                                                  strokeLinecap="round"
+                                                  strokeLinejoin="round"
+                                                />
+                                              </svg>
+                                            )}
+                                          </div>
                                           Use Gradient
                                         </label>
                                         {useGradient && (
@@ -4856,39 +4955,48 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                         Opacity
                                       </label>
                                       <style>{`
-                                        input[type="range"]::-webkit-slider-thumb {
+                                        input[type="range"]#dashboard-bg-opacity {
                                           -webkit-appearance: none;
                                           appearance: none;
-                                          width: 18px;
-                                          height: 18px;
+                                          width: 100%;
+                                          height: 8px;
+                                          background: linear-gradient(to right, #ff6b6b 0%, #ff6b6b ${dashboardBgOpacity * 100}%, #e5e7eb ${dashboardBgOpacity * 100}%, #e5e7eb 100%);
+                                          border-radius: 4px;
+                                          outline: none;
+                                        }
+                                        input[type="range"]#dashboard-bg-opacity::-webkit-slider-thumb {
+                                          -webkit-appearance: none;
+                                          appearance: none;
+                                          width: 20px;
+                                          height: 20px;
                                           border-radius: 50%;
                                           background: #ff6b6b;
                                           cursor: pointer;
-                                          box-shadow: 0 2px 4px rgba(255, 107, 107, 0.3);
+                                          box-shadow: 0 2px 6px rgba(255, 107, 107, 0.4);
+                                          border: 2px solid white;
                                         }
-                                        input[type="range"]::-moz-range-thumb {
-                                          width: 18px;
-                                          height: 18px;
+                                        input[type="range"]#dashboard-bg-opacity::-moz-range-thumb {
+                                          width: 20px;
+                                          height: 20px;
                                           border-radius: 50%;
                                           background: #ff6b6b;
                                           cursor: pointer;
-                                          border: none;
-                                          box-shadow: 0 2px 4px rgba(255, 107, 107, 0.3);
+                                          border: 2px solid white;
+                                          box-shadow: 0 2px 6px rgba(255, 107, 107, 0.4);
                                         }
-                                        input[type="range"]::-webkit-slider-runnable-track {
+                                        input[type="range"]#dashboard-bg-opacity::-webkit-slider-runnable-track {
                                           width: 100%;
-                                          height: 4px;
-                                          background: #e5e7eb;
-                                          border-radius: 2px;
+                                          height: 8px;
+                                          border-radius: 4px;
                                         }
-                                        input[type="range"]::-moz-range-track {
+                                        input[type="range"]#dashboard-bg-opacity::-moz-range-track {
                                           width: 100%;
-                                          height: 4px;
-                                          background: #e5e7eb;
-                                          border-radius: 2px;
+                                          height: 8px;
+                                          border-radius: 4px;
                                         }
                                       `}</style>
                                       <input
+                                        id="dashboard-bg-opacity"
                                         type="range"
                                         min="0"
                                         max="1"
@@ -4952,7 +5060,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                             editingKPIIndex={editingKPIIndex}
                             backgroundColor={dashboardBgColor}
                             textColor={dashboardTextColor}
-                            hideAddButton={isLoading && !streamingComplete}
+                            hideAddButton={context.savedView || (isLoading && !streamingComplete)}
                             isAddingKPI={isAddingKPI}
                             activeContainerColorPicker={activeContainerColorPicker}
                             setActiveContainerColorPicker={setActiveContainerColorPicker}
@@ -5195,8 +5303,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                       fontSize: '14px',
                                       fontWeight: 500,
                                       cursor: isAddingKPI || !addKPIInput.trim() ? 'not-allowed' : 'pointer',
-                                      transition: 'all 0.2s',
-                                      boxShadow: isAddingKPI || !addKPIInput.trim() ? 'none' : '0 2px 8px rgba(255, 107, 107, 0.3)'
+                                      transition: 'all 0.2s'
                                     }}
                                     onMouseEnter={(e) => {
                                       if (!isAddingKPI && addKPIInput.trim()) {
@@ -5229,7 +5336,6 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                               <button
                                 onClick={() => {
                                   setViewMode('list');
-                                  localStorage.setItem('chart_view_mode', 'list');
                                 }}
                                 style={{
                                   padding: '6px 12px',
@@ -5259,7 +5365,6 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                               <button
                                 onClick={() => {
                                   setViewMode('grid');
-                                  localStorage.setItem('chart_view_mode', 'grid');
                                 }}
                                 style={{
                                   padding: '6px 12px',
@@ -5361,8 +5466,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                             )}
                           </div>
                           
-                          {/* Floating Add Chart Button - Hidden while loading */}
-                          {!(isLoading && !streamingComplete) && (
+                          {/* Floating Add Chart Button - Hidden while loading or in saved view */}
+                          {!(isLoading && !streamingComplete) && !context.savedView && (
                             <div style={{
                               display: 'flex',
                               justifyContent: 'center',
@@ -5376,7 +5481,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                   height: '60px',
                                   borderRadius: '50%',
                                   border: '2px solid #ff6b6b',
-                                  background: 'rgba(255, 107, 107, 0.1)',
+                                  background: 'white',
                                   color: '#ff6b6b',
                                   fontSize: '32px',
                                   fontWeight: 'bold',
@@ -5384,18 +5489,18 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                                   display: 'flex',
                                   alignItems: 'center',
                                   justifyContent: 'center',
-                                  transition: 'all 0.3s ease',
-                                  boxShadow: '0 4px 12px rgba(255, 107, 107, 0.2)'
+                                  transition: 'all 0.2s ease',
+                                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)'
                                 }}
                                 onMouseEnter={(e) => {
-                                  e.currentTarget.style.background = 'rgba(255, 107, 107, 0.2)';
-                                  e.currentTarget.style.transform = 'scale(1.1)';
-                                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(255, 107, 107, 0.3)';
+                                  e.currentTarget.style.background = '#fef2f2';
+                                  e.currentTarget.style.transform = 'scale(1.05)';
+                                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
                                 }}
                                 onMouseLeave={(e) => {
-                                  e.currentTarget.style.background = 'rgba(255, 107, 107, 0.1)';
+                                  e.currentTarget.style.background = 'white';
                                   e.currentTarget.style.transform = 'scale(1)';
-                                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(255, 107, 107, 0.2)';
+                                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.05)';
                                 }}
                                 title="Add New Chart"
                               >
@@ -5413,6 +5518,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                           minHeight: '400px',
                           gap: '1rem'
                         }}>
+                          {!context.savedView && (
                           <button
                             onClick={() => setShowAddChartPopup(true)}
                             style={{
@@ -5420,7 +5526,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                               height: '120px',
                               borderRadius: '50%',
                               border: '3px solid #ff6b6b',
-                              background: 'rgba(255, 107, 107, 0.1)',
+                              background: 'white',
                               color: '#ff6b6b',
                               fontSize: '48px',
                               fontWeight: 'bold',
@@ -5428,36 +5534,37 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
-                              transition: 'all 0.3s ease',
-                              boxShadow: '0 4px 12px rgba(255, 107, 107, 0.2)'
+                              transition: 'all 0.2s ease',
+                              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)'
                             }}
                             onMouseEnter={(e) => {
-                              e.currentTarget.style.background = 'rgba(255, 107, 107, 0.2)';
-                              e.currentTarget.style.transform = 'scale(1.1)';
-                              e.currentTarget.style.boxShadow = '0 6px 20px rgba(255, 107, 107, 0.3)';
+                              e.currentTarget.style.background = '#fef2f2';
+                              e.currentTarget.style.transform = 'scale(1.05)';
+                              e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
                             }}
                             onMouseLeave={(e) => {
-                              e.currentTarget.style.background = 'rgba(255, 107, 107, 0.1)';
+                              e.currentTarget.style.background = 'white';
                               e.currentTarget.style.transform = 'scale(1)';
-                              e.currentTarget.style.boxShadow = '0 4px 12px rgba(255, 107, 107, 0.2)';
+                              e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.05)';
                             }}
                           >
                             +
                           </button>
+                          )}
                           <p style={{
                             fontSize: '1.2rem',
                             color: '#6b7280',
                             fontWeight: 500,
                             margin: 0
                           }}>
-                            No charts yet
+                            {context.savedView ? 'No saved charts' : 'No charts yet'}
                           </p>
                           <p style={{
                             fontSize: '0.9rem',
                             color: '#9ca3af',
                             margin: 0
                           }}>
-                            Ask me to create visualizations from your data
+                            {context.savedView ? 'This saved dashboard has no charts' : 'Ask me to create visualizations from your data'}
                           </p>
                         </div>
                       )}
@@ -5468,7 +5575,8 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
       </div>
     </div>
 
-    {/* Add Chart Popup */}
+    {/* Add Chart Popup - Hidden in saved view */}
+        {!context.savedView && (
         <AddChartPopup
           isOpen={showAddChartPopup}
           onClose={() => setShowAddChartPopup(false)}
@@ -5476,6 +5584,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
           datasetId={datasetId}
           addingChart={addingChart}
         />
+        )}
 
         {/* Insufficient Balance Popup */}
         <InsufficientBalancePopup
@@ -5636,7 +5745,7 @@ export const Visualization: React.FC<VisualizationProps> = ({ data, datasetId, c
                   onClick={applyChartPreview}
                   style={{
                     padding: '12px 24px',
-                    background: 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)',
+                    background: '#ff6b6b',
                     color: 'white',
                     border: 'none',
                     borderRadius: '8px',
