@@ -10,6 +10,9 @@ export interface NotificationProps {
   onCancel?: () => void;
   autoClose?: boolean;
   duration?: number;
+  showClose?: boolean;
+  showOkButton?: boolean;
+  showIcon?: boolean;
 }
 
 export const Notification: React.FC<NotificationProps> = ({
@@ -21,6 +24,9 @@ export const Notification: React.FC<NotificationProps> = ({
   onCancel,
   autoClose = true,
   duration = 4000,
+  showClose = true,
+  showOkButton = false,
+  showIcon = true,
 }) => {
   const isConfirm = type === 'confirm';
 
@@ -98,9 +104,9 @@ export const Notification: React.FC<NotificationProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="notification-header">
-          <div className="notification-icon">{getIcon()}</div>
+          {showIcon && <div className="notification-icon">{getIcon()}</div>}
           {title && <h3 className="notification-title">{title}</h3>}
-          {!isConfirm && (
+          {!isConfirm && showClose && (
             <button className="notification-close" onClick={onClose}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
@@ -119,6 +125,13 @@ export const Notification: React.FC<NotificationProps> = ({
             </button>
             <button className="notification-button confirm" onClick={handleConfirm}>
               Confirm
+            </button>
+          </div>
+        )}
+        {showOkButton && !isConfirm && (
+          <div className="notification-actions">
+            <button className="notification-button confirm" onClick={onClose}>
+              Okay
             </button>
           </div>
         )}

@@ -6,6 +6,9 @@ interface NotificationOptions {
   message: string;
   title?: string;
   duration?: number;
+  showClose?: boolean;
+  showOkButton?: boolean;
+  showIcon?: boolean;
 }
 
 interface ConfirmOptions {
@@ -41,6 +44,9 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       onClose: closeNotification,
       autoClose: true,
       duration: options.duration || 4000,
+      showClose: options.showClose !== undefined ? options.showClose : true,
+      showOkButton: options.showOkButton || false,
+      showIcon: options.showIcon !== undefined ? options.showIcon : true,
     });
   }, [closeNotification]);
 

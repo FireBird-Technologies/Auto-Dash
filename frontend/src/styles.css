@@ -19,26 +19,11 @@ html, body, #root {
 
 body {
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial, "Apple Color Emoji", "Segoe UI Emoji";
-  background: linear-gradient(135deg, #fff7f8 0%, #ffffff 50%, #fff7f8 100%);
-  background-attachment: fixed;
+  background: #ffffff;
   color: var(--aa-text);
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
   position: relative;
-}
-
-body::before {
-  content: '';
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: 
-    radial-gradient(circle at 20% 50%, rgba(255, 107, 107, 0.1) 0%, transparent 50%),
-    radial-gradient(circle at 80% 80%, rgba(255, 107, 107, 0.08) 0%, transparent 50%);
-  pointer-events: none;
-  z-index: 0;
 }
 
 .app-container {
@@ -72,16 +57,14 @@ body::before {
 .brand span {
   font-weight: 700;
   font-size: 22px;
-  background: linear-gradient(135deg, var(--aa-text), var(--aa-primary));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--aa-text);
 }
 
 .logo {
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  background: linear-gradient(135deg, var(--aa-primary), var(--aa-primary-600));
+  background: var(--aa-primary);
 }
 
 /* Progress Bar */
@@ -97,7 +80,7 @@ body::before {
 
 .progress-bar {
   height: 100%;
-  background: linear-gradient(to right, var(--aa-primary), var(--aa-primary-600));
+  background: var(--aa-primary);
   transition: width 0.3s ease;
 }
 
@@ -125,9 +108,7 @@ body::before {
   font-weight: 800;
   letter-spacing: -0.02em;
   margin: 0;
-  background: var(--aa-primary);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--aa-text);
 }
 
 .step-description {
@@ -143,32 +124,33 @@ body::before {
   max-width: 640px;
   background: var(--aa-surface);
   padding: 32px;
-  border-radius: 20px;
-  box-shadow: 0 20px 40px rgba(255, 107, 107, 0.08);
-  transition: transform 0.3s ease;
+  border-radius: 16px;
+  border: 1px solid #f3f4f6;
+  transition: all 0.2s ease;
 }
 
 .upload-container:hover {
-  transform: translateY(-4px);
+  border-color: #e5e7eb;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
 .upload-zone {
   width: 100%;
   aspect-ratio: 16/10;
-  border: 2px dashed rgba(255, 107, 107, 0.3);
-  border-radius: 16px;
-  background: linear-gradient(135deg, rgba(255, 107, 107, 0.03) 0%, rgba(255, 255, 255, 0) 100%);
+  border: 2px dashed #e5e7eb;
+  border-radius: 12px;
+  background: #fafafa;
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
   cursor: pointer;
 }
 
 .upload-zone:hover {
   border-color: var(--aa-primary);
-  background: linear-gradient(135deg, rgba(255, 107, 107, 0.05) 0%, rgba(255, 255, 255, 0) 100%);
+  background: #fff5f5;
 }
 
 .file-input {
@@ -224,8 +206,7 @@ body::before {
 }
 
 .sample-button:hover {
-  background: rgba(255, 107, 107, 0.08);
-  transform: translateY(-1px);
+  background: #fff5f5;
 }
 
 /* Insight Form */
@@ -240,18 +221,22 @@ body::before {
 .insight-textarea {
   width: 100%;
   padding: 20px;
-  border: 1px solid var(--aa-border);
-  border-radius: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
   font-size: 16px;
   line-height: 1.6;
   background: var(--aa-surface);
   color: var(--aa-text);
   resize: vertical;
-  transition: all 0.3s ease;
-  box-shadow: 0 10px 30px rgba(255, 107, 107, 0.05);
+  transition: all 0.2s ease;
   overflow-y: auto;
   min-height: 150px;
   max-height: 400px;
+}
+
+.insight-textarea:focus {
+  outline: none;
+  border-color: var(--aa-primary);
 }
 
 /* Theme Picker - Modern Design */
@@ -280,7 +265,7 @@ body::before {
   content: '';
   width: 3px;
   height: 12px;
-  background: linear-gradient(135deg, var(--aa-primary), #ff8a8a);
+  background: var(--aa-primary);
   border-radius: 2px;
 }
 
@@ -289,10 +274,9 @@ body::before {
   flex-wrap: wrap;
   gap: 10px;
   padding: 20px;
-  border: 1px solid #fecaca;
+  border: 1px solid #f3f4f6;
   border-radius: 12px;
-  background: linear-gradient(135deg, #fff5f7, #ffe4e6);
-  box-shadow: 0 2px 8px rgba(255, 107, 107, 0.08);
+  background: #fafafa;
 }
 
 .theme-button {

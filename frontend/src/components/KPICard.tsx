@@ -266,36 +266,44 @@ export const KPICard: React.FC<KPICardProps> = ({
             Opacity
           </label>
           <style>{`
+            input[type="range"]#kpi-opacity-${chartIndex} {
+              -webkit-appearance: none;
+              appearance: none;
+              width: 100%;
+              height: 8px;
+              background: linear-gradient(to right, #ff6b6b 0%, #ff6b6b ${(containerColor?.opacity ?? 1) * 100}%, #e5e7eb ${(containerColor?.opacity ?? 1) * 100}%, #e5e7eb 100%);
+              border-radius: 4px;
+              outline: none;
+            }
             input[type="range"]#kpi-opacity-${chartIndex}::-webkit-slider-thumb {
               -webkit-appearance: none;
               appearance: none;
-              width: 14px;
-              height: 14px;
+              width: 20px;
+              height: 20px;
               border-radius: 50%;
               background: #ff6b6b;
               cursor: pointer;
-              box-shadow: 0 2px 4px rgba(255, 107, 107, 0.3);
+              box-shadow: 0 2px 6px rgba(255, 107, 107, 0.4);
+              border: 2px solid white;
             }
             input[type="range"]#kpi-opacity-${chartIndex}::-moz-range-thumb {
-              width: 14px;
-              height: 14px;
+              width: 20px;
+              height: 20px;
               border-radius: 50%;
               background: #ff6b6b;
               cursor: pointer;
-              border: none;
-              box-shadow: 0 2px 4px rgba(255, 107, 107, 0.3);
+              border: 2px solid white;
+              box-shadow: 0 2px 6px rgba(255, 107, 107, 0.4);
             }
             input[type="range"]#kpi-opacity-${chartIndex}::-webkit-slider-runnable-track {
               width: 100%;
-              height: 4px;
-              background: #e5e7eb;
-              border-radius: 2px;
+              height: 8px;
+              border-radius: 4px;
             }
             input[type="range"]#kpi-opacity-${chartIndex}::-moz-range-track {
               width: 100%;
-              height: 4px;
-              background: #e5e7eb;
-              border-radius: 2px;
+              height: 8px;
+              border-radius: 4px;
             }
           `}</style>
           <input
