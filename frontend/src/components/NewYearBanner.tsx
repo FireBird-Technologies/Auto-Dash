@@ -47,7 +47,7 @@ export const NewYearBanner: React.FC = () => {
 
   const handlePromoClick = () => {
     // Navigate to pricing with promo code in URL (Stripe convention)
-    navigate('/pricing?prefilled_promo_code=NEWYEARS');
+    navigate('/pricing?prefilled_promo_code=FIRST100');
   };
 
   // Don't show if dismissed or if it's already past Feb 28th, 2026
@@ -96,7 +96,7 @@ export const NewYearBanner: React.FC = () => {
           fontSize: '14px',
           letterSpacing: '0.5px',
         }}>
-          50% OFF
+          30% OFF
         </span>
         <span style={{ fontSize: '13px', color: '#666' }}>
           Use code: <code style={{ 
@@ -106,7 +106,7 @@ export const NewYearBanner: React.FC = () => {
             fontWeight: 600,
             color: '#ff6b6b',
             border: '1px dashed rgba(255, 107, 107, 0.4)',
-          }}>NEWYEARS</code>
+          }}>FIRST100</code>
         </span>
         <button
           onClick={handlePromoClick}
