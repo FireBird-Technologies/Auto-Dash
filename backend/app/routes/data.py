@@ -371,7 +371,10 @@ class FileProcessor:
             return result['encoding']
     
     def read_csv(self):
-        """Read CSV with multiple fallback strategies"""
+        """
+        Read CSV with fast delimiter detection and smart fallback for edge cases.
+        Only performs expensive quality checks when initial parse yields <= 2 columns.
+        """
         encodings = [
             'utf-8', 'utf-8-sig', 'latin-1', 'cp1252', 'ascii',
             'iso-8859-1', 'iso-8859-2', 'iso-8859-3', 'iso-8859-4', 'iso-8859-5',
@@ -391,7 +394,10 @@ class FileProcessor:
         except Exception as e:
             logger.warning(f"Encoding detection failed: {str(e)}")
         
-        # Try different encoding and delimiter combinations
+        # Track results with <= 2 columns for potential retry
+        poor_results = []
+        
+        # Try different encoding and delimiter combinations (FAST PATH)
         for encoding in encodings:
             for delimiter in delimiters:
                 try:
@@ -399,22 +405,95 @@ class FileProcessor:
                         self.filepath,
                         encoding=encoding,
                         delimiter=delimiter,
-                        on_bad_lines='skip',  # Skip bad lines instead of failing
-                        engine='python',  # More flexible parser
+                        on_bad_lines='skip',
+                        engine='python',
                         low_memory=False,
-                        encoding_errors='ignore'  # Skip undecodable bytes rather than replace
+                        encoding_errors='ignore'
                     )
                     
-                    # Check if we got meaningful data (more than 1 column)
-                    if self.df.shape[1] > 1:
-                        # Sanitize column names
+                    # If we got MORE than 2 columns, it's likely correct - return immediately
+                    if self.df.shape[1] > 2:
                         self.df = sanitize_dataframe_columns(self.df)
-                        print(f"Successfully read CSV with encoding={encoding}, delimiter='{delimiter}'")
+                        logger.info(f"Successfully read CSV with encoding={encoding}, delimiter='{delimiter}', columns={self.df.shape[1]}")
                         return self.df
+                    
+                    # If 1-2 columns, save for potential retry (might be wrong delimiter)
+                    elif self.df.shape[1] >= 1:
+                        poor_results.append({
+                            'df': self.df.copy(),
+                            'encoding': encoding,
+                            'delimiter': delimiter,
+                            'columns': self.df.shape[1]
+                        })
+                        
                 except Exception as e:
                     continue
         
-        # Last resort: read as single column and try to split
+        # SLOW PATH: If we only found results with <= 2 columns, do smarter detection
+        if poor_results:
+            logger.info(f"Only found {len(poor_results)} results with ≤2 columns. Trying smarter detection...")
+            
+            # Try all delimiters again with quality scoring
+            best_result = None
+            best_score = -1
+            
+            for encoding in encodings[:3]:  # Only try top 3 encodings to save time
+                for delimiter in delimiters:
+                    try:
+                        # Read a sample to score quality
+                        sample_df = pd.read_csv(
+                            self.filepath,
+                            encoding=encoding,
+                            delimiter=delimiter,
+                            nrows=50,  # Small sample for speed
+                            on_bad_lines='skip',
+                            engine='python',
+                            encoding_errors='ignore'
+                        )
+                        
+                        if sample_df.shape[1] > 1:
+                            # Calculate quality score
+                            num_cols = sample_df.shape[1]
+                            avg_col_name_length = sum(len(str(col)) for col in sample_df.columns) / num_cols
+                            non_null_ratio = sample_df.notna().sum().sum() / (sample_df.shape[0] * sample_df.shape[1])
+                            
+                            # Quality = more columns + reasonable names + data filled
+                            quality = num_cols * 100
+                            if avg_col_name_length < 100:  # Reasonable column names
+                                quality += 50
+                            quality += non_null_ratio * 50
+                            
+                            if quality > best_score:
+                                # Read full file with this delimiter
+                                full_df = pd.read_csv(
+                                    self.filepath,
+                                    encoding=encoding,
+                                    delimiter=delimiter,
+                                    on_bad_lines='skip',
+                                    engine='python',
+                                    low_memory=False,
+                                    encoding_errors='ignore'
+                                )
+                                best_result = full_df
+                                best_score = quality
+                                logger.info(f"Better result found: delimiter='{delimiter}', columns={num_cols}, quality={quality:.1f}")
+                                
+                    except Exception:
+                        continue
+            
+            # Use best result from smart detection
+            if best_result is not None and best_result.shape[1] > 2:
+                self.df = sanitize_dataframe_columns(best_result)
+                return self.df
+            
+            # If smart detection still only found ≤2 columns, use the best poor result
+            if poor_results:
+                best_poor = max(poor_results, key=lambda x: x['columns'])
+                self.df = sanitize_dataframe_columns(best_poor['df'])
+                logger.warning(f"Using result with {best_poor['columns']} column(s): encoding={best_poor['encoding']}, delimiter='{best_poor['delimiter']}'")
+                return self.df
+        
+        # Last resort: read as single column
         try:
             self.df = pd.read_csv(
                 self.filepath,
@@ -424,15 +503,16 @@ class FileProcessor:
                 header=None,
                 encoding_errors='ignore'
             )
-            # Attempt to promote first row to headers if they look like column names
+            
             try:
                 self.df = restore_headers_if_lost(self.df)
-                # Sanitize column names after restoring headers
                 self.df = sanitize_dataframe_columns(self.df)
             except Exception:
                 pass
-            print("Read CSV as single column (may need manual parsing)")
+                
+            logger.warning("Read CSV as single column - file may need manual parsing")
             return self.df
+            
         except Exception as e:
             raise Exception(f"Failed to read CSV: {str(e)}")
     
