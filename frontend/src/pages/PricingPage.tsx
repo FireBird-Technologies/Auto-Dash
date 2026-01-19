@@ -72,8 +72,8 @@ export const PricingPage: React.FC = () => {
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
   const [promoCode] = useState<string | null>(() => searchParams.get('prefilled_promo_code'));
   
-  // 50% off promotion
-  const PROMO_DISCOUNT = 0.5; // 50% off
+  // 30% off promotion
+  const PROMO_DISCOUNT = 0.3; // 30% off
   const PROMO_ACTIVE = true;
 
   useEffect(() => {
@@ -203,9 +203,9 @@ export const PricingPage: React.FC = () => {
             <div className="promo-content">
               <span className="promo-icon">🎉</span>
               <div className="promo-text">
-                <strong>Limited Time Offer!</strong> Get 50% off all paid plans
+                <strong>Limited Time Offer!</strong> Get 30% off all paid plans
               </div>
-              <span className="promo-badge">50% OFF</span>
+              <span className="promo-badge">30% OFF</span>
             </div>
           </div>
         )}
@@ -249,7 +249,7 @@ export const PricingPage: React.FC = () => {
                 className={`pricing-card ${isCurrent ? 'current-plan' : ''} ${plan.name === 'Pro' ? 'popular' : ''}`}
               >
                 {plan.name === 'Pro' && <div className="popular-badge">Most Popular</div>}
-                {showDiscount && <div className="discount-ribbon">50% OFF</div>}
+                {showDiscount && <div className="discount-ribbon">30% OFF</div>}
                 
                 <div className="plan-header">
                   <h3>{plan.name}</h3>
