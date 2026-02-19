@@ -474,7 +474,7 @@ export const Landing: React.FC<LandingProps> = ({ onStart }) => {
             <h2 className="section-heading">See AutoDash in Action</h2>
             <p className="section-subheading">
               Try interacting with fully functional visualizations and data analysis below. 
-              <strong> Click the "Customize" button</strong> to personalize colors, gradients, opacity, and more!
+              <strong> Click the "Customize" button</strong> to personalize colors, gradients, opacity!
               Explore charts, run notebook-style analysis, and see AI-powered insights - all created with natural language.
             </p>
           </div>
