@@ -1,5 +1,6 @@
 import os
 import logging
+import asyncio
 from urllib.parse import urlencode
 from fastapi import APIRouter, Request, Depends
 from authlib.integrations.starlette_client import OAuth
@@ -9,6 +10,7 @@ from .db import get_db
 from .models import User
 from .security import create_access_token
 from .services.subscription_service import subscription_service
+from .services.email_service import email_service, EmailServiceError
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/auth/google", tags=["auth"])
@@ -66,6 +68,9 @@ async def callback(request: Request, db: Session = Depends(get_db)):
                 subscription_service.assign_free_tier(db, user)
             except Exception as e:
                 logger.error(f"Failed to assign free tier to user {user.id}: {e}")
+            
+            # Send welcome email asynchronously (non-blocking)
+            asyncio.create_task(_send_welcome_email(user))
         
         jwt_token = create_access_token(str(user.id), {"email": user.email})
         return RedirectResponse(url=f"{FRONTEND_URL}/?{urlencode({'token': jwt_token})}")
@@ -75,3 +80,23 @@ async def callback(request: Request, db: Session = Depends(get_db)):
         return RedirectResponse(url=f"{FRONTEND_URL}/?error=login_failed")
 
 
+async def _send_welcome_email(user: User):
+    """
+    Send welcome email to new user.
+    Runs asynchronously and doesn't block the OAuth flow.
+    
+    Args:
+        user: User object
+    """
+    try:
+        await email_service.send_welcome_email(
+            to_email=user.email,
+            user_name=user.name
+        )
+        logger.info(f"Welcome email sent to {user.email}")
+    except EmailServiceError as e:
+        # Log but don't fail the OAuth flow
+        logger.error(f"Failed to send welcome email to {user.email}: {e}")
+    except Exception as e:
+        # Catch all other errors to prevent breaking OAuth
+        logger.error(f"Unexpected error sending welcome email to {user.email}: {e}", exc_info=True)
